@@ -361,12 +361,6 @@ export default class PresetManager extends View {
      * @returns {undefined}
      */
     unInstallData(set, mode) {
-        if (mode === 'uninstall') {
-            let modal = UIkit.modal.alert(window.swac.lang.dict.PresetManager.uuninstalled + "Datensätze können in dieser Version nicht deinstalliert werden. Bitte deinstallieren Sie diese manuell.");
-            modal.then(function () {
-                location.reload();
-            });
-        }
 
         this.unInstall(set, set.data, mode).then(function (res) {
             if (mode === 'install') {
@@ -376,17 +370,11 @@ export default class PresetManager extends View {
                 });
             } else {
                 // mode == 'uninstall
-                if (res.every(result => result === true)) {
-                    let modal = UIkit.modal.alert(window.swac.lang.dict.PresetManager.uninstalled);
-                    modal.then(function () {
-                        location.reload();
-                    });
-                } else {
-                    let modal = UIkit.modal.alert(window.swac.lang.dict.PresetManager.uuninstalled + "Datensätze können in dieser Version nicht deinstalliert werden. Bitte deinstallieren Sie diese manuell.");
-                    modal.then(function () {
-                        location.reload();
-                    });
-                }
+                
+                let modal = UIkit.modal.alert(window.swac.lang.dict.PresetManager.uninstalled);
+                modal.then(function () {
+                    location.reload();
+                });
             }
         }).catch(function (err) {
             let msg;
@@ -463,79 +451,83 @@ export default class PresetManager extends View {
      * @param {String} mode         install or uninstall
      * @returns {undefined}
      */
-    unInstall(set, parts, mode) {
-        return new Promise((resolve, reject) => {
-            let fetches = [];
-            // Create needed tables
-            for (let curPart of parts) {
+    async unInstall(set, parts, mode) {
+        for (let curPart of parts) {
 
-                // Build request url
-                let url = this.options.targetSource.url.replace('[fromName]', curPart.fromName);
-                let fetchopts = {
+            // Build request url
+            let url = this.options.targetSource.url.replace('[fromName]', curPart.fromName);
+            let fetchopts = {
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            };
+            if (this.options.targetSource.interfaces) {
+                if (!this.options.targetSource.interfaces[curPart.method]) {
+                    let msg = window.swac.lang.replacePlaceholders(
+                            window.swac.lang.dict.PresetManager.interfaceerr,
+                            'interface',
+                            curPart.method
+                            );
+                    UIkit.modal.alert(msg);
+                    throw new Error(msg);
+                }
+                url = url.replace(
+                        '[iface]',
+                        this.options.targetSource.interfaces[curPart.method][1]
+                        );
+                fetchopts.method =
+                        this.options.targetSource.interfaces[curPart.method][0];
+            }
+
+            if (curPart.filter) {
+                url += (url.includes('?') ? '&' : '?') + 'filter=' + curPart.filter;
+            }
+
+            // INSTALL
+            if (mode === 'install') {
+
+                // Skip if already installed
+                if (
+                        this.installstates.has(set.name + '_' + curPart.name) &&
+                        this.installstates.get(set.name + '_' + curPart.name)
+                        ) {
+                    continue;
+                }
+
+                if (curPart.body) {
+                    fetchopts.body =
+                            typeof curPart.body === 'object'
+                            ? JSON.stringify(curPart.body)
+                            : curPart.body;
+                }
+
+                const res = await fetch(url, fetchopts);
+
+                if (!res.ok) {
+                    throw res;
+                }
+
+                // UNINSTALL
+            } else {
+
+                url += (url.includes('?') ? '&' : '?') + 'cascade=true';
+
+                const res = await fetch(url, {
+                    method: 'DELETE',
                     headers: {
                         'Content-Type': 'application/json'
                     }
-                };
-                if (this.options.targetSource.interfaces) {
-                    if (!this.options.targetSource.interfaces[curPart.method]) {
-                        let msg = window.swac.lang.replacePlaceholders(window.swac.lang.dict.PresetManager.interfaceerr, 'interface', curPart.method);
-                        UIkit.modal.alert(msg);
-                        return;
-                    }
-                    url = url.replace('[iface]', this.options.targetSource.interfaces[curPart.method][1]);
-                    fetchopts.method = this.options.targetSource.interfaces[curPart.method][0];
-                }
-                if (curPart.filter) {
-                    if (url.includes('?'))
-                        url += '&';
-                    else
-                        url += '?';
-                    url += 'filter=' + curPart.filter;
-                }
-                // Install
-                if (mode === 'install') {
-                    // Ignore if allready installed
-                    if (this.installstates.has(set.name + '_' + curPart.name) && this.installstates.get(set.name + '_' + curPart.name)) {
-                        continue;
-                    }
-                    fetchopts.body = curPart.body;
-                    if (typeof curPart.body === 'object')
-                        fetchopts.body = JSON.stringify(curPart.body);
+                });
 
-                    let curFetch = fetch(url, fetchopts);
-                    fetches.push(curFetch);
-                    curFetch.then(function (res) {
-                        if (!res.ok) {
-                            reject(res);
-                        }
-                    }).catch(function (err) {
-                        reject(err);
-                    });
-                } else {
-                    let curFetch = fetch(url, {
-                        method: 'DELETE',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        }
-                    });
-                    fetches.push(curFetch);
-                    curFetch.then(function (res) {
-                        if (!res.ok) {
-                            reject(res);
-                        }
-                    }).catch(function (err) {
-                        reject(err);
-                    });
+                if (!res.ok) {
+                    throw res;
                 }
             }
+        }
 
-            Promise.all(fetches).then(function (res) {
-                resolve(res);
-            }).catch(function (err) {
-                reject(err);
-            });
-        });
+        return true;
     }
+
 }
 
 
