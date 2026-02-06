@@ -86,9 +86,9 @@ export default class Model {
                 // Create WS if data is requested without component
                 new WatchableSource(dataRequest.fromName, Model, dataRequest.storeId);
             }
-            
+
             // Add fromHeaders from comp to request
-            if(comp)
+            if (comp)
                 dataRequest.fromHeaders = comp.options.fromHeaders;
 
             // Check if data is allready loading
@@ -135,6 +135,15 @@ export default class Model {
                 if (comp)
                     comp.lastloaded = dataCapsule.length - 1;
                 resolve(dataCapsule);
+            } else if (localStorage.getItem(dataRequest.fromName) != null) {
+                Msg.info('model', 'Useing data from local storage for >' + dataRequest.fromName + '<', comp);
+                let localStData = localStorage.getItem(dataRequest.fromName);
+                
+                dataCapsule = thisRef.convertData({data: localStData, fromName: dataRequest.fromName}, dataRequest, comp);
+                if (comp)
+                    comp.lastloaded = dataCapsule.length - 1;
+                resolve(dataCapsule);
+
             } else {
                 let fetchUrl = dataRequest.fromName;
 
@@ -245,7 +254,7 @@ export default class Model {
 
         // Note highest new id
         let maxId = Math.max(...data.map(obj => obj[idAttr]));
-        if(isNaN(maxId))
+        if (isNaN(maxId))
             maxId = 0;
         dataRequest.highestId = maxId;
 
