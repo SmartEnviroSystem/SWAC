@@ -884,6 +884,10 @@ export default class Mediaplayer extends View {
                         sourceElem.setAttribute('type', set.mimetype);
                         audioElem.appendChild(sourceElem);
                         audioElem.swac_set = set;
+                        // Set inital volume
+                        if (set.volume) {
+                            audioElem.volume = set.volume / 100;
+                        }
                         keymediacard.appendChild(audioElem);
                         // Add to key list
                         if (set.startonkey) {
@@ -1807,7 +1811,7 @@ export default class Mediaplayer extends View {
      * @param {int} seconds Seconds to fade out
      */
     fadeout(mediaElem, seconds) {
-        if(this.fadeintval) {
+        if (this.fadeintval) {
             clearInterval(this.fadeintval);
         }
         let fadepercentage = (100 / seconds / 4) / 100;
