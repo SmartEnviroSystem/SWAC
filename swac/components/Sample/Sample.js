@@ -17,7 +17,7 @@ export default class Sample extends View {
         this.desc.text = 'Description of this component for documentation.';
         this.desc.developers = 'Florian Fehring (HSBI)';
         this.desc.license = 'GNU Lesser General Public License';
-        
+
         // Include an external library that does not use export
         // Include files that use export by import statement at start of the file
         this.desc.depends[0] = {
@@ -67,7 +67,9 @@ export default class Sample extends View {
             example: {
                 some1: "This is an example config for configuration",
                 some2: "It can be any object / string / value",
-                func1: function(t) { t.do(); }
+                func1: function (t) {
+                    t.do();
+                }
             }
         };
         // Setting a default value, only applying when the options parameter does not contain this option
@@ -91,14 +93,14 @@ export default class Sample extends View {
                 type: 'String'
             }
         };
-        
+
         //Documentation for events the component can fire
         this.desc.events[0] = {
             name: 'swac_REQUESTOR_ID_sample_click',
             desc: 'An event fired when the user clicks on the component.',
             data: 'Delivers the JS event object of the click event.'
         }
-        
+
         // Definition of available plugins
         if (!options.plugins) {
             this.options.plugins = new Map();
@@ -107,7 +109,7 @@ export default class Sample extends View {
                 id: 'SamplePlugin',
                 active: false       // On by default?
             });
-        }
+    }
     }
 
     /*
@@ -115,24 +117,20 @@ export default class Sample extends View {
      * At this thime the template code is loaded, the data inserted into the 
      * template and even plugins are ready to use.
      */
-    init() {
-        return new Promise((resolve, reject) => {
+    async init() {
+        // here we can do what we want with the data and template.
 
-            // here we can do what we want with the data and template.
+        // we can access the data over the data attrbute
+        console.log('Data inside the sample component:', this.data);
+        Msg.flow('Sample', 'Flow messages symbolise a important waypoint in the programm', this.requestor);
+        Msg.hint('Sample', 'With hint messages you can give developers help how to use your component', this.requestor);
+        Msg.warn('Sample', 'Give warnings for example when an element in the template is missing', this.requestor);
+        Msg.error('Sample', 'This is a sample of createing an error message', this.requestor);
 
-            // we can access the data over the data attrbute
-            console.log('Data inside the sample component:',this.data);
-            Msg.flow('Sample', 'Flow messages symbolise a important waypoint in the programm', this.requestor);
-            Msg.hint('Sample', 'With hint messages you can give developers help how to use your component', this.requestor);
-            Msg.warn('Sample', 'Give warnings for example when an element in the template is missing', this.requestor);
-            Msg.error('Sample', 'This is a sample of createing an error message', this.requestor);
-            
-            // Custom event
-            this.requestor.addEventListener('click',function(e) {
-                // Create and fire custom event
-                document.dispatchEvent(new CustomEvent('swac_' + this.requestor.id + '_sample_click', {detail: e}))
-            });
-            resolve();
+        // Custom event
+        this.requestor.addEventListener('click', function (e) {
+            // Create and fire custom event
+            document.dispatchEvent(new CustomEvent('swac_' + this.requestor.id + '_sample_click', {detail: e}))
         });
     }
 
@@ -160,10 +158,10 @@ export default class Sample extends View {
         // You can do after adding actions here. At this timepoint the template
         // repeatForSet is also repeated and accessable.
         // e.g. generate a custom view for the data.
-        
+
         // Call Components afterAddSet and plugins afterAddSet
-        super.afterAddSet(set,repeateds);
-        
+        super.afterAddSet(set, repeateds);
+
         return;
     }
 }
