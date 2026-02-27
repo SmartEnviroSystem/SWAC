@@ -35,161 +35,81 @@ export default class Bluetooth extends View {
             desc: 'Element to display general connection status messages.'
         };
 
-        // ── Option descriptions ────────────────────────────────────────────
-
-        this.desc.opts[0] = {
-            name: 'filterDevices',
-            desc: 'Array of BLE filter objects (e.g. namePrefix). If empty, all devices are accepted.',
-            example: [{namePrefix: 'Sensor'}]
-        };
+        this.desc.opts[0] = {name: 'filterDevices', desc: 'Array of BLE filter objects (e.g. namePrefix). If empty, all devices are accepted.', example: [{namePrefix: 'Sensor'}]};
         if (!options.filterDevices)
             this.options.filterDevices = [];
 
-        this.desc.opts[1] = {
-            name: 'communicationTimeout',
-            desc: 'Timeout in milliseconds to wait for a notification response from a Pi.'
-        };
+        this.desc.opts[1] = {name: 'communicationTimeout', desc: 'Timeout in milliseconds to wait for a notification response from a Pi.'};
         if (!options.communicationTimeout)
             this.options.communicationTimeout = 5000;
 
-        this.desc.opts[2] = {
-            name: 'uartServiceUUID',
-            desc: 'UUID of the Nordic UART BLE service on the Pi.'
-        };
+        this.desc.opts[2] = {name: 'uartServiceUUID', desc: 'UUID of the Nordic UART BLE service on the Pi.'};
         if (!options.uartServiceUUID)
             this.options.uartServiceUUID = '12345678-1234-5678-1234-56789abcdef0';
 
-        this.desc.opts[3] = {
-            name: 'uartWriteUUID',
-            desc: 'UUID of the BLE write characteristic (TX from browser perspective).'
-        };
+        this.desc.opts[3] = {name: 'uartWriteUUID', desc: 'UUID of the BLE write characteristic (TX from browser perspective).'};
         if (!options.uartWriteUUID)
             this.options.uartWriteUUID = '12345678-1234-5678-1234-56789abcdef1';
 
-        this.desc.opts[4] = {
-            name: 'uartNotifyUUID',
-            desc: 'UUID of the BLE notify characteristic (RX from browser perspective).'
-        };
+        this.desc.opts[4] = {name: 'uartNotifyUUID', desc: 'UUID of the BLE notify characteristic (RX from browser perspective).'};
         if (!options.uartNotifyUUID)
             this.options.uartNotifyUUID = '12345678-1234-5678-1234-56789abcdef2';
 
-        this.desc.opts[5] = {
-            name: 'maxDevices',
-            desc: 'Maximum number of simultaneously connected devices. 0 = unlimited.'
-        };
+        this.desc.opts[5] = {name: 'maxDevices', desc: 'Maximum number of simultaneously connected devices. 0 = unlimited.'};
         if (!options.maxDevices)
             this.options.maxDevices = 0;
 
-        this.desc.opts[6] = {
-            name: 'onConnected',
-            desc: 'Callback executed after a successful BLE connection. Receives (deviceId, device).'
-        };
+        this.desc.opts[6] = {name: 'onConnected', desc: 'Callback executed after a successful BLE connection. Receives (deviceId, device).'};
         if (!options.onConnected)
             this.options.onConnected = function () {};
 
-        this.desc.opts[7] = {
-            name: 'onDisconnected',
-            desc: 'Callback executed when a device disconnects. Receives (deviceId).'
-        };
+        this.desc.opts[7] = {name: 'onDisconnected', desc: 'Callback executed when a device disconnects. Receives (deviceId).'};
         if (!options.onDisconnected)
             this.options.onDisconnected = function () {};
 
-        this.desc.opts[8] = {
-            name: 'deviceMismatchKey',
-            desc: 'localStorage key prefix for MAC validation. Full key per device: prefix + "_" + deviceId.'
-        };
+        this.desc.opts[8] = {name: 'deviceMismatchKey', desc: 'localStorage key prefix for MAC validation. Full key per device: prefix + "_" + deviceId.'};
         if (!options.deviceMismatchKey)
             this.options.deviceMismatchKey = 'deviceMac';
 
-        /**
-         * @option sections
-         * @desc Defines the command sections and buttons shown on each connected device card.
-         *       Each section is rendered as a labeled group of buttons.
-         *       Defaults to an empty array — no buttons are shown unless sections are
-         *       explicitly provided via the project-specific configuration file (e.g. example1.js).
-         *
-         * Section object fields:
-         *   title   {string}  - Section heading shown above the button group.
-         *   type    {string}  - Optional. Set to "wlan" to render the built-in WLAN input form
-         *                       instead of a button grid. All other values (or omitted) render buttons.
-         *   buttons {Array}   - Array of button definition objects (ignored when type === "wlan").
-         *
-         * Button definition object fields:
-         *   icon        {string}  - Emoji or HTML string shown left of the label.
-         *   label       {string}  - Short button name.
-         *   description {string}  - Small subtitle rendered below the label.
-         *   action      {string}  - Name of a method on this Bluetooth instance that should be
-         *                           called when the button is clicked. The method receives (deviceId)
-         *                           as its only argument and must return a Promise.
-         *                           Built-in actions: sendTimeStamp, getMacAddress, startMeasurement,
-         *                           stopMeasurement, getLastMeasuring, measuringStatus,
-         *                           smartMobileStatus, aggregationOn, aggregationOff,
-         *                           aggregationStatus, synchronizeDataOn, synchronizeDataOff,
-         *                           synchronizeDataStatus, stopAll, rebootPi, shutDownPi.
-         *   style       {string}  - Optional CSS modifier appended as "ble-cmd-{style}".
-         *                           Built-in values: "warn" (orange), "danger" (red).
-         */
-        this.desc.opts[9] = {
-            name: 'sections',
-            desc: 'Array of section config objects that define which command buttons appear on each device card. ' +
-                  'Defaults to [] — define all sections in your project config file. See JSDoc above for the full schema.'
-        };
-        // Default is intentionally empty.
-        // All button layout must come from the project-specific config (e.g. example1.js).
+        // sections: array of section config objects rendered as button groups on each device card.
+        // Button definition fields:
+        //   icon, label, description  - visual appearance
+        //   action                    - Pi command string sent via sendCommand() (e.g. 'smartMobile_on_measuring')
+        //                               set param: '__method__' to invoke a named Bluetooth method instead
+        //   param                     - optional payload forwarded as content.param (default: null)
+        //   style                     - optional CSS modifier: 'warn' | 'danger'
+        // Section with type: 'wlan' renders the built-in WLAN form instead of a button grid.
+        // Default is empty — all layout must come from the project config file (e.g. example1.js).
+        this.desc.opts[9] = {name: 'sections', desc: 'Array of section config objects defining command buttons on each device card.'};
         if (!options.sections)
             this.options.sections = [];
 
         if (!options.showWhenNoData)
             this.options.showWhenNoData = true;
 
-        // ── Public API descriptions ────────────────────────────────────────
         this.desc.funcs[0] = {name: 'connectDevice', desc: 'Opens a BLE picker and connects the chosen device.', returns: {type: 'Promise<String>'}};
         this.desc.funcs[1] = {name: 'disconnectDevice', desc: 'Disconnects a specific device.', params: [{name: 'deviceId'}]};
         this.desc.funcs[2] = {name: 'disconnectAll', desc: 'Disconnects all connected devices.'};
         this.desc.funcs[3] = {name: 'getConnectedDeviceIds', desc: 'Returns an array of all connected device IDs.', returns: {type: 'String[]'}};
         this.desc.funcs[4] = {name: 'communicateWithPi', desc: 'Sends a JSON string to a specific Pi and returns the parsed response.', params: [{name: 'deviceId'}, {name: 'jsonString'}], returns: {type: 'Promise<Object>'}};
-        this.desc.funcs[5] = {name: 'sendTimeStamp', params: [{name: 'deviceId'}], returns: {type: 'Promise<Object>'}};
-        this.desc.funcs[6] = {name: 'getMacAddress', params: [{name: 'deviceId'}], returns: {type: 'Promise<String>'}};
-        this.desc.funcs[7] = {name: 'startMeasurement', params: [{name: 'deviceId'}], returns: {type: 'Promise<Object>'}};
-        this.desc.funcs[8] = {name: 'stopMeasurement', params: [{name: 'deviceId'}], returns: {type: 'Promise<Object>'}};
-        this.desc.funcs[9] = {name: 'getLastMeasuring', params: [{name: 'deviceId'}], returns: {type: 'Promise<Object>'}};
-        this.desc.funcs[10] = {name: 'measuringStatus', params: [{name: 'deviceId'}], returns: {type: 'Promise<Object>'}};
-        this.desc.funcs[11] = {name: 'smartMobileStatus', params: [{name: 'deviceId'}], returns: {type: 'Promise<Object>'}};
-        this.desc.funcs[12] = {name: 'aggregationOn', params: [{name: 'deviceId'}], returns: {type: 'Promise<Object>'}};
-        this.desc.funcs[13] = {name: 'aggregationOff', params: [{name: 'deviceId'}], returns: {type: 'Promise<Object>'}};
-        this.desc.funcs[14] = {name: 'aggregationStatus', params: [{name: 'deviceId'}], returns: {type: 'Promise<Object>'}};
-        this.desc.funcs[15] = {name: 'synchronizeDataOn', params: [{name: 'deviceId'}], returns: {type: 'Promise<Object>'}};
-        this.desc.funcs[16] = {name: 'synchronizeDataOff', params: [{name: 'deviceId'}], returns: {type: 'Promise<Object>'}};
-        this.desc.funcs[17] = {name: 'synchronizeDataStatus', params: [{name: 'deviceId'}], returns: {type: 'Promise<Object>'}};
-        this.desc.funcs[18] = {name: 'addWLANToPi', params: [{name: 'deviceId'}, {name: 'ssid'}, {name: 'password'}], returns: {type: 'Promise<Object>'}};
-        this.desc.funcs[19] = {name: 'shutDownPi', params: [{name: 'deviceId'}], returns: {type: 'Promise<Object>'}};
-        this.desc.funcs[20] = {name: 'stopAll', params: [{name: 'deviceId'}], returns: {type: 'Promise<Object>'}};
-        this.desc.funcs[21] = {name: 'rebootPi', params: [{name: 'deviceId'}], returns: {type: 'Promise<Object>'}};
+        this.desc.funcs[5] = {name: 'sendCommand', desc: 'Sends a Pi command string via BLE. All standard buttons use this.', params: [{name: 'deviceId'}, {name: 'action'}, {name: 'param'}], returns: {type: 'Promise<Object>'}};
+        this.desc.funcs[6] = {name: 'sendTimeStamp', params: [{name: 'deviceId'}], returns: {type: 'Promise<Object>'}};
+        this.desc.funcs[7] = {name: 'getMacAddress', params: [{name: 'deviceId'}], returns: {type: 'Promise<String>'}};
+        this.desc.funcs[8] = {name: 'addWLANToPi', params: [{name: 'deviceId'}, {name: 'ssid'}, {name: 'password'}], returns: {type: 'Promise<Object>'}};
 
-        this.desc.events[0] = {
-            name: 'swac_REQUESTOR_ID_bluetooth_connected',
-            desc: 'Fired on successful connection.',
-            data: 'event.detail = { deviceId, device }'
-        };
-        this.desc.events[1] = {
-            name: 'swac_REQUESTOR_ID_bluetooth_disconnected',
-            desc: 'Fired on disconnect.',
-            data: 'event.detail = { deviceId }'
-        };
+        this.desc.events[0] = {name: 'swac_REQUESTOR_ID_bluetooth_connected', desc: 'Fired on successful connection.', data: 'event.detail = { deviceId, device }'};
+        this.desc.events[1] = {name: 'swac_REQUESTOR_ID_bluetooth_disconnected', desc: 'Fired on disconnect.', data: 'event.detail = { deviceId }'};
 
         if (!options.plugins)
             this.options.plugins = new Map();
-
         this._connectedDevices = new Map();
     }
 
-    // ── Lifecycle ──────────────────────────────────────────────────────────
+    // --- Lifecycle ---
 
     async init() {
-        // Read the project-specific config object from the global window scope.
-        // SWAC convention: the config for element id="foo" lives at window["foo_conf_options"].
-        // Merging here (rather than relying on the constructor) guarantees that config values
-        // always override constructor defaults, regardless of how SWAC passes options internally.
+        // Merge project-specific config from window["<elementId>_conf_options"] into options.
+        // This ensures config values always override constructor defaults.
         let projectConf = window[this.requestor.id + '_conf_options'];
         if (projectConf) {
             Object.assign(this.options, projectConf);
@@ -212,7 +132,7 @@ export default class Bluetooth extends View {
         }
     }
 
-    // ── Connection management ──────────────────────────────────────────────
+    // --- Connection management ---
 
     async connectDevice() {
         Msg.flow('Bluetooth', 'connectDevice()', this.requestor);
@@ -231,11 +151,7 @@ export default class Bluetooth extends View {
             } else {
                 requestConf.acceptAllDevices = true;
             }
-            requestConf.optionalServices = [
-                'generic_access',
-                'device_information',
-                this.options.uartServiceUUID
-            ];
+            requestConf.optionalServices = ['generic_access', 'device_information', this.options.uartServiceUUID];
 
             this._setStatus('Scanning for devices...');
             let device = await navigator.bluetooth.requestDevice(requestConf);
@@ -250,11 +166,7 @@ export default class Bluetooth extends View {
             device.addEventListener('gattserverdisconnected', () => this._onDisconnected(device.id));
             let server = await device.gatt.connect();
 
-            this._connectedDevices.set(device.id, {
-                device,
-                server,
-                name: device.name ?? device.id
-            });
+            this._connectedDevices.set(device.id, {device, server, name: device.name ?? device.id});
 
             Msg.info('Bluetooth', 'Connected: ' + device.name + ' | Total: ' + this._connectedDevices.size, this.requestor);
             this._setStatus(this._connectedDevices.size + ' device(s) connected', 'connected');
@@ -302,7 +214,7 @@ export default class Bluetooth extends View {
         return entry ? entry.name : null;
     }
 
-    // ── Internal disconnect handler ────────────────────────────────────────
+    // --- Internal disconnect handler ---
 
     _onDisconnected(deviceId) {
         let entry = this._connectedDevices.get(deviceId);
@@ -324,7 +236,7 @@ export default class Bluetooth extends View {
         this.options.onDisconnected.call(this, deviceId);
     }
 
-    // ── MAC validation ────────────────────────────────────────────────────
+    // --- MAC validation ---
 
     async _validateDeviceMac(deviceId) {
         let storageKey = this.options.deviceMismatchKey + '_' + deviceId;
@@ -344,7 +256,7 @@ export default class Bluetooth extends View {
         Msg.info('Bluetooth', 'MAC validated for ' + deviceId, this.requestor);
     }
 
-    // ── Status bar ────────────────────────────────────────────────────────
+    // --- Status bar ---
 
     _setStatus(message, state = '') {
         let el = this.requestor.querySelector('.swac_bluetooth_status');
@@ -358,7 +270,7 @@ export default class Bluetooth extends View {
             el.classList.add('ble-status-error');
     }
 
-    // ── Device card ───────────────────────────────────────────────────────
+    // --- Device card ---
 
     _addDeviceCard(deviceId, deviceName) {
         let listElem = this.requestor.querySelector('.swac_bluetooth_device_list');
@@ -367,12 +279,10 @@ export default class Bluetooth extends View {
 
         let shortId = deviceId.length > 20 ? deviceId.substring(0, 20) + '...' : deviceId;
 
-        // Card shell
         let card = document.createElement('li');
         card.classList.add('ble-device-card');
         card.setAttribute('swac_bluetooth_deviceid', deviceId);
 
-        // Card header
         let header = document.createElement('div');
         header.classList.add('ble-device-header');
 
@@ -412,12 +322,10 @@ export default class Bluetooth extends View {
         header.appendChild(disconnectBtn);
         card.appendChild(header);
 
-        // Command area — only rendered when at least one section is configured
         let cmdArea = document.createElement('div');
         cmdArea.classList.add('ble-commands');
 
         if (this.options.sections && this.options.sections.length > 0) {
-            // Shared response log reused by all buttons on this card
             let responseLog = document.createElement('div');
             responseLog.classList.add('ble-response');
 
@@ -425,9 +333,7 @@ export default class Bluetooth extends View {
                 if (section.type === 'wlan') {
                     cmdArea.appendChild(this._buildWlanSection(deviceId, responseLog, section));
                 } else {
-                    cmdArea.appendChild(
-                            this._buildButtonSection(deviceId, section.title, section.buttons || [], responseLog)
-                            );
+                    cmdArea.appendChild(this._buildButtonSection(deviceId, section.title, section.buttons || [], responseLog));
                 }
             }
 
@@ -436,7 +342,6 @@ export default class Bluetooth extends View {
 
         card.appendChild(cmdArea);
 
-        // Toggle collapse/expand — only useful when there are sections
         toggleBtn.addEventListener('click', () => {
             let collapsed = cmdArea.style.display === 'none';
             cmdArea.style.display = collapsed ? '' : 'none';
@@ -444,7 +349,6 @@ export default class Bluetooth extends View {
             toggleBtn.title = collapsed ? 'Collapse commands' : 'Expand commands';
         });
 
-        // Hide the toggle button entirely when there are no sections to show
         if (!this.options.sections || this.options.sections.length === 0) {
             toggleBtn.style.display = 'none';
         }
@@ -484,20 +388,20 @@ export default class Bluetooth extends View {
                 (btnDef.description ? '<span class="ble-cmd-desc">' + btnDef.description + '</span>' : '');
 
         btn.addEventListener('click', async () => {
-            let method = this[btnDef.action];
-            if (typeof method !== 'function') {
-                responseLog.className = 'ble-response ble-response-visible ble-response-err';
-                responseLog.textContent = 'Unknown action: "' + btnDef.action + '"';
-                return;
-            }
-
             btn.disabled = true;
             btn.style.opacity = '0.6';
             responseLog.className = 'ble-response ble-response-visible';
             responseLog.textContent = 'Waiting for response...';
 
             try {
-                let result = await method.call(this, deviceId);
+                let result;
+                // param: '__method__' triggers a named method (e.g. sendTimeStamp, getMacAddress)
+                // that have special logic beyond a plain sendCommand() call.
+                if (btnDef.param === '__method__' && typeof this[btnDef.action] === 'function') {
+                    result = await this[btnDef.action](deviceId);
+                } else {
+                    result = await this.sendCommand(deviceId, btnDef.action, btnDef.param ?? null);
+                }
                 responseLog.className = 'ble-response ble-response-visible ble-response-ok';
                 responseLog.textContent = btnDef.label + ': ' + JSON.stringify(result, null, 2);
             } catch (e) {
@@ -512,11 +416,6 @@ export default class Bluetooth extends View {
         return btn;
     }
 
-    /**
-     * Builds the WLAN configuration section.
-     * Labels and placeholders can be customised via the section definition object in the config file:
-     *   { title, type: 'wlan', icon, label, description, ssidPlaceholder, passwordPlaceholder }
-     */
     _buildWlanSection(deviceId, responseLog, sectionDef = {}) {
         let section = document.createElement('div');
         section.classList.add('ble-cmd-section');
@@ -546,7 +445,7 @@ export default class Bluetooth extends View {
         pwToggle.addEventListener('click', () => {
             let show = pwInput.type === 'password';
             pwInput.type = show ? 'text' : 'password';
-            pwToggle.textContent = show ? '⌣' : '👁';
+            pwToggle.textContent = show ? '🙈' : '👁';
         });
 
         let pwRow = document.createElement('div');
@@ -612,7 +511,7 @@ export default class Bluetooth extends View {
         setTimeout(() => card.remove(), 320);
     }
 
-    // ── Core BLE communication ────────────────────────────────────────────
+    // --- BLE communication ---
 
     async communicateWithPi(deviceId, jsonString) {
         Msg.flow('Bluetooth', 'communicateWithPi() device=' + deviceId, this.requestor);
@@ -653,7 +552,6 @@ export default class Bluetooth extends View {
                     }
                 };
                 notifyChar.addEventListener('characteristicvaluechanged', handleNotification);
-
                 setTimeout(() => {
                     notifyChar.removeEventListener('characteristicvaluechanged', handleNotification);
                     reject(new Error('Timeout: No response from ' + deviceId + ' within ' + this.options.communicationTimeout + 'ms.'));
@@ -674,148 +572,36 @@ export default class Bluetooth extends View {
         }
     }
 
-    // ── Built-in command methods ──────────────────────────────────────────
-    // These are referenced by name in the sections[].buttons[].action field
-    // of the project-specific config file (e.g. example1.js).
+    // --- Commands ---
 
-    async sendTimeStamp(deviceId) {
-        Msg.flow('Bluetooth', 'sendTimeStamp() ' + deviceId, this.requestor);
+    // Sends a Pi command over BLE. action is the Pi command string (e.g. 'smartMobile_on_measuring')
+    // or an object (e.g. {sendTimeStamp: '...'}). param is forwarded as content.param.
+    async sendCommand(deviceId, action, param = null) {
+        Msg.flow('Bluetooth', 'sendCommand() ' + deviceId + ' action=' + JSON.stringify(action), this.requestor);
         return await this.communicateWithPi(deviceId, JSON.stringify({
             type: 'request', status: null,
-            content: {description: null, data: {sendTimeStamp: new Date().toLocaleString('de-DE')}, param: null}
+            content: {description: null, data: action, param: param}
         }));
     }
 
+    // Sends the current browser timestamp as an object — the Pi expects {sendTimeStamp: '...'}.
+    async sendTimeStamp(deviceId) {
+        return await this.sendCommand(deviceId, {sendTimeStamp: new Date().toLocaleString('de-DE')});
+    }
+
+    // Fetches the MAC address and unwraps it from the response envelope.
+    // Also called internally by _validateDeviceMac().
     async getMacAddress(deviceId) {
-        Msg.flow('Bluetooth', 'getMacAddress() ' + deviceId, this.requestor);
-        const res = await this.communicateWithPi(deviceId, JSON.stringify({
-            type: 'request', status: null,
-            content: {description: null, data: 'getMac', param: null}
-        }));
+        const res = await this.sendCommand(deviceId, 'getMac');
         return res.content.data;
     }
 
-    async startMeasurement(deviceId) {
-        Msg.flow('Bluetooth', 'startMeasurement() ' + deviceId, this.requestor);
-        return await this.communicateWithPi(deviceId, JSON.stringify({
-            type: 'request', status: null,
-            content: {description: null, data: 'smartMobile_on_measuring', param: null}
-        }));
-    }
-
-    async stopMeasurement(deviceId) {
-        Msg.flow('Bluetooth', 'stopMeasurement() ' + deviceId, this.requestor);
-        return await this.communicateWithPi(deviceId, JSON.stringify({
-            type: 'request', status: null,
-            content: {description: null, data: 'smartMobile_off_measuring', param: null}
-        }));
-    }
-
-    async getLastMeasuring(deviceId) {
-        Msg.flow('Bluetooth', 'getLastMeasuring() ' + deviceId, this.requestor);
-        return await this.communicateWithPi(deviceId, JSON.stringify({
-            type: 'request', status: null,
-            content: {description: null, data: 'last_measuring', param: 'last_' + new Date().toLocaleString('de-DE')}
-        }));
-    }
-
-    async measuringStatus(deviceId) {
-        Msg.flow('Bluetooth', 'measuringStatus() ' + deviceId, this.requestor);
-        return await this.communicateWithPi(deviceId, JSON.stringify({
-            type: 'request', status: null,
-            content: {description: null, data: 'smartMobile_measuring_status', param: null}
-        }));
-    }
-
-    async smartMobileStatus(deviceId) {
-        Msg.flow('Bluetooth', 'smartMobileStatus() ' + deviceId, this.requestor);
-        return await this.communicateWithPi(deviceId, JSON.stringify({
-            type: 'request', status: null,
-            content: {description: null, data: 'smartMobile_status', param: null}
-        }));
-    }
-
-    async aggregationOn(deviceId) {
-        Msg.flow('Bluetooth', 'aggregationOn() ' + deviceId, this.requestor);
-        return await this.communicateWithPi(deviceId, JSON.stringify({
-            type: 'request', status: null,
-            content: {description: null, data: 'smartMobile_on_aggregation', param: null}
-        }));
-    }
-
-    async aggregationOff(deviceId) {
-        Msg.flow('Bluetooth', 'aggregationOff() ' + deviceId, this.requestor);
-        return await this.communicateWithPi(deviceId, JSON.stringify({
-            type: 'request', status: null,
-            content: {description: null, data: 'smartMobile_off_aggregation', param: null}
-        }));
-    }
-
-    async aggregationStatus(deviceId) {
-        Msg.flow('Bluetooth', 'aggregationStatus() ' + deviceId, this.requestor);
-        return await this.communicateWithPi(deviceId, JSON.stringify({
-            type: 'request', status: null,
-            content: {description: null, data: 'smartMobile_aggregation_status', param: null}
-        }));
-    }
-
-    async synchronizeDataOn(deviceId) {
-        Msg.flow('Bluetooth', 'synchronizeDataOn() ' + deviceId, this.requestor);
-        return await this.communicateWithPi(deviceId, JSON.stringify({
-            type: 'request', status: null,
-            content: {description: null, data: 'smartMobile_on_synchronisation', param: null}
-        }));
-    }
-
-    async synchronizeDataOff(deviceId) {
-        Msg.flow('Bluetooth', 'synchronizeDataOff() ' + deviceId, this.requestor);
-        return await this.communicateWithPi(deviceId, JSON.stringify({
-            type: 'request', status: null,
-            content: {description: null, data: 'smartMobile_off_synchronisation', param: null}
-        }));
-    }
-
-    async synchronizeDataStatus(deviceId) {
-        Msg.flow('Bluetooth', 'synchronizeDataStatus() ' + deviceId, this.requestor);
-        return await this.communicateWithPi(deviceId, JSON.stringify({
-            type: 'request', status: null,
-            content: {description: null, data: 'smartMobile_synchronisation_status', param: null}
-        }));
-    }
-
-    async stopAll(deviceId) {
-        Msg.flow('Bluetooth', 'stopAll() ' + deviceId, this.requestor);
-        return await this.communicateWithPi(deviceId, JSON.stringify({
-            type: 'request', status: null,
-            content: {description: null, data: 'smartMobile_stop_all', param: null}
-        }));
-    }
-
-    async rebootPi(deviceId) {
-        Msg.flow('Bluetooth', 'rebootPi() ' + deviceId, this.requestor);
-        return await this.communicateWithPi(deviceId, JSON.stringify({
-            type: 'request', status: null,
-            content: {description: null, data: 'reboot', param: null}
-        }));
-    }
-
+    // Called by the WLAN form with ssid and password as separate arguments.
     async addWLANToPi(deviceId, ssid, password) {
-        Msg.flow('Bluetooth', 'addWLANToPi() ' + deviceId, this.requestor);
-        return await this.communicateWithPi(deviceId, JSON.stringify({
-            type: 'request', status: null,
-            content: {description: null, data: 'addWlan', param: {ssid, password}}
-        }));
+        return await this.sendCommand(deviceId, 'addWlan', {ssid, password});
     }
 
-    async shutDownPi(deviceId) {
-        Msg.flow('Bluetooth', 'shutDownPi() ' + deviceId, this.requestor);
-        return await this.communicateWithPi(deviceId, JSON.stringify({
-            type: 'request', status: null,
-            content: {description: null, data: 'shutdown', param: null}
-        }));
-    }
-
-    // ── Utilities ─────────────────────────────────────────────────────────
+    // --- Utilities ---
 
     _formatMac(input) {
         const clean = input.replace(/[-\s:]/g, '').toUpperCase();
