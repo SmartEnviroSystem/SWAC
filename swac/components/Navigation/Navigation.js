@@ -89,7 +89,7 @@ export default class Navigation extends View {
             name: 'parent',
             desc: 'Reference path ref:// to the parent navigation entry.'
         };
-        
+
         this.desc.optPerSet[1] = {
             name: 'icon',
             desc: 'path to icon file.'
@@ -166,17 +166,36 @@ export default class Navigation extends View {
 
     // Inheritted
     afterAddSet(set, repeateds) {
-        let repForSets = this.requestor.querySelectorAll('[swac_fromname="' + set.swac_fromName + '"][swac_setid="' + set.id + '"]');
+        let repForSets = this.requestor.querySelectorAll(
+                '[swac_fromname="' + set.swac_fromName + '"][swac_setid="' + set.id + '"]'
+                );
+
+// URL‑Parameter einmal auslesen
+        let urlParams = new URLSearchParams(window.location.search);
+
         for (let curRepForSet of repForSets) {
             // Look at each link
             let as = curRepForSet.querySelectorAll('a');
             for (let curA of as) {
                 let curHref = curA.getAttribute('href');
-                if (!curHref.startsWith('#') && !curHref.startsWith('http')) {
-                    curA.setAttribute('href', SWAC.config.app_root + '/sites/' + curHref);
+                // --- Platzhalter ersetzen ---
+                // Beispiel: href="details.html?id={id}&name={username}"
+                if (curHref.includes('{')) {
+                    curHref = curHref.replace(/\{([^}]+)\}/g, (match, p1) => {
+                        // p1 = Name des Parameters
+                        return urlParams.get(p1) ?? match; // falls nicht vorhanden, Platzhalter stehen lassen
+                    });
                 }
+
+                // --- Relative Links umbiegen ---
+                if (!curHref.startsWith('#') && !curHref.startsWith('http')) {
+                    curHref = SWAC.config.app_root + '/sites/' + curHref;
+                }
+
+                curA.setAttribute('href', curHref);
             }
         }
+
         super.afterAddSet(set, repeateds);
     }
 
