@@ -15,13 +15,13 @@ export default class Navigation extends View {
         this.desc.license = 'GNU Lesser General Public License';
 
         this.desc.templates[0] = {
-            name: 'nav',
-            style: 'nav',
+            name: 'nav_text_top',
+            style: 'nav_text_top',
             desc: 'Responsive navigation menue for big and small screens. Awaits a logo.png/avif in ../files/icons/'
         };
         this.desc.templates[1] = {
-            name: 'nav_nologo',
-            style: 'nav_nologo',
+            name: 'nav_text_top_nologo',
+            style: 'nav_text_top_nologo',
             desc: 'Responsive navigation menue with logo for big and small screens. Without logo.'
         };
         this.desc.templates[2] = {
@@ -30,24 +30,18 @@ export default class Navigation extends View {
             desc: 'Simple sitemap generated from the navigation data.'
         };
         this.desc.templates[3] = {
-            name: 'nav_webPush',
-            style: 'nav_webPush',
-            desc: 'Display for webPush application.'
+            name: 'nav_text_side',
+            desc: 'Display navigation menu in sidebar.'
         };
         this.desc.templates[4] = {
-            name: 'nav_webPush_mobile',
-            style: 'nav_webPush_mobile',
+            name: 'nav_icons',
+            style: 'nav_icons',
             desc: 'Display for webPush mobile application.'
         };
         this.desc.templates[5] = {
-            name: 'nav_title_offcanvas',
-            style: 'nav_title_offcanvas',
-            desc: 'Banner displaying a Logo on the left, an Application Name in the Center and the Navigation along its Add-Ons in an Offcanvas Container to the right. Awaits the logo.png in ../../data; AppName configurable using the swac_lang Key appName'
-        };
-        this.desc.templates[6] = {
-            name: 'nav_imagePerItem',
-            style: 'nav_imagePerItem',
-            desc: 'Navigation displaying an Image per Item; img src must be specified using Key src in the displayed Data'
+            name: 'nav_icons_at_bottom',
+            style: 'nav_icons_at_bottom',
+            desc: 'Navigation displaying an Icon at the bottom of the display'
         };
         this.desc.styles[0] = {
             selc: ".swac_navigation_head",
@@ -94,6 +88,11 @@ export default class Navigation extends View {
         this.desc.optPerSet[0] = {
             name: 'parent',
             desc: 'Reference path ref:// to the parent navigation entry.'
+        };
+        
+        this.desc.optPerSet[1] = {
+            name: 'icon',
+            desc: 'path to icon file.'
         };
 
         this.desc.opts[0] = {

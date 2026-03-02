@@ -445,7 +445,7 @@ export default class Bluetooth extends View {
         pwToggle.addEventListener('click', () => {
             let show = pwInput.type === 'password';
             pwInput.type = show ? 'text' : 'password';
-            pwToggle.textContent = show ? '🙈' : '👁';
+            pwToggle.textContent = show ? '⌣' : '👁';
         });
 
         let pwRow = document.createElement('div');
@@ -584,9 +584,28 @@ export default class Bluetooth extends View {
         }));
     }
 
-    // Sends the current browser timestamp as an object — the Pi expects {sendTimeStamp: '...'}.
+    // Builds a local-time ISO-like string (YYYY-MM-DDTHH:MM:SS) from the current system clock.
+    // toLocaleString('de-DE') is NOT used because its output format varies between browsers and
+    // OS locales, making it unreliable for strptime parsing on the Pi.
+    // toISOString() is also not used because it returns UTC, not the user's local wall-clock time.
+    _buildLocalIsoTimestamp() {
+        const now = new Date();
+        const pad = (n) => String(n).padStart(2, '0');
+        return now.getFullYear() + '-' +
+            pad(now.getMonth() + 1) + '-' +
+            pad(now.getDate()) + 'T' +
+            pad(now.getHours()) + ':' +
+            pad(now.getMinutes()) + ':' +
+            pad(now.getSeconds());
+    }
+
+    // Sends the current local wall-clock time to the Pi so it can set its system clock.
+    // The timestamp is embedded directly inside the 'data' object so the Pi dispatcher
+    // can identify it via isinstance(command, dict) and "sendTimeStamp" in command.
     async sendTimeStamp(deviceId) {
-        return await this.sendCommand(deviceId, {sendTimeStamp: new Date().toLocaleString('de-DE')});
+        const ts = this._buildLocalIsoTimestamp();
+        Msg.flow('Bluetooth', 'sendTimeStamp() ts=' + ts, this.requestor);
+        return await this.sendCommand(deviceId, {sendTimeStamp: ts});
     }
 
     // Fetches the MAC address and unwraps it from the response envelope.
