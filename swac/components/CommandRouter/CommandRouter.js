@@ -33,6 +33,33 @@ export default class CommandRouter extends View {
         if (!options.components)
             this.options.components = null;
 
+        this.desc.opts[1] = {
+            name: "targetDatacapsule",
+            desc: "",
+            example: {
+                fromName: 'mytablename', // Name of the datatable
+                fromWheres: {
+                    filter: 'id,lt,10', // Filter datasets (when use TreeQL / SmartData)
+                    // Note: When you need to use two or more filters, add them in the filter attribute: id,gt,5&filter=id,lt,10
+                    other: 'This is another attribute to send with request'
+                },
+                fromHeaders: {
+                    "X-Requested-By": "SWAC"
+                }
+            }
+        };
+        if (!options.targetDatacapsule)
+            this.options.targetDatacapsule = {
+                fromName: '/SmartWebSocket/smartwebsocket/socket/{name}'
+            };
+        this.desc.opts[2] = {
+            name: "deviceNameSource",
+            desc: "CSS Selector for an element contianing the device name",
+            example: '.nameelement'
+        };
+        if (!options.deviceNameSource)
+            this.options.deviceNameSource = '.device_name';
+
         if (!options.showWhenNoData)
             this.options.showWhenNoData = true;
 
@@ -85,9 +112,11 @@ export default class CommandRouter extends View {
      */
     executeCommand(evt) {
         Msg.flow('CommandRouter', 'executeCommand()', this.requestor);
+        let thisRef = this;
 
         // Get command for execution
         let cmd = evt.target.getAttribute('cmd');
+        let executed = false;
         // Check on every component
         for (let curComp of this.comps) {
             // Check if component is currently able to process commands
@@ -99,16 +128,19 @@ export default class CommandRouter extends View {
                 // Execute command
                 try {
                     let res = curComp.swac_comp.doCommand(cmd);
-                    Msg.info('CommandRouter', 'Command >' + cmd + '< on component >' + curComp.id + '< executed with result: ' + res);
 
-                    this.generateView(res);
-
-                    // Dispatch command executed event
-                    document.dispatchEvent(new CustomEvent('swac_' + this.requestor.id + '_commandrouter_executed', {detail: {
-                            'comp': curComp,
-                            'result': res
-                        }}))
-
+                    if (typeof res.then === 'function') {
+                        // If returned is a promise wait
+                        res.then(function (response) {
+                            Msg.info('CommandRouter', 'Command >' + cmd + '< on component >' + curComp.id + '< executed with result: ' + response);
+                            let dataset = response.data;
+                            this.processResult(dataset, curComp);
+                        });
+                    } else {
+                        Msg.info('CommandRouter', 'Command >' + cmd + '< on component >' + curComp.id + '< executed with result: ' + res);
+                        // If returend is no promise proced
+                        this.processResult(res, curComp);
+                    }
                 } catch (e) {
                     Msg.error('CommandRouter', 'Command >' + cmd + '< on component >' + curComp.id + '< threw error: ' + e, this.requestor);
                 }
@@ -116,10 +148,60 @@ export default class CommandRouter extends View {
                 Msg.warn('CommandRouter', 'Component ' + curComp.id + ' does not support commandable.', this.requestor);
             }
         }
+        // Fallback to requestor if configured
+        if (!executed && this.options.targetDatacapsule) {
+            // Create copy of targetDatacapsule
+            const curCapsule = Object.assign({}, this.options.targetDatacapsule);
+
+            let name = '';
+            let nameElem = document.querySelector(this.options.deviceNameSource);
+            if (nameElem) {
+                name = nameElem.children[0].innerHTML;
+            } else {
+                Msg.error('CommandRouter', 'Client name not found.', this.requestor);
+            }
+            curCapsule.fromName = curCapsule.fromName.replace('{name}', name);
+
+            // Add command
+            curCapsule.data = [{
+                    action: cmd
+                }];
+
+            let Model = window.swac.Model;
+            let dataPromise = Model.save(curCapsule, true);
+            // Wait for data to be loaded
+            dataPromise.then(function (result) {
+                console.log('TEST result neu: ',result);
+                // Get dataset from result
+                //TODO Hier stimmt noch etwas nicht mit der empfangenen Datenstruktur.
+                // Eigentlich müsste der Datensatz per result[0] direkt zugreifbar sein
+                let datasets = result[0].data;
+                console.log('TEST dataset:',datasets[0]);
+                thisRef.processResult(datasets[0], null);
+            }).catch(function (err) {
+                // Handle load error
+                Msg.error('CommandRouter','Could not process data: ' + err,this.requestor);
+            });
+        }
     }
 
-    generateView(result) {
-        if (!result || typeof result.then !== 'function')
+    processResult(result, comp) {
+        Msg.flow('CommandRouter', 'processResult()', this.requestor);
+        console.log('TEST datasets',result);
+        this.generateView(result);
+        
+        //TODO show status message if result contains status message but no data
+
+        // Dispatch command executed event
+        document.dispatchEvent(new CustomEvent('swac_' + this.requestor.id + '_commandrouter_executed', {detail: {
+                'comp': comp,
+                'result': result
+            }}))
+    }
+
+    generateView(dataset) {
+        Msg.flow('CommandRouter', 'generateView()', this.requestor);
+        if (!dataset)
             return;
 
         let modal = document.getElementById('last-measuring-modal');
@@ -128,52 +210,30 @@ export default class CommandRouter extends View {
         let table = document.getElementById('last-measuring-table');
         let tbody = document.getElementById('last-measuring-tbody');
 
-        // Only handle last_measuring responses
         // Close any open UIkit dropdown before showing the modal
         document.querySelectorAll('[uk-dropdown]').forEach(function (el) {
             UIkit.dropdown(el).hide(false);
         });
 
-        result.then(function (res) {
-            if (!res || res.status === undefined)
-                return;
-            // Only react when the response contains sensor data
-            if (res.status !== 'ok' || !res.data)
-                return;
+        loading.style.display = 'none';
+        error.style.display = 'none';
+        tbody.innerHTML = '';
 
-            loading.style.display = 'none';
-            error.style.display = 'none';
-            tbody.innerHTML = '';
-
-            let row = res.data;
-            Object.entries(row).forEach(function ([key, value]) {
-                let tr = document.createElement('tr');
-                let tdKey = document.createElement('td');
-                tdKey.textContent = key;
-                tdKey.style.fontWeight = '600';
-                let tdVal = document.createElement('td');
-                tdVal.textContent = (value !== null && value !== undefined) ? value : '—';
-                tr.appendChild(tdKey);
-                tr.appendChild(tdVal);
-                tbody.appendChild(tr);
-            });
-
-            table.style.display = '';
-            UIkit.modal(modal).show();
-
-        }).catch(function (err) {
-            loading.style.display = 'none';
-            table.style.display = 'none';
-            error.textContent = 'Error: ' + err.message;
-            error.style.display = '';
-            UIkit.modal(modal).show();
+        let row = dataset;
+        Object.entries(row).forEach(function ([key, value]) {
+            let tr = document.createElement('tr');
+            let tdKey = document.createElement('td');
+            tdKey.textContent = key;
+            tdKey.style.fontWeight = '600';
+            let tdVal = document.createElement('td');
+            tdVal.textContent = (value !== null && value !== undefined) ? value : '—';
+            tr.appendChild(tdKey);
+            tr.appendChild(tdVal);
+            tbody.appendChild(tr);
         });
 
-        // Show spinner immediately while the promise is pending
-        tbody.innerHTML = '';
-        table.style.display = 'none';
-        error.style.display = 'none';
-        loading.style.display = '';
+        table.style.display = '';
+        UIkit.modal(modal).show();
     }
 
     /**
