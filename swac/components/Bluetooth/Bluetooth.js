@@ -626,4 +626,20 @@ export default class Bluetooth extends View {
         const clean = input.replace(/[-\s:]/g, '').toUpperCase();
         return clean.match(/.{1,2}/g)?.join('-') || '';
     }
+    
+    /**
+     * Commandable functions
+     */
+    isCommandable() {
+        // Check if a device is connected and commands can be send
+        return false;
+    }
+    
+    doCommand(cmd) {
+        // Find if given command is supported
+        
+        // If more than one device is connected ask user which device to command
+        
+        // If input is needed ask user for input
+    }
 }
