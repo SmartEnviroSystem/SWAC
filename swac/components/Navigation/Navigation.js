@@ -35,12 +35,10 @@ export default class Navigation extends View {
         };
         this.desc.templates[4] = {
             name: 'nav_icons',
-            style: 'nav_icons',
             desc: 'Display for webPush mobile application.'
         };
         this.desc.templates[5] = {
             name: 'nav_icons_at_bottom',
-            style: 'nav_icons_at_bottom',
             desc: 'Navigation displaying an Icon at the bottom of the display'
         };
         this.desc.styles[0] = {
