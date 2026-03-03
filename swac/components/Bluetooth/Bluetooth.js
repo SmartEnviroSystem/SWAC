@@ -38,7 +38,7 @@ export default class Bluetooth extends View {
 
         this.desc.optPerTpl[2] = {
             selc: '.swac_bluetooth_connect_minimal_btn',
-            desc: 'Minimal ble connetc Button'
+            desc: 'Minimal ble connect button'
         };
 
         this.desc.optPerTpl[3] = {
@@ -48,12 +48,12 @@ export default class Bluetooth extends View {
 
         this.desc.optPerTpl[4] = {
             selc: '.ble-header',
-            desc: 'Ble header styling for Panel'
+            desc: 'BLE header styling for panel'
         };
 
         this.desc.optPerTpl[5] = {
             selc: '.ble-header-icon',
-            desc: 'Bluetooth Icon'
+            desc: 'Bluetooth icon'
         };
 
         this.desc.optPerTpl[6] = {
@@ -122,6 +122,7 @@ export default class Bluetooth extends View {
         this.desc.funcs[6] = {name: 'sendTimeStamp', params: [{name: 'deviceId'}], returns: {type: 'Promise<Object>'}};
         this.desc.funcs[7] = {name: 'getMacAddress', params: [{name: 'deviceId'}], returns: {type: 'Promise<String>'}};
         this.desc.funcs[8] = {name: 'addWLANToPi', params: [{name: 'deviceId'}, {name: 'ssid'}, {name: 'password'}], returns: {type: 'Promise<Object>'}};
+        this.desc.funcs[9] = {name: 'getDeviceId', desc: 'Returns the deviceId of the first connected device, or the first matching a name filter.', params: [{name: 'nameFilter', desc: 'Optional name substring to match (case-insensitive).'}], returns: {type: 'String|null'}};
 
         this.desc.events[0] = {name: 'swac_REQUESTOR_ID_bluetooth_connected', desc: 'Fired on successful connection.', data: 'event.detail = { deviceId, device }'};
         this.desc.events[1] = {name: 'swac_REQUESTOR_ID_bluetooth_disconnected', desc: 'Fired on disconnect.', data: 'event.detail = { deviceId }'};
@@ -170,7 +171,7 @@ export default class Bluetooth extends View {
     async connectDevice() {
         Msg.flow('Bluetooth', 'connectDevice()', this.requestor);
 
-        // template check
+        // Check which template is active
         let minimal_Btn = this.requestor.querySelector('.swac_bluetooth_connect_minimal_btn');
 
         if (minimal_Btn) {
@@ -221,17 +222,15 @@ export default class Bluetooth extends View {
             }));
             this.options.onConnected.call(this, device.id, device);
 
-
             if (minimal_Btn) {
-                minimal_Btn.innerText = 'Gerät verbunden: ' + device.name;
+                minimal_Btn.innerText = 'Device connected: ' + device.name;
             }
 
             return device.id;
 
         } catch (err) {
-
             if (minimal_Btn) {
-                minimal_Btn.innerText = 'Fehler, bittte erneut versuchen';
+                minimal_Btn.innerText = 'Error, please try again';
             }
 
             this._setStatus('Connection failed: ' + err.message, 'error');
@@ -266,6 +265,9 @@ export default class Bluetooth extends View {
         return entry ? entry.name : null;
     }
 
+    // Returns the deviceId of the first connected device,
+    // or the first device whose name contains the given nameFilter (case-insensitive).
+    // Returns null if no matching device is connected.
     getDeviceId(nameFilter = null) {
         if (this._connectedDevices.size === 0) {
             Msg.warn('Bluetooth', 'getDeviceId() called but no devices are connected.', this.requestor);
@@ -299,9 +301,9 @@ export default class Bluetooth extends View {
 
         let count = this._connectedDevices.size;
         this._setStatus(
-                count > 0 ? count + ' device(s) connected' : 'Ready - no device connected',
-                count > 0 ? 'connected' : ''
-                );
+            count > 0 ? count + ' device(s) connected' : 'Ready - no device connected',
+            count > 0 ? 'connected' : ''
+        );
 
         this.requestor.dispatchEvent(new CustomEvent('swac_' + this.requestor.id + '_bluetooth_disconnected', {
             detail: {deviceId}
@@ -456,9 +458,9 @@ export default class Bluetooth extends View {
             btn.classList.add('ble-cmd-' + btnDef.style);
 
         btn.innerHTML =
-                (btnDef.icon ? '<span class="ble-cmd-icon">' + btnDef.icon + '</span>' : '') +
-                (btnDef.label ? '<span class="ble-cmd-name">' + btnDef.label + '</span>' : '') +
-                (btnDef.description ? '<span class="ble-cmd-desc">' + btnDef.description + '</span>' : '');
+            (btnDef.icon ? '<span class="ble-cmd-icon">' + btnDef.icon + '</span>' : '') +
+            (btnDef.label ? '<span class="ble-cmd-name">' + btnDef.label + '</span>' : '') +
+            (btnDef.description ? '<span class="ble-cmd-desc">' + btnDef.description + '</span>' : '');
 
         btn.addEventListener('click', async () => {
             btn.disabled = true;
@@ -489,6 +491,8 @@ export default class Bluetooth extends View {
         return btn;
     }
 
+    // Renders a WLAN section with a single button that opens the modal dialog.
+    // The inline input fields have been removed — the modal is the only entry point.
     _buildWlanSection(deviceId, responseLog, sectionDef = {}) {
         let section = document.createElement('div');
         section.classList.add('ble-cmd-section');
@@ -498,63 +502,28 @@ export default class Bluetooth extends View {
         label.textContent = sectionDef.title || 'WLAN';
         section.appendChild(label);
 
-        let form = document.createElement('div');
-        form.classList.add('ble-wlan-form');
-
-        let ssidInput = document.createElement('input');
-        ssidInput.type = 'text';
-        ssidInput.placeholder = sectionDef.ssidPlaceholder || 'WLAN name (SSID)';
-        ssidInput.classList.add('ble-wlan-input');
-
-        let pwInput = document.createElement('input');
-        pwInput.type = 'password';
-        pwInput.placeholder = sectionDef.passwordPlaceholder || 'Password';
-        pwInput.classList.add('ble-wlan-input');
-
-        let pwToggle = document.createElement('button');
-        pwToggle.classList.add('ble-wlan-toggle');
-        pwToggle.textContent = '👁';
-        pwToggle.title = 'Show password';
-        pwToggle.addEventListener('click', () => {
-            let show = pwInput.type === 'password';
-            pwInput.type = show ? 'text' : 'password';
-            pwToggle.textContent = show ? '⌣' : '👁';
-        });
-
-        let pwRow = document.createElement('div');
-        pwRow.classList.add('ble-wlan-pw-row');
-        pwRow.appendChild(pwInput);
-        pwRow.appendChild(pwToggle);
-
         let wlanBtn = document.createElement('button');
         wlanBtn.classList.add('ble-cmd-btn');
         wlanBtn.innerHTML =
-                '<span class="ble-cmd-icon">' + (sectionDef.icon || '📶') + '</span>' +
-                '<span class="ble-cmd-name">' + (sectionDef.label || 'Add WLAN') + '</span>' +
-                '<span class="ble-cmd-desc">' + (sectionDef.description || 'Configure WLAN on the Pi') + '</span>';
+            '<span class="ble-cmd-icon">' + (sectionDef.icon || '📶') + '</span>' +
+            '<span class="ble-cmd-name">' + (sectionDef.label || 'Add WLAN') + '</span>' +
+            '<span class="ble-cmd-desc">' + (sectionDef.description || 'Configure WLAN on the Pi') + '</span>';
 
         wlanBtn.addEventListener('click', async () => {
-            let ssid = ssidInput.value.trim();
-            let pw = pwInput.value;
-
-            if (!ssid) {
-                responseLog.className = 'ble-response ble-response-visible ble-response-err';
-                responseLog.textContent = 'Please enter a WLAN name.';
-                return;
-            }
-
-            wlanBtn.disabled = true;
-            wlanBtn.style.opacity = '0.6';
-            responseLog.className = 'ble-response ble-response-visible';
-            responseLog.textContent = 'Waiting for response...';
-
             try {
-                let result = await this.addWLANToPi(deviceId, ssid, pw);
+                let {ssid, password} = await this._showWlanModal();
+
+                wlanBtn.disabled = true;
+                wlanBtn.style.opacity = '0.6';
+                responseLog.className = 'ble-response ble-response-visible';
+                responseLog.textContent = 'Waiting for response...';
+
+                let result = await this.addWLANToPi(deviceId, ssid, password);
                 responseLog.className = 'ble-response ble-response-visible ble-response-ok';
                 responseLog.textContent = (sectionDef.label || 'Add WLAN') + ': ' + JSON.stringify(result, null, 2);
-                ssidInput.value = '';
-                pwInput.value = '';
             } catch (e) {
+                // Modal cancelled: no error shown in response log
+                if (e.message.includes('cancelled')) return;
                 responseLog.className = 'ble-response ble-response-visible ble-response-err';
                 responseLog.textContent = e.message;
             } finally {
@@ -563,13 +532,10 @@ export default class Bluetooth extends View {
             }
         });
 
-        form.appendChild(ssidInput);
-        form.appendChild(pwRow);
-        form.appendChild(wlanBtn);
-        section.appendChild(form);
-
+        section.appendChild(wlanBtn);
         return section;
     }
+
 
     _removeDeviceCard(deviceId) {
         let listElem = this.requestor.querySelector('.swac_bluetooth_device_list');
@@ -665,11 +631,11 @@ export default class Bluetooth extends View {
         const now = new Date();
         const pad = (n) => String(n).padStart(2, '0');
         return now.getFullYear() + '-' +
-                pad(now.getMonth() + 1) + '-' +
-                pad(now.getDate()) + 'T' +
-                pad(now.getHours()) + ':' +
-                pad(now.getMinutes()) + ':' +
-                pad(now.getSeconds());
+            pad(now.getMonth() + 1) + '-' +
+            pad(now.getDate()) + 'T' +
+            pad(now.getHours()) + ':' +
+            pad(now.getMinutes()) + ':' +
+            pad(now.getSeconds());
     }
 
     // Sends the current local wall-clock time to the Pi so it can set its system clock.
@@ -700,8 +666,169 @@ export default class Bluetooth extends View {
         return clean.match(/.{1,2}/g)?.join('-') || '';
     }
 
+    // --- WLAN modal ---
+
+    // Opens a styled modal dialog to collect SSID and password from the user.
+    // Returns a Promise<{ssid, password}> that resolves on confirm and rejects on cancel.
+    _showWlanModal() {
+        return new Promise((resolve, reject) => {
+            // Backdrop overlay
+            let overlay = document.createElement('div');
+            overlay.style.cssText = `
+                position: fixed; inset: 0; z-index: 9999;
+                background: rgba(0,0,0,0.5);
+                display: flex; align-items: center; justify-content: center;
+            `;
+
+            // Modal box
+            let modal = document.createElement('div');
+            modal.style.cssText = `
+                background: #fff; border-radius: 12px; padding: 28px 32px;
+                min-width: 320px; max-width: 420px; width: 90%;
+                box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+                font-family: inherit;
+            `;
+
+            // Title
+            let title = document.createElement('h3');
+            title.textContent = '📶 Add WLAN';
+            title.style.cssText = 'margin: 0 0 20px 0; font-size: 1.1rem; color: #1a1a2e;';
+
+            // SSID label + input
+            let ssidLabel = document.createElement('label');
+            ssidLabel.textContent = 'WLAN Name (SSID)';
+            ssidLabel.style.cssText = 'display: block; font-size: 0.85rem; color: #555; margin-bottom: 4px;';
+
+            let ssidInput = document.createElement('input');
+            ssidInput.type = 'text';
+            ssidInput.placeholder = 'e.g. MyNetwork';
+            ssidInput.style.cssText = `
+                width: 100%; box-sizing: border-box; padding: 9px 12px;
+                border: 1px solid #ccc; border-radius: 7px; font-size: 0.95rem;
+                margin-bottom: 16px; outline: none;
+            `;
+            ssidInput.addEventListener('focus', () => ssidInput.style.borderColor = '#4a90e2');
+            ssidInput.addEventListener('blur',  () => ssidInput.style.borderColor = '#ccc');
+
+            // Password label + input row
+            let pwLabel = document.createElement('label');
+            pwLabel.textContent = 'Password';
+            pwLabel.style.cssText = 'display: block; font-size: 0.85rem; color: #555; margin-bottom: 4px;';
+
+            let pwRow = document.createElement('div');
+            pwRow.style.cssText = 'display: flex; gap: 6px; margin-bottom: 24px;';
+
+            let pwInput = document.createElement('input');
+            pwInput.type = 'password';
+            pwInput.placeholder = 'Enter password';
+            pwInput.style.cssText = `
+                flex: 1; padding: 9px 12px;
+                border: 1px solid #ccc; border-radius: 7px; font-size: 0.95rem;
+                outline: none;
+            `;
+            pwInput.addEventListener('focus', () => pwInput.style.borderColor = '#4a90e2');
+            pwInput.addEventListener('blur',  () => pwInput.style.borderColor = '#ccc');
+
+            // Toggle password visibility
+            let pwToggle = document.createElement('button');
+            pwToggle.textContent = '👁';
+            pwToggle.title = 'Show password';
+            pwToggle.style.cssText = `
+                padding: 0 12px; border: 1px solid #ccc; border-radius: 7px;
+                background: #f5f5f5; cursor: pointer; font-size: 1rem;
+            `;
+            pwToggle.addEventListener('click', () => {
+                let show = pwInput.type === 'password';
+                pwInput.type = show ? 'text' : 'password';
+                pwToggle.textContent = show ? '🙈' : '👁';
+            });
+
+            pwRow.appendChild(pwInput);
+            pwRow.appendChild(pwToggle);
+
+            // Inline validation error message
+            let errorMsg = document.createElement('div');
+            errorMsg.style.cssText = `
+                color: #e53e3e; font-size: 0.82rem;
+                margin-bottom: 12px; display: none;
+            `;
+
+            // Action buttons
+            let btnRow = document.createElement('div');
+            btnRow.style.cssText = 'display: flex; gap: 10px; justify-content: flex-end;';
+
+            let cancelBtn = document.createElement('button');
+            cancelBtn.textContent = 'Cancel';
+            cancelBtn.style.cssText = `
+                padding: 9px 20px; border: 1px solid #ccc; border-radius: 7px;
+                background: #f5f5f5; cursor: pointer; font-size: 0.9rem;
+            `;
+
+            let confirmBtn = document.createElement('button');
+            confirmBtn.textContent = 'Connect';
+            confirmBtn.style.cssText = `
+                padding: 9px 20px; border: none; border-radius: 7px;
+                background: #4a90e2; color: #fff; cursor: pointer;
+                font-size: 0.9rem; font-weight: 600;
+            `;
+
+            // Close and reject helpers
+            const close = () => document.body.removeChild(overlay);
+
+            cancelBtn.addEventListener('click', () => {
+                close();
+                reject(new Error('doCommand() cancelled: WLAN modal dismissed.'));
+            });
+
+            // Click on the backdrop also cancels
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) {
+                    close();
+                    reject(new Error('doCommand() cancelled: WLAN modal dismissed.'));
+                }
+            });
+
+            // Confirm: validate SSID then resolve
+            const confirm = () => {
+                let ssid = ssidInput.value.trim();
+                if (!ssid) {
+                    errorMsg.textContent = 'Please enter a WLAN name.';
+                    errorMsg.style.display = 'block';
+                    ssidInput.focus();
+                    return;
+                }
+                close();
+                resolve({ssid, password: pwInput.value});
+            };
+
+            confirmBtn.addEventListener('click', confirm);
+            // Enter in SSID field moves focus to password field
+            ssidInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') pwInput.focus(); });
+            // Enter in password field confirms
+            pwInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') confirm(); });
+
+            btnRow.appendChild(cancelBtn);
+            btnRow.appendChild(confirmBtn);
+
+            modal.appendChild(title);
+            modal.appendChild(ssidLabel);
+            modal.appendChild(ssidInput);
+            modal.appendChild(pwLabel);
+            modal.appendChild(pwRow);
+            modal.appendChild(errorMsg);
+            modal.appendChild(btnRow);
+            overlay.appendChild(modal);
+            document.body.appendChild(overlay);
+
+            // Auto-focus SSID input after the modal is rendered
+            setTimeout(() => ssidInput.focus(), 50);
+        });
+    }
+
+    // --- Commandable interface ---
+
+    // Returns true only when at least one device is connected and ready to receive commands.
     isCommandable() {
-        // Commands can only be sent if at least one device is connected
         if (this._connectedDevices.size === 0) {
             Msg.warn('Bluetooth', 'isCommandable() = false: no devices connected.', this.requestor);
             return false;
@@ -709,9 +836,15 @@ export default class Bluetooth extends View {
         return true;
     }
 
+    // Executes a command string on the first connected device (or prompts the user
+    // to choose when multiple devices are connected).
+    // For 'addWlan', a modal dialog collects SSID and password before sending.
+    // Returns a Promise that resolves with the Pi response object.
     doCommand(cmd) {
         Msg.flow('Bluetooth', 'doCommand() cmd=' + cmd, this.requestor);
 
+        // Match the command against configured section buttons to pick up any preset param.
+        // Falls back to a bare action object for commands not listed in any section.
         let matchedBtn = null;
         for (let section of this.options.sections) {
             if (section.buttons) {
@@ -722,63 +855,46 @@ export default class Bluetooth extends View {
             matchedBtn = {action: cmd, param: null};
         }
         if (!matchedBtn) {
-            console.warn('[doCommand] unknown command:', cmd);
             Msg.warn('Bluetooth', 'doCommand(): unknown command "' + cmd + '"', this.requestor);
             return Promise.reject(new Error('Unknown command: ' + cmd));
         }
 
+        // Resolve the target device — prompt the user if more than one is connected.
         let deviceId;
         if (this._connectedDevices.size === 1) {
             deviceId = this._connectedDevices.keys().next().value;
         } else {
-            let options = [];
+            let deviceOptions = [];
             let i = 1;
             for (let [id, entry] of this._connectedDevices) {
-                options.push(i + ': ' + entry.name + ' (' + id.substring(0, 10) + '...)');
+                deviceOptions.push(i + ': ' + entry.name + ' (' + id.substring(0, 10) + '...)');
                 i++;
             }
             let choice = window.prompt(
-                    'Multiple devices connected. Choose a device:\n\n' + options.join('\n'), '1'
-                    );
+                'Multiple devices connected. Choose a device:\n\n' + deviceOptions.join('\n'), '1'
+            );
             if (!choice) {
-                console.warn('[doCommand] cancelled: no device selected');
                 return Promise.reject(new Error('doCommand() cancelled: no device selected.'));
             }
             let idx = parseInt(choice) - 1;
             let ids = Array.from(this._connectedDevices.keys());
             if (idx < 0 || idx >= ids.length) {
-                console.warn('[doCommand] invalid device selection:', choice);
                 return Promise.reject(new Error('doCommand(): invalid device selection "' + choice + '"'));
             }
             deviceId = ids[idx];
         }
 
-        let param = matchedBtn.param ?? null;
-
+        // For addWlan, open the modal to collect credentials before sending.
         if (cmd === 'addWlan') {
-            let ssid = window.prompt('WLAN name (SSID):');
-            if (!ssid) {
-                console.warn('[doCommand] cancelled: no SSID entered');
-                return Promise.reject(new Error('doCommand() cancelled: no SSID entered.'));
-            }
-            let password = window.prompt('Password for "' + ssid + '":');
-            if (password === null) {
-                console.warn('[doCommand] cancelled: password prompt dismissed');
-                return Promise.reject(new Error('doCommand() cancelled: password prompt dismissed.'));
-            }
-            param = {ssid: ssid.trim(), password};
+            return this._showWlanModal().then(({ssid, password}) => {
+                Msg.info('Bluetooth', 'doCommand() -> sendCommand deviceId=' + deviceId + ' action=' + cmd, this.requestor);
+                return this.sendCommand(deviceId, cmd, {ssid, password});
+            });
         }
 
+        // All other commands: send directly with the param from the section config (or null).
+        let param = matchedBtn.param ?? null;
         Msg.info('Bluetooth', 'doCommand() -> sendCommand deviceId=' + deviceId + ' action=' + cmd, this.requestor);
-
-        return this.sendCommand(deviceId, cmd, param)
-                .then(result => {
-                    console.log('[doCommand] sendCommand resolved:', result);
-                    return result;
-                })
-                .catch(err => {
-                    console.error('[doCommand] sendCommand rejected:', err);
-                    throw err;
-                });
+        return this.sendCommand(deviceId, cmd, param);
     }
 }
