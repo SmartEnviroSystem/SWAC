@@ -161,6 +161,14 @@ Example parameter:\n\
             name: 'clearOptions',
             desc: 'Removes all options from the select element'
         };
+
+        //Documentation for events the component can fire
+        this.desc.events[0] = {
+            name: 'swac_REQUESTOR_ID_select',
+            desc: 'Fired when user selects an (additional) value.',
+            data: 'Delivers the selected value (in value) and the original event.'
+        }
+
         this.options.plugins = new Map();
     }
 
@@ -173,7 +181,7 @@ Example parameter:\n\
             window.swac.reactions.addReaction(function () {
                 // Get selected data
                 let dataRequest = thisRef.options.selectedsSource;
-                
+
                 if (dataRequest !== null) {
                     Model.load(dataRequest).then(function (data) {
                         for (let i in data) {
@@ -183,13 +191,13 @@ Example parameter:\n\
                     }).catch(function (err) {
                         Msg.error('Select', 'Error requesting the selecteds from >' + thisRef.options.selectedsSource + '<: ' + err, thisRef);
                     });
-                }else{
+                } else {
                     // get selectets from local storage
                     let localStorageValue = localStorage.getItem(thisRef.requestor.id + "_Selected");
-                    if(localStorageValue){
+                    if (localStorageValue) {
                         thisRef.setInputs(JSON.parse(localStorageValue));
-                        if(thisRef.options.onChangeSelections){
-                            let boundOnChange  = thisRef.options.onChangeSelections.bind(thisRef);
+                        if (thisRef.options.onChangeSelections) {
+                            let boundOnChange = thisRef.options.onChangeSelections.bind(thisRef);
                             boundOnChange();
                         }
                     }
@@ -290,17 +298,19 @@ Example parameter:\n\
         let elem = evt.target;
         // Set selection for direct access
         this.requestor.value = elem.value;
-        
+
         // get target from local storage
-        if(this.options.rememberSelection){
+        if (this.options.rememberSelection) {
             let selectet = {};
             selectet[elem.value] = true;
             localStorage.setItem(this.requestor.id + "_Selected", JSON.stringify(selectet));
         }
-        
+
         // Call onChangeSelections function
         this.onChangeSelections = this.options.onChangeSelections;
         this.onChangeSelections(evt, elem.value);
+        console.log('TEST ');
+        this.onChange(evt, elem.value);
     }
 
     /**
@@ -314,29 +324,30 @@ Example parameter:\n\
         Msg.flow('Select', 'onChange occured at checkbox', this.requestor);
         // Get effected element
         let elem = evt.target;
-        
+
         // get target from local storage
-        if(this.options(rememberSelection)){
+        if (this.options(rememberSelection)) {
             let localStorageValue = localStorage.getItem(this.requestor.id + "_Selected");
-            if (!localStorageValue){
+            if (!localStorageValue) {
                 localStorageValue = {}
             }
-            
+
             localStorageValue[elem.value] = true;
             localStorage.setItem(this.requestor.id + "_Selected", JSON.stringify(localStorageValue));
         }
-        
+
         // Get checkbox state
         if (elem.checked === true) {
-            // Now element is checked
+            // @deprecated Now element is checked
             if (this.options.onSelect !== null) {
                 this.options.onSelect(evt, elem.value);
-                // Set selection for direct access
-                if (this.requestor.value.length < 1)
-                    this.requestor.value = elem.value;
-                else
-                    this.requestor.value += ',' + elem.value;
             }
+
+            // Set selection for direct access
+            if (this.requestor.value.length < 1)
+                this.requestor.value = elem.value;
+            else
+                this.requestor.value += ',' + elem.value;
         } else {
             // Now element is not longer checked
             if (this.options.onUnselect !== null) {
@@ -348,6 +359,8 @@ Example parameter:\n\
         // Call onChangeSelections function
         this.onChangeSelections = this.options.onChangeSelections;
         this.onChangeSelections(evt, elem.value);
+        
+        this.onChange(evt, elem.value);
     }
 
     /**
@@ -376,10 +389,12 @@ Example parameter:\n\
         let elem = evt.target;
         // Set selection for direct access
         this.requestor.value = elem.value;
-        
+
         // Call option onChangeSelections
         this.onChangeSelections = this.options.onChangeSelections;
         this.onChangeSelections(evt, elem.value);
+        
+        this.onChange(evt, elem.value);
     }
 
     /**
@@ -395,9 +410,23 @@ Example parameter:\n\
         let elem = evt.target;
         // Set selection for direct access
         this.requestor.value = elem.value;
+
+        this.onChange(evt, elem.value);
+    }
+
+    onChange(evt, value) {
+        // Fire select event
+        const event = new CustomEvent("swac_" + this.requestor.id + '_select', {
+            detail: {
+                originalEvent: evt,
+                value: value
+            },
+            bubbles: true
+        });
+        document.dispatchEvent(event);
         
-        // Call onChangeSelections option
-        this.options.onChangeSelections(evt, elem.value);
+        //@deprecated Call onChangeSelections option
+        this.options.onChangeSelections(evt, value);
     }
 
     /**
