@@ -148,7 +148,8 @@ export default class Bluetooth extends View {
         if (!navigator.bluetooth) {
             if (minimal_Btn) {
                 minimal_Btn.innerText = 'No Bluetooth support';
-                minimal_Btn.disabled = true;
+                minimal_Btn.classList.remove("uk-button-primary");
+                minimal_Btn.classList.add("uk-button-danger");
             }
 
             this._setStatus('Web Bluetooth is not supported by this browser.', 'error');
@@ -224,6 +225,9 @@ export default class Bluetooth extends View {
 
             if (minimal_Btn) {
                 minimal_Btn.innerText = 'Device connected: ' + device.name;
+                minimal_Btn.classList.remove("uk-button-primary");
+                minimal_Btn.classList.remove("uk-button-danger");
+                minimal_Btn.classList.add("uk-label-success");
             }
 
             return device.id;
@@ -231,6 +235,9 @@ export default class Bluetooth extends View {
         } catch (err) {
             if (minimal_Btn) {
                 minimal_Btn.innerText = 'Error, please try again';
+                minimal_Btn.classList.remove("uk-button-primary");
+                minimal_Btn.classList.remove("uk-label-success");
+                minimal_Btn.classList.add("uk-button-danger");
             }
 
             this._setStatus('Connection failed: ' + err.message, 'error');
@@ -301,9 +308,9 @@ export default class Bluetooth extends View {
 
         let count = this._connectedDevices.size;
         this._setStatus(
-            count > 0 ? count + ' device(s) connected' : 'Ready - no device connected',
-            count > 0 ? 'connected' : ''
-        );
+                count > 0 ? count + ' device(s) connected' : 'Ready - no device connected',
+                count > 0 ? 'connected' : ''
+                );
 
         this.requestor.dispatchEvent(new CustomEvent('swac_' + this.requestor.id + '_bluetooth_disconnected', {
             detail: {deviceId}
@@ -458,9 +465,9 @@ export default class Bluetooth extends View {
             btn.classList.add('ble-cmd-' + btnDef.style);
 
         btn.innerHTML =
-            (btnDef.icon ? '<span class="ble-cmd-icon">' + btnDef.icon + '</span>' : '') +
-            (btnDef.label ? '<span class="ble-cmd-name">' + btnDef.label + '</span>' : '') +
-            (btnDef.description ? '<span class="ble-cmd-desc">' + btnDef.description + '</span>' : '');
+                (btnDef.icon ? '<span class="ble-cmd-icon">' + btnDef.icon + '</span>' : '') +
+                (btnDef.label ? '<span class="ble-cmd-name">' + btnDef.label + '</span>' : '') +
+                (btnDef.description ? '<span class="ble-cmd-desc">' + btnDef.description + '</span>' : '');
 
         btn.addEventListener('click', async () => {
             btn.disabled = true;
@@ -505,9 +512,9 @@ export default class Bluetooth extends View {
         let wlanBtn = document.createElement('button');
         wlanBtn.classList.add('ble-cmd-btn');
         wlanBtn.innerHTML =
-            '<span class="ble-cmd-icon">' + (sectionDef.icon || '📶') + '</span>' +
-            '<span class="ble-cmd-name">' + (sectionDef.label || 'Add WLAN') + '</span>' +
-            '<span class="ble-cmd-desc">' + (sectionDef.description || 'Configure WLAN on the Pi') + '</span>';
+                '<span class="ble-cmd-icon">' + (sectionDef.icon || '📶') + '</span>' +
+                '<span class="ble-cmd-name">' + (sectionDef.label || 'Add WLAN') + '</span>' +
+                '<span class="ble-cmd-desc">' + (sectionDef.description || 'Configure WLAN on the Pi') + '</span>';
 
         wlanBtn.addEventListener('click', async () => {
             try {
@@ -523,7 +530,8 @@ export default class Bluetooth extends View {
                 responseLog.textContent = (sectionDef.label || 'Add WLAN') + ': ' + JSON.stringify(result, null, 2);
             } catch (e) {
                 // Modal cancelled: no error shown in response log
-                if (e.message.includes('cancelled')) return;
+                if (e.message.includes('cancelled'))
+                    return;
                 responseLog.className = 'ble-response ble-response-visible ble-response-err';
                 responseLog.textContent = e.message;
             } finally {
@@ -535,7 +543,6 @@ export default class Bluetooth extends View {
         section.appendChild(wlanBtn);
         return section;
     }
-
 
     _removeDeviceCard(deviceId) {
         let listElem = this.requestor.querySelector('.swac_bluetooth_device_list');
@@ -631,11 +638,11 @@ export default class Bluetooth extends View {
         const now = new Date();
         const pad = (n) => String(n).padStart(2, '0');
         return now.getFullYear() + '-' +
-            pad(now.getMonth() + 1) + '-' +
-            pad(now.getDate()) + 'T' +
-            pad(now.getHours()) + ':' +
-            pad(now.getMinutes()) + ':' +
-            pad(now.getSeconds());
+                pad(now.getMonth() + 1) + '-' +
+                pad(now.getDate()) + 'T' +
+                pad(now.getHours()) + ':' +
+                pad(now.getMinutes()) + ':' +
+                pad(now.getSeconds());
     }
 
     // Sends the current local wall-clock time to the Pi so it can set its system clock.
@@ -708,7 +715,7 @@ export default class Bluetooth extends View {
                 margin-bottom: 16px; outline: none;
             `;
             ssidInput.addEventListener('focus', () => ssidInput.style.borderColor = '#4a90e2');
-            ssidInput.addEventListener('blur',  () => ssidInput.style.borderColor = '#ccc');
+            ssidInput.addEventListener('blur', () => ssidInput.style.borderColor = '#ccc');
 
             // Password label + input row
             let pwLabel = document.createElement('label');
@@ -727,7 +734,7 @@ export default class Bluetooth extends View {
                 outline: none;
             `;
             pwInput.addEventListener('focus', () => pwInput.style.borderColor = '#4a90e2');
-            pwInput.addEventListener('blur',  () => pwInput.style.borderColor = '#ccc');
+            pwInput.addEventListener('blur', () => pwInput.style.borderColor = '#ccc');
 
             // Toggle password visibility
             let pwToggle = document.createElement('button');
@@ -803,9 +810,15 @@ export default class Bluetooth extends View {
 
             confirmBtn.addEventListener('click', confirm);
             // Enter in SSID field moves focus to password field
-            ssidInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') pwInput.focus(); });
+            ssidInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter')
+                    pwInput.focus();
+            });
             // Enter in password field confirms
-            pwInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') confirm(); });
+            pwInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter')
+                    confirm();
+            });
 
             btnRow.appendChild(cancelBtn);
             btnRow.appendChild(confirmBtn);
@@ -871,8 +884,8 @@ export default class Bluetooth extends View {
                 i++;
             }
             let choice = window.prompt(
-                'Multiple devices connected. Choose a device:\n\n' + deviceOptions.join('\n'), '1'
-            );
+                    'Multiple devices connected. Choose a device:\n\n' + deviceOptions.join('\n'), '1'
+                    );
             if (!choice) {
                 return Promise.reject(new Error('doCommand() cancelled: no device selected.'));
             }
