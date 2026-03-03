@@ -101,6 +101,8 @@ export default class CommandRouter extends View {
                     let res = curComp.swac_comp.doCommand(cmd);
                     Msg.info('CommandRouter', 'Command >' + cmd + '< on component >' + curComp.id + '< executed with result: ' + res);
 
+                    this.generateView(res);
+
                     // Dispatch command executed event
                     document.dispatchEvent(new CustomEvent('swac_' + this.requestor.id + '_commandrouter_executed', {detail: {
                             'comp': curComp,
@@ -114,6 +116,64 @@ export default class CommandRouter extends View {
                 Msg.warn('CommandRouter', 'Component ' + curComp.id + ' does not support commandable.', this.requestor);
             }
         }
+    }
+
+    generateView(result) {
+        if (!result || typeof result.then !== 'function')
+            return;
+
+        let modal = document.getElementById('last-measuring-modal');
+        let loading = document.getElementById('last-measuring-loading');
+        let error = document.getElementById('last-measuring-error');
+        let table = document.getElementById('last-measuring-table');
+        let tbody = document.getElementById('last-measuring-tbody');
+
+        // Only handle last_measuring responses
+        // Close any open UIkit dropdown before showing the modal
+        document.querySelectorAll('[uk-dropdown]').forEach(function (el) {
+            UIkit.dropdown(el).hide(false);
+        });
+
+        result.then(function (res) {
+            if (!res || res.status === undefined)
+                return;
+            // Only react when the response contains sensor data
+            if (res.status !== 'ok' || !res.data)
+                return;
+
+            loading.style.display = 'none';
+            error.style.display = 'none';
+            tbody.innerHTML = '';
+
+            let row = res.data;
+            Object.entries(row).forEach(function ([key, value]) {
+                let tr = document.createElement('tr');
+                let tdKey = document.createElement('td');
+                tdKey.textContent = key;
+                tdKey.style.fontWeight = '600';
+                let tdVal = document.createElement('td');
+                tdVal.textContent = (value !== null && value !== undefined) ? value : '—';
+                tr.appendChild(tdKey);
+                tr.appendChild(tdVal);
+                tbody.appendChild(tr);
+            });
+
+            table.style.display = '';
+            UIkit.modal(modal).show();
+
+        }).catch(function (err) {
+            loading.style.display = 'none';
+            table.style.display = 'none';
+            error.textContent = 'Error: ' + err.message;
+            error.style.display = '';
+            UIkit.modal(modal).show();
+        });
+
+        // Show spinner immediately while the promise is pending
+        tbody.innerHTML = '';
+        table.style.display = 'none';
+        error.style.display = 'none';
+        loading.style.display = '';
     }
 
     /**

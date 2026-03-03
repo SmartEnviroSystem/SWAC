@@ -1,0 +1,20 @@
+<!-- Modal: Last measurement result -->
+<div id="last-measuring-modal" uk-modal>
+    <div class="uk-modal-dialog uk-modal-body">
+        <button class="uk-modal-close-default" type="button" uk-close></button>
+        <h2 class="uk-modal-title">Last Measurement</h2>
+        <div id="last-measuring-loading" class="uk-text-center uk-padding-small" style="display:none;">
+            <span uk-spinner></span>
+        </div>
+        <div id="last-measuring-error" class="uk-alert uk-alert-danger" style="display:none;"></div>
+        <table id="last-measuring-table" class="uk-table uk-table-striped uk-table-small" style="display:none;">
+            <thead>
+                <tr>
+                    <th>Field</th>
+                    <th>Value</th>
+                </tr>
+            </thead>
+            <tbody id="last-measuring-tbody"></tbody>
+        </table>
+    </div>
+</div>
