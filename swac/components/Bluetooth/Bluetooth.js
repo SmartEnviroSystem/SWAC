@@ -16,23 +16,49 @@ export default class Bluetooth extends View {
             desc: 'Default template with connect button, status bar and dynamic device cards.'
         };
 
-        this.desc.styles[0] = {
-            selc: '.swac_bluetooth_panel',
-            desc: 'Main panel style. Loaded from Bluetooth.css automatically by SWAC.'
+        this.desc.templates[1] = {
+            name: 'minimal',
+            desc: 'Minimal template with connect button'
         };
 
         this.desc.reqPerTpl[0] = {
             selc: '.swac_bluetooth_connect_btn',
             desc: 'Button to initiate a new BLE connection. Can be clicked multiple times to add devices.'
         };
-        this.desc.reqPerTpl[1] = {
-            selc: '.swac_bluetooth_device_list',
-            desc: 'Container where connected device cards are rendered dynamically.'
-        };
 
         this.desc.optPerTpl[0] = {
             selc: '.swac_bluetooth_status',
             desc: 'Element to display general connection status messages.'
+        };
+
+        this.desc.optPerTpl[1] = {
+            selc: '.swac_bluetooth_device_list',
+            desc: 'Container where connected device cards are rendered dynamically.'
+        };
+
+        this.desc.optPerTpl[2] = {
+            selc: '.swac_bluetooth_connect_minimal_btn',
+            desc: 'Minimal ble connetc Button'
+        };
+
+        this.desc.optPerTpl[3] = {
+            selc: '.swac_bluetooth_panel',
+            desc: 'Main panel style. Loaded from Bluetooth.css automatically by SWAC.'
+        };
+
+        this.desc.optPerTpl[4] = {
+            selc: '.ble-header',
+            desc: 'Ble header styling for Panel'
+        };
+
+        this.desc.optPerTpl[5] = {
+            selc: '.ble-header-icon',
+            desc: 'Bluetooth Icon'
+        };
+
+        this.desc.optPerTpl[6] = {
+            selc: '',
+            desc: ''
         };
 
         this.desc.opts[0] = {name: 'filterDevices', desc: 'Array of BLE filter objects (e.g. namePrefix). If empty, all devices are accepted.', example: [{namePrefix: 'Sensor'}]};
@@ -80,7 +106,7 @@ export default class Bluetooth extends View {
         //   style                     - optional CSS modifier: 'warn' | 'danger'
         // Section with type: 'wlan' renders the built-in WLAN form instead of a button grid.
         // Default is empty — all layout must come from the project config file (e.g. example1.js).
-        this.desc.opts[9] = {name: 'sections', desc: 'Array of section config objects defining command buttons on each device card.'};
+        this.desc.opts[9] = {name: 'sections', type: 'array', desc: 'Array of section config objects defining command buttons on each device card.'};
         if (!options.sections)
             this.options.sections = [];
 
@@ -115,8 +141,15 @@ export default class Bluetooth extends View {
             Object.assign(this.options, projectConf);
             Msg.info('Bluetooth', 'Project config loaded from window["' + this.requestor.id + '_conf_options"].', this.requestor);
         }
+        
+         let minimal_Btn = this.requestor.querySelector('.swac_bluetooth_connect_minimal_btn');
 
         if (!navigator.bluetooth) {
+             if (minimal_Btn) {
+                minimal_Btn.innerText = 'No Bluetooth support';
+                minimal_Btn.disabled = true;
+            }
+            
             this._setStatus('Web Bluetooth is not supported by this browser.', 'error');
             Msg.error('Bluetooth', 'Web Bluetooth is not supported.', this.requestor);
             return;
@@ -136,6 +169,13 @@ export default class Bluetooth extends View {
 
     async connectDevice() {
         Msg.flow('Bluetooth', 'connectDevice()', this.requestor);
+
+        // template check
+        let minimal_Btn = this.requestor.querySelector('.swac_bluetooth_connect_minimal_btn');
+
+        if (minimal_Btn) {
+            this.options.maxDevices = 1;
+        }
 
         if (this.options.maxDevices > 0 && this._connectedDevices.size >= this.options.maxDevices) {
             let msg = 'Maximum number of devices (' + this.options.maxDevices + ') already connected.';
@@ -169,8 +209,10 @@ export default class Bluetooth extends View {
             this._connectedDevices.set(device.id, {device, server, name: device.name ?? device.id});
 
             Msg.info('Bluetooth', 'Connected: ' + device.name + ' | Total: ' + this._connectedDevices.size, this.requestor);
-            this._setStatus(this._connectedDevices.size + ' device(s) connected', 'connected');
-            this._addDeviceCard(device.id, device.name ?? device.id);
+            if (!minimal_Btn) {
+                this._setStatus(this._connectedDevices.size + ' device(s) connected', 'connected');
+                this._addDeviceCard(device.id, device.name ?? device.id);
+            }
 
             await this._validateDeviceMac(device.id);
 
@@ -179,9 +221,19 @@ export default class Bluetooth extends View {
             }));
             this.options.onConnected.call(this, device.id, device);
 
+
+            if (minimal_Btn) {
+                minimal_Btn.innerText = 'Gerät verbunden: ' + device.name;
+            }
+
             return device.id;
 
         } catch (err) {
+            
+            if (minimal_Btn) {
+                minimal_Btn.innerText = 'Fehler, bittte erneut versuchen';
+            }
+            
             this._setStatus('Connection failed: ' + err.message, 'error');
             Msg.error('Bluetooth', 'Connection failed: ' + err.message, this.requestor);
             throw err;
@@ -592,11 +644,11 @@ export default class Bluetooth extends View {
         const now = new Date();
         const pad = (n) => String(n).padStart(2, '0');
         return now.getFullYear() + '-' +
-            pad(now.getMonth() + 1) + '-' +
-            pad(now.getDate()) + 'T' +
-            pad(now.getHours()) + ':' +
-            pad(now.getMinutes()) + ':' +
-            pad(now.getSeconds());
+                pad(now.getMonth() + 1) + '-' +
+                pad(now.getDate()) + 'T' +
+                pad(now.getHours()) + ':' +
+                pad(now.getMinutes()) + ':' +
+                pad(now.getSeconds());
     }
 
     // Sends the current local wall-clock time to the Pi so it can set its system clock.
@@ -626,7 +678,7 @@ export default class Bluetooth extends View {
         const clean = input.replace(/[-\s:]/g, '').toUpperCase();
         return clean.match(/.{1,2}/g)?.join('-') || '';
     }
-    
+
     /**
      * Commandable functions
      */
@@ -634,12 +686,12 @@ export default class Bluetooth extends View {
         // Check if a device is connected and commands can be send
         return false;
     }
-    
+
     doCommand(cmd) {
         // Find if given command is supported
-        
+
         // If more than one device is connected ask user which device to command
-        
+
         // If input is needed ask user for input
     }
 }
