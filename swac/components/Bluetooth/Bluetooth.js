@@ -141,15 +141,15 @@ export default class Bluetooth extends View {
             Object.assign(this.options, projectConf);
             Msg.info('Bluetooth', 'Project config loaded from window["' + this.requestor.id + '_conf_options"].', this.requestor);
         }
-        
-         let minimal_Btn = this.requestor.querySelector('.swac_bluetooth_connect_minimal_btn');
+
+        let minimal_Btn = this.requestor.querySelector('.swac_bluetooth_connect_minimal_btn');
 
         if (!navigator.bluetooth) {
-             if (minimal_Btn) {
+            if (minimal_Btn) {
                 minimal_Btn.innerText = 'No Bluetooth support';
                 minimal_Btn.disabled = true;
             }
-            
+
             this._setStatus('Web Bluetooth is not supported by this browser.', 'error');
             Msg.error('Bluetooth', 'Web Bluetooth is not supported.', this.requestor);
             return;
@@ -229,11 +229,11 @@ export default class Bluetooth extends View {
             return device.id;
 
         } catch (err) {
-            
+
             if (minimal_Btn) {
                 minimal_Btn.innerText = 'Fehler, bittte erneut versuchen';
             }
-            
+
             this._setStatus('Connection failed: ' + err.message, 'error');
             Msg.error('Bluetooth', 'Connection failed: ' + err.message, this.requestor);
             throw err;
@@ -264,6 +264,27 @@ export default class Bluetooth extends View {
     getDeviceName(deviceId) {
         let entry = this._connectedDevices.get(deviceId);
         return entry ? entry.name : null;
+    }
+
+    getDeviceId(nameFilter = null) {
+        if (this._connectedDevices.size === 0) {
+            Msg.warn('Bluetooth', 'getDeviceId() called but no devices are connected.', this.requestor);
+            return null;
+        }
+
+        if (!nameFilter) {
+            return this._connectedDevices.keys().next().value;
+        }
+
+        const filter = nameFilter.toLowerCase();
+        for (let [id, entry] of this._connectedDevices) {
+            if (entry.name && entry.name.toLowerCase().includes(filter)) {
+                return id;
+            }
+        }
+
+        Msg.warn('Bluetooth', 'getDeviceId() no device found matching "' + nameFilter + '".', this.requestor);
+        return null;
     }
 
     // --- Internal disconnect handler ---
@@ -679,19 +700,85 @@ export default class Bluetooth extends View {
         return clean.match(/.{1,2}/g)?.join('-') || '';
     }
 
-    /**
-     * Commandable functions
-     */
     isCommandable() {
-        // Check if a device is connected and commands can be send
-        return false;
+        // Commands can only be sent if at least one device is connected
+        if (this._connectedDevices.size === 0) {
+            Msg.warn('Bluetooth', 'isCommandable() = false: no devices connected.', this.requestor);
+            return false;
+        }
+        return true;
     }
 
     doCommand(cmd) {
-        // Find if given command is supported
+        Msg.flow('Bluetooth', 'doCommand() cmd=' + cmd, this.requestor);
 
-        // If more than one device is connected ask user which device to command
+        let matchedBtn = null;
+        for (let section of this.options.sections) {
+            if (section.buttons) {
+                matchedBtn = section.buttons.find(b => b.action === cmd) ?? matchedBtn;
+            }
+        }
+        if (!matchedBtn && cmd !== 'addWlan') {
+            matchedBtn = {action: cmd, param: null};
+        }
+        if (!matchedBtn) {
+            console.warn('[doCommand] unknown command:', cmd);
+            Msg.warn('Bluetooth', 'doCommand(): unknown command "' + cmd + '"', this.requestor);
+            return Promise.reject(new Error('Unknown command: ' + cmd));
+        }
 
-        // If input is needed ask user for input
+        let deviceId;
+        if (this._connectedDevices.size === 1) {
+            deviceId = this._connectedDevices.keys().next().value;
+        } else {
+            let options = [];
+            let i = 1;
+            for (let [id, entry] of this._connectedDevices) {
+                options.push(i + ': ' + entry.name + ' (' + id.substring(0, 10) + '...)');
+                i++;
+            }
+            let choice = window.prompt(
+                    'Multiple devices connected. Choose a device:\n\n' + options.join('\n'), '1'
+                    );
+            if (!choice) {
+                console.warn('[doCommand] cancelled: no device selected');
+                return Promise.reject(new Error('doCommand() cancelled: no device selected.'));
+            }
+            let idx = parseInt(choice) - 1;
+            let ids = Array.from(this._connectedDevices.keys());
+            if (idx < 0 || idx >= ids.length) {
+                console.warn('[doCommand] invalid device selection:', choice);
+                return Promise.reject(new Error('doCommand(): invalid device selection "' + choice + '"'));
+            }
+            deviceId = ids[idx];
+        }
+
+        let param = matchedBtn.param ?? null;
+
+        if (cmd === 'addWlan') {
+            let ssid = window.prompt('WLAN name (SSID):');
+            if (!ssid) {
+                console.warn('[doCommand] cancelled: no SSID entered');
+                return Promise.reject(new Error('doCommand() cancelled: no SSID entered.'));
+            }
+            let password = window.prompt('Password for "' + ssid + '":');
+            if (password === null) {
+                console.warn('[doCommand] cancelled: password prompt dismissed');
+                return Promise.reject(new Error('doCommand() cancelled: password prompt dismissed.'));
+            }
+            param = {ssid: ssid.trim(), password};
+        }
+
+        Msg.info('Bluetooth', 'doCommand() -> sendCommand deviceId=' + deviceId + ' action=' + cmd, this.requestor);
+
+        return this.sendCommand(deviceId, cmd, param)
+                .then(result => {
+                    console.log('[doCommand] sendCommand resolved:', result);
+                    return result;
+                })
+                .catch(err => {
+                    console.error('[doCommand] sendCommand rejected:', err);
+                    throw err;
+                });
     }
 }
