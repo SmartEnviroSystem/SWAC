@@ -67,24 +67,24 @@ export default class Navigation extends View {
             desc: 'Id of the navigation dataset used for building hierarchies'
         };
         this.desc.reqPerSet[1] = {
-            name: 'rfrom',
-            desc: 'Regular expression from which sites this navigation rule shold apply. (* = from all; -m not from menue)'
-        };
-        this.desc.reqPerSet[2] = {
             name: 'rto',
             desc: 'Path to the target'
         };
-        this.desc.reqPerSet[3] = {
+        this.desc.reqPerSet[2] = {
             name: 'name',
             desc: 'Name of the navigation entry when shown in menue'
         };
 
         this.desc.optPerSet[0] = {
+            name: 'rfrom',
+            desc: 'Regular expression from which sites this navigation rule shold apply. (* = from all; -m not from menue)'
+        };
+        this.desc.optPerSet[1] = {
             name: 'parent',
             desc: 'Reference path ref:// to the parent navigation entry.'
         };
 
-        this.desc.optPerSet[1] = {
+        this.desc.optPerSet[2] = {
             name: 'icon',
             desc: 'path to icon file.'
         };
