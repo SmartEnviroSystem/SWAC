@@ -484,7 +484,7 @@ export default class Question extends View {
 
             choiceLabel.appendChild(radioChoiceElem);
             choiceLabel.appendChild(imgChoiceElem);
-            choiceLabel.addEventListener('click', this.onMadeInput.bind(this), false);
+            radioChoiceElem.addEventListener('click', this.onMadeInput.bind(this), false);
             divElem.appendChild(choiceLabel);
         }
         return divElem;
@@ -498,6 +498,7 @@ export default class Question extends View {
      * @returns {undefined}
      */
     onMadeInput(evt) {
+        Msg.flow('Question','onMadeInput()',this.requestor);
         // Get clicked element
         let clickedElem = evt.target;
         // Filter event thats are not occured at a img elem (click on icon input)
@@ -531,10 +532,7 @@ export default class Question extends View {
                     clickedElem.classList.add('swac_question_icon_selected');
                 }
             }
-
-            return evt;
         }
-
         // Execute custom function
         if (this.options.afterInputFunction) {
             this.options.afterInputFunction(evt);
@@ -544,7 +542,6 @@ export default class Question extends View {
         this.requestor.dispatchEvent(new CustomEvent('swac_' + this.requestor.id + '_question_on_input', {
             detail: {original_evt: evt}
         }));
-
         if (this.options.autoSave) {
             this.onSend();
         }
@@ -585,6 +582,7 @@ export default class Question extends View {
      * @returns {undefined}
      */
     onSend(evt) {
+        Msg.flow('Querstion','onSend()',this.requestor);
         let dataCapsles = new Map();
         // Get form element
         let formElem = this.requestor.querySelector('form');
