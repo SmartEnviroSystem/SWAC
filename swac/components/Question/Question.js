@@ -134,12 +134,21 @@ export default class Question extends View {
         if (!options.afterSaveLoc)
             this.options.afterSaveLoc = null;
         this.desc.opts[3] = {
+            name: "autoSave",
+            desc: "If true data is saved automatically after a user made input."
+        };
+        if (!options.autoSave)
+            this.options.autoSave = false;
+        this.desc.opts[4] = {
             name: "afterInputFunction",
-            desc: "A function that should be executed directly after the user made a input.",
+            desc: "DEPRECATED: User question_on_input event instead. A function that should be executed directly after the user made a input.",
             example: function () {}
         };
         if (!options.afterInputFunction)
             this.options.afterInputFunction = null;
+
+        this.desc.events[0] = {name: 'swac_REQUESTOR_ID_question_on_input', desc: 'Fired when user made a input.', data: 'event.detail = { original_evt }'};
+
     }
 
     init() {
@@ -156,7 +165,7 @@ export default class Question extends View {
         });
     }
 
-    afterAddSet(set, repeateds) {
+    async afterAddSet(set, repeateds) {
         // Get created collectContainer
         let questionAreaElem = this.requestor.querySelector('[swac_setid="' + set.id + '"]');
         let collectContainerElem = questionAreaElem.querySelector('.swac_question_answerContainer');
@@ -183,7 +192,7 @@ export default class Question extends View {
                 inputElem = this.createInputForSelect(set);
                 break;
             case 'icon':
-                inputElem = this.createInputForIcon(set);
+                inputElem = await this.createInputForIcon(set);
                 break;
             case 'datetime':
                 inputElem = this.createInputForDateTime(set);
@@ -311,6 +320,16 @@ export default class Question extends View {
     createInputForSelect(set) {
         let divElem = document.createElement('div');
         divElem.swac_set = set;
+
+        // Get options from source if given
+        if (set.options_datarequest) {
+            // Load from reference
+            if (typeof set.options_datarequest === 'string') {
+                let optionsMod = await Model.getFromReference(set.options_datarequest);
+                set.options = optionsMod.data;
+            }
+        }
+
         if (!set.multiple) {
             let inputElem = document.createElement('select');
             inputElem.setAttribute('name', set.attr);
@@ -322,6 +341,7 @@ export default class Question extends View {
             notSelOptElem.setAttribute('selected', 'selected');
             notSelOptElem.innerHTML = SWAC.lang.dict.Question.pleaseselect;
             inputElem.appendChild(notSelOptElem);
+
             // Create possible options
             for (let curOption of set.options) {
                 let optElem = document.createElement('option');
@@ -404,11 +424,23 @@ export default class Question extends View {
      * @param {Object} set Dataobject with question data
      * @returns {this.createSinglechoiceInput.questInputElem|Element}
      */
-    createInputForIcon(set) {
+    async createInputForIcon(set) {
         let divElem = document.createElement('div');
         divElem.swac_set = set;
+
+        // Get options from source if given
+        if (set.options_datarequest) {
+            // Load from reference
+            if (typeof set.options_datarequest === 'string') {
+                let optionsMod = await Model.getFromReference(set.options_datarequest);
+                set.options = optionsMod.data;
+            }
+        }
+
         // Get options
         for (let curOption of set.options) {
+            if (!curOption)
+                continue;
             let curOptionValue;
             let curOptionTitle;
             let curOptionSrc;
@@ -507,6 +539,16 @@ export default class Question extends View {
         if (this.options.afterInputFunction) {
             this.options.afterInputFunction(evt);
         }
+
+        // Threw afterInput event
+        this.requestor.dispatchEvent(new CustomEvent('swac_' + this.requestor.id + '_question_on_input', {
+            detail: {original_evt: evt}
+        }));
+
+        if (this.options.autoSave) {
+            this.onSend();
+        }
+
 //        this.nextQuestion();
     }
 
@@ -612,7 +654,7 @@ export default class Question extends View {
                         break;
                     }
                 }
-                if(!parentSet) {
+                if (!parentSet) {
                     let msg = SWAC.lang.dict.Question.wrongparentset;
                     msg = window.swac.lang.replacePlaceholders(msg, 'parentset', set.parent);
                     UIkit.modal.alert(msg);
