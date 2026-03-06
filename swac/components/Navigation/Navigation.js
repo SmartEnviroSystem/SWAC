@@ -191,12 +191,14 @@ export default class Navigation extends View {
                 }
 
                 // search uk-icon element
-                if (set.icon.includes('.')) {
-                    let ukElem = curA.querySelector('[uk-icon]');
-                    ukElem.remove();
-                } else {
-                    let imgElem = curA.querySelector('[data-src]');
-                    imgElem.remove();
+                if (set.icon) {
+                    if (set.icon.includes('.')) {
+                        let ukElem = curA.querySelector('[uk-icon]');
+                        ukElem.remove();
+                    } else {
+                        let imgElem = curA.querySelector('[data-src]');
+                        imgElem.remove();
+                    }
                 }
 
                 curA.setAttribute('href', curHref);
