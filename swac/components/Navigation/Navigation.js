@@ -37,10 +37,6 @@ export default class Navigation extends View {
             name: 'nav_icons',
             desc: 'Display for webPush mobile application.'
         };
-        this.desc.templates[5] = {
-            name: 'nav_icons_at_bottom',
-            desc: 'Navigation displaying an Icon at the bottom of the display'
-        };
         this.desc.styles[0] = {
             selc: ".swac_navigation_head",
             desc: "Makes the navigation a head navigation that stays sticky in its position on scrolling."
