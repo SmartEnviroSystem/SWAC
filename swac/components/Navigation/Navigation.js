@@ -139,12 +139,16 @@ export default class Navigation extends View {
             let srcsets = this.requestor.querySelectorAll('[data-srcset]');
             for (let curImg of srcsets) {
                 let imgsrc = curImg.getAttribute('data-srcset').replace('logo', this.options.logoName);
-                curImg.setAttribute('srcset', SWAC.config.app_root + imgsrc);
+                if (!imgsrc.startsWith('{')) {
+                    curImg.setAttribute('srcset', SWAC.config.app_root + imgsrc);
+                }
             }
             let srcs = this.requestor.querySelectorAll('[data-src]');
             for (let curImg of srcs) {
                 let imgsrc = curImg.getAttribute('data-src').replace('logo', this.options.logoName);
-                curImg.setAttribute('src', SWAC.config.app_root + imgsrc);
+                if (!imgsrc.startsWith('{')) {
+                    curImg.setAttribute('src', SWAC.config.app_root + imgsrc);
+                }
             }
 
             // Set logo link with url from options
@@ -184,6 +188,15 @@ export default class Navigation extends View {
                 // --- Relative Links umbiegen ---
                 if (!curHref.startsWith('#') && !curHref.startsWith('http')) {
                     curHref = SWAC.config.app_root + '/sites/' + curHref;
+                }
+
+                // search uk-icon element
+                if (set.icon.includes('.')) {
+                    let ukElem = curA.querySelector('[uk-icon]');
+                    ukElem.remove();
+                } else {
+                    let imgElem = curA.querySelector('[data-src]');
+                    imgElem.remove();
                 }
 
                 curA.setAttribute('href', curHref);
