@@ -317,7 +317,7 @@ export default class Question extends View {
      * @param {Object} set Dataset defining the input
      * @returns {Element|Question.createInputForRange.divElem}
      */
-    createInputForSelect(set) {
+    async createInputForSelect(set) {
         let divElem = document.createElement('div');
         divElem.swac_set = set;
 
