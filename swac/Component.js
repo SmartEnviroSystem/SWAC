@@ -581,6 +581,15 @@ DEFINTION of SET:\n\
                 type: 'WatchableSource{}'
             }
         }
+        
+        this.desc.funcs[1027] = {
+            name: 'getMainSourceData',
+            desc: 'Get data from main data source.',
+            returns: {
+                desc: 'Object with watchable sources. With key is the name of the source. Containing WatchableSets accessable with .getSets()',
+                type: 'WatchableSource{}'
+            }
+        }
 
         // Documentation for events
         this.desc.events = [];
