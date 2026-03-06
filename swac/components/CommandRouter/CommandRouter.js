@@ -1,19 +1,31 @@
-import SWAC from '../../swac.js';
 import View from '../../View.js';
 import Msg from '../../Msg.js';
 
 export default class CommandRouter extends View {
 
+    /**
+     * Registers all SWAC component metadata and sets default option values.
+     * Initialises internal state for component tracking and timer management.
+     */
     constructor(options = {}) {
         super(options);
         this.name = 'CommandRouter';
-        this.desc.text = 'Routes commands depending on availablility of other components.';
+        this.desc.text = 'Routes commands depending on availability of other components.';
         this.desc.developers = 'Florian Fehring (HSBI)';
         this.desc.license = 'GNU Lesser General Public License';
 
         this.desc.templates[0] = {
             name: 'default',
             desc: 'Default template.'
+        };
+
+        this.desc.optPerPage[0] = {
+            selc: '.commandrouter_countdown_cur',
+            desc: 'Element where to show current left time until next command exec.'
+        };
+        this.desc.optPerPage[1] = {
+            selc: '.commandrouter_countdown_max',
+            desc: 'Element where to show maximum time until next command execution.'
         };
 
         this.desc.reqPerSet[0] = {
@@ -37,10 +49,9 @@ export default class CommandRouter extends View {
             name: "targetDatacapsule",
             desc: "",
             example: {
-                fromName: 'mytablename', // Name of the datatable
+                fromName: 'mytablename',
                 fromWheres: {
-                    filter: 'id,lt,10', // Filter datasets (when use TreeQL / SmartData)
-                    // Note: When you need to use two or more filters, add them in the filter attribute: id,gt,5&filter=id,lt,10
+                    filter: 'id,lt,10',
                     other: 'This is another attribute to send with request'
                 },
                 fromHeaders: {
@@ -52,153 +63,262 @@ export default class CommandRouter extends View {
             this.options.targetDatacapsule = {
                 fromName: '/SmartWebSocket/smartwebsocket/socket/{name}'
             };
+
         this.desc.opts[2] = {
             name: "deviceNameSource",
-            desc: "CSS Selector for an element contianing the device name",
+            desc: "CSS Selector for an element containing the device name",
             example: '.nameelement'
         };
         if (!options.deviceNameSource)
-            this.options.deviceNameSource = '.device_name';
+            this.options.deviceNameSource = null;
+
+        this.desc.opts[3] = {
+            name: "commandTimer",
+            desc: "defines timer command execution",
+            example: [{cmd: "shutdown", interval: "30000", param: "text"}]
+        };
+        if (!options.commandTimer)
+            this.options.commandTimer = [];
 
         if (!options.showWhenNoData)
             this.options.showWhenNoData = true;
 
-        //Documentation for events the component can fire
         this.desc.events[0] = {
-            name: 'swac_REQUESTOR_ID_commandrouter_exwecuted',
-            desc: 'Fired when a command was succsessfull executed.',
-            data: 'Fields >comp< with component and >result< with returend result.'
-        }
+            name: 'swac_REQUESTOR_ID_commandrouter_executed',
+            desc: 'Fired when a command was successfully executed.',
+            data: 'Fields >comp< with component and >result< with returned result.'
+        };
 
-        // internal attributes
         this.comps = [];
-    }
-
-    /*
-     * This method will be called when the component is complete loaded
-     * At this thime the template code is loaded, the data inserted into the 
-     * template and even plugins are ready to use.
-     */
-    async init() {
-        document.addEventListener('swac_components_complete', this.bindCommands.bind(this));
+        this.cmdIntervals = [];
+        this.countdownInterval = null;
     }
 
     /**
-     * Seach gui elements that activate commands and bind events
+     * Waits for all SWAC components to finish loading, then binds commands
+     * and starts the configured timed command intervals.
+     */
+    async init() {
+        document.addEventListener('swac_components_complete', this.bindCommands.bind(this));
+        this.startTimedCommands();
+    }
+
+    /**
+     * Attaches click handlers to all elements with a [cmd] attribute.
+     * Collects all commandable SWAC components on the page for later use.
      */
     bindCommands(evt) {
         Msg.flow('CommandRouter', 'bindCommands()', this.requestor);
+
         let cmdElems = document.querySelectorAll('[cmd]');
         for (let curCmdElem of cmdElems) {
-            curCmdElem.addEventListener('click', this.executeCommand.bind(this));
+            curCmdElem.addEventListener('click', this.executeCommandFromEvent.bind(this));
         }
-        // Search components
+
         if (this.options.components && this.options.components.length > 0) {
             for (let curCompId of this.options.components) {
                 let curComp = document.querySelector('.' + curCompId);
                 if (!curComp) {
                     Msg.error('CommandRouter', 'Component with id >' + curCompId + '< not found.');
+                } else {
+                    this.comps.push(curComp);
                 }
-                this.comps.push(curComp);
             }
         } else {
-            // Use all components on page
+            // Fall back to all SWAC elements on the page
             this.comps = document.querySelectorAll('[swa]');
         }
     }
 
     /**
-     * Execute commands on components where possible
+     * Extracts the command name and optional parameter from a click event
+     * and delegates to executeCommand().
      */
-    executeCommand(evt) {
+    executeCommandFromEvent(evt) {
+        let cmd = evt.target.getAttribute('cmd');
+        let param = evt.target.getAttribute('param');
+        this.executeCommand(cmd, param);
+    }
+
+    /**
+     * Sends a command to all commandable components on the page.
+     * Falls back to the targetDatacapsule (WebSocket / REST) if no component handles it.
+     *
+     * @param {string}      cmd   - Command name (e.g. 'last_measuring', 'shutdown')
+     * @param {string|null} param - Optional parameter forwarded with the command
+     */
+    executeCommand(cmd, param) {
         Msg.flow('CommandRouter', 'executeCommand()', this.requestor);
         let thisRef = this;
-
-        // Get command for execution
-        let cmd = evt.target.getAttribute('cmd');
         let executed = false;
-        // Check on every component
-        for (let curComp of this.comps) {
-            // Check if component is currently able to process commands
-            if (typeof curComp.swac_comp.isCommandable === 'function') {
-                if (!curComp.swac_comp.isCommandable()) {
-                    Msg.warn('CommandRouter', 'Component ' + curComp.id + ' currently does not accept comands.', this.response);
-                    continue;
-                }
-                // Execute command
-                try {
-                    let res = curComp.swac_comp.doCommand(cmd);
 
-                    if (typeof res.then === 'function') {
-                        // If returned is a promise wait
-                        res.then(function (response) {
-                            Msg.info('CommandRouter', 'Command >' + cmd + '< on component >' + curComp.id + '< executed with result: ' + response);
-                            let dataset = response.data;
-                            this.processResult(dataset, curComp);
-                        });
-                    } else {
-                        Msg.info('CommandRouter', 'Command >' + cmd + '< on component >' + curComp.id + '< executed with result: ' + res);
-                        // If returend is no promise proced
-                        this.processResult(res, curComp);
-                    }
-                } catch (e) {
-                    Msg.error('CommandRouter', 'Command >' + cmd + '< on component >' + curComp.id + '< threw error: ' + e, this.requestor);
-                }
-            } else {
+        for (let curComp of this.comps) {
+            if (typeof curComp.swac_comp?.isCommandable !== 'function') {
                 Msg.warn('CommandRouter', 'Component ' + curComp.id + ' does not support commandable.', this.requestor);
+                continue;
+            }
+            if (!curComp.swac_comp.isCommandable()) {
+                Msg.warn('CommandRouter', 'Component ' + curComp.id + ' currently does not accept commands.', this.requestor);
+                continue;
+            }
+
+            try {
+                let res = curComp.swac_comp.doCommand(cmd);
+                executed = true;
+
+                if (typeof res?.then === 'function') {
+                    res.then(function (response) {
+                        Msg.info('CommandRouter', 'Command >' + cmd + '< on component >' + curComp.id + '< executed.');
+                        thisRef.processResult(thisRef._unwrapBLE(response), curComp);
+                    }).catch(function (err) {
+                        Msg.error('CommandRouter', 'Command >' + cmd + '< rejected: ' + err, thisRef.requestor);
+                    });
+                } else {
+                    Msg.info('CommandRouter', 'Command >' + cmd + '< on component >' + curComp.id + '< executed.');
+                    thisRef.processResult(thisRef._unwrapBLE(res), curComp);
+                }
+            } catch (e) {
+                Msg.error('CommandRouter', 'Command >' + cmd + '< threw error: ' + e, this.requestor);
             }
         }
-        // Fallback to requestor if configured
+
+        // No component handled the command – send it via WebSocket / REST
         if (!executed && this.options.targetDatacapsule) {
-            // Create copy of targetDatacapsule
             const curCapsule = Object.assign({}, this.options.targetDatacapsule);
 
             let name = '';
             let nameElem = document.querySelector(this.options.deviceNameSource);
             if (nameElem) {
-                name = nameElem.children[0].innerHTML;
+                name = nameElem.children[0]?.innerHTML ?? nameElem.textContent.trim();
             } else {
-                Msg.error('CommandRouter', 'Client name not found.', this.requestor);
+                Msg.info('CommandRouter', 'Device name element not found.', this.requestor);
             }
             curCapsule.fromName = curCapsule.fromName.replace('{name}', name);
-
-            // Add command
-            curCapsule.data = [{
-                    action: cmd
-                }];
+            curCapsule.data = [{action: cmd}];
 
             let Model = window.swac.Model;
             let dataPromise = Model.save(curCapsule, true);
-            // Wait for data to be loaded
+
             dataPromise.then(function (result) {
-                console.log('TEST result neu: ',result);
-                // Get dataset from result
-                //TODO Hier stimmt noch etwas nicht mit der empfangenen Datenstruktur.
-                // Eigentlich müsste der Datensatz per result[0] direkt zugreifbar sein
-                let datasets = result[0].data;
-                console.log('TEST dataset:',datasets[0]);
-                thisRef.processResult(datasets[0], null);
+                // Unwrap the Pi transport envelope: result[0].data[0]
+                let piEnvelope = result[0].data[0];
+                thisRef.processResult(piEnvelope, null);
             }).catch(function (err) {
-                // Handle load error
-                Msg.error('CommandRouter','Could not process data: ' + err,this.requestor);
+                Msg.error('CommandRouter', 'Could not process data: ' + err, thisRef.requestor);
             });
         }
     }
 
-    processResult(result, comp) {
-        Msg.flow('CommandRouter', 'processResult()', this.requestor);
-        console.log('TEST datasets',result);
-        this.generateView(result);
-        
-        //TODO show status message if result contains status message but no data
+    /**
+     * Starts a setInterval for every entry in options.commandTimer.
+     * Also drives the countdown display in the DOM using the shortest interval.
+     */
+    startTimedCommands() {
+        let thisRef = this;
+        if (this.options.commandTimer && this.options.commandTimer.length > 0) {
+            let minimumTimer = Number.MAX_SAFE_INTEGER;
 
-        // Dispatch command executed event
-        document.dispatchEvent(new CustomEvent('swac_' + this.requestor.id + '_commandrouter_executed', {detail: {
-                'comp': comp,
-                'result': result
-            }}))
+            for (let curCommandTimer of this.options.commandTimer) {
+                (function(timerDef) {
+                    let curInterval = setInterval(function () {
+                        // Suppress the modal so only the dashboard cards are updated silently
+                        thisRef.suppressModal = true;
+                        thisRef.executeCommand(timerDef.cmd, timerDef.param);
+                    }, timerDef.interval);
+
+                    if (timerDef.interval < minimumTimer) {
+                        minimumTimer = timerDef.interval;
+                    }
+                    thisRef.cmdIntervals.push(curInterval);
+                })(curCommandTimer);
+            }
+
+            let countDownElemCur = document.querySelector('.commandrouter_countdown_cur');
+            if (countDownElemCur) {
+                let countDownElemMax = document.querySelector('.commandrouter_countdown_max');
+                if (countDownElemMax) {
+                    countDownElemMax.innerHTML = minimumTimer / 1000;
+                }
+                let curTimer = minimumTimer / 1000;
+                this.countdownInterval = setInterval(function () {
+                    if (curTimer <= 0) {
+                        curTimer = minimumTimer / 1000;
+                    }
+                    countDownElemCur.innerHTML = curTimer--;
+                }, 1000);
+            }
+        }
     }
 
+    /**
+     * Clears all active command intervals and resets the countdown display.
+     */
+    stopTimedCommands() {
+        for (let curCmdInterval of this.cmdIntervals) {
+            clearInterval(curCmdInterval);
+        }
+        clearInterval(this.countdownInterval);
+        let countDownElemCur = document.querySelector('.commandrouter_countdown_cur');
+        if (countDownElemCur) {
+            countDownElemCur.innerHTML = '';
+        }
+        let countDownElemMax = document.querySelector('.commandrouter_countdown_max');
+        if (countDownElemMax) {
+            countDownElemMax.innerHTML = '';
+        }
+    }
+
+    /**
+     * Extracts the payload from a BLE SWAC response envelope.
+     * Returns content.data if present, otherwise returns the input unchanged.
+     *
+     * @param   {*} response
+     * @returns {object}
+     */
+    _unwrapBLE(response) {
+        if (!response || typeof response !== 'object')
+            return response;
+
+        if (response.content !== undefined) {
+            const inner = response.content?.data;
+            if (inner !== null && typeof inner === 'object')
+                return inner;
+            if (inner !== undefined)
+                return {value: inner, status: response.status};
+            return response.content;
+        }
+
+        return response;
+    }
+
+    /**
+     * Central handler called after every successful command execution.
+     * Dispatches the commandrouter_executed event so index.js can update the dashboard cards.
+     *
+     * @param {object|null}  result
+     * @param {Element|null} comp
+     */
+    processResult(result, comp) {
+        Msg.flow('CommandRouter', 'processResult()', this.requestor);
+
+        // Skip the modal for timer-triggered commands; reset flag afterwards
+        if (!this.suppressModal) {
+            this.generateView(result);
+        }
+        this.suppressModal = false;
+
+        document.dispatchEvent(new CustomEvent(
+                'swac_' + this.requestor.id + '_commandrouter_executed',
+                {detail: {comp, result}}
+        ));
+    }
+
+    /**
+     * Renders the command result as a key/value table inside the last-measuring modal.
+     * Detects and unwraps the Pi transport envelope before rendering.
+     *
+     * @param {object|null} dataset
+     */
     generateView(dataset) {
         Msg.flow('CommandRouter', 'generateView()', this.requestor);
         if (!dataset)
@@ -210,23 +330,48 @@ export default class CommandRouter extends View {
         let table = document.getElementById('last-measuring-table');
         let tbody = document.getElementById('last-measuring-tbody');
 
-        // Close any open UIkit dropdown before showing the modal
+        if (!modal) {
+            Msg.warn('CommandRouter', 'Modal #last-measuring-modal not found.', this.requestor);
+            return;
+        }
+
         document.querySelectorAll('[uk-dropdown]').forEach(function (el) {
             UIkit.dropdown(el).hide(false);
         });
 
+        // Reset modal to a clean state before rendering new data
         loading.style.display = 'none';
         error.style.display = 'none';
         tbody.innerHTML = '';
+        table.style.display = 'none';
 
+        // Unwrap Pi transport envelope if dataset.data contains the actual measurement
         let row = dataset;
+        if (dataset.data !== null
+                && dataset.data !== undefined
+                && typeof dataset.data === 'object'
+                && !Array.isArray(dataset.data)) {
+            row = dataset.data;
+        }
+
+        let statusValue = dataset.status ?? dataset.message ?? dataset.msg ?? null;
+        if (statusValue) {
+            let isError = /error|fail|err/i.test(String(statusValue));
+            error.textContent = statusValue;
+            error.style.display = '';
+            // Red for errors, blue for informational status
+            error.style.color = isError ? '#e53e3e' : '#2b6cb0';
+        }
+
         Object.entries(row).forEach(function ([key, value]) {
             let tr = document.createElement('tr');
             let tdKey = document.createElement('td');
+            let tdVal = document.createElement('td');
+
             tdKey.textContent = key;
             tdKey.style.fontWeight = '600';
-            let tdVal = document.createElement('td');
             tdVal.textContent = (value !== null && value !== undefined) ? value : '—';
+
             tr.appendChild(tdKey);
             tr.appendChild(tdVal);
             tbody.appendChild(tr);
@@ -235,37 +380,4 @@ export default class CommandRouter extends View {
         table.style.display = '';
         UIkit.modal(modal).show();
     }
-
-    /**
-     * Method thats called before adding a dataset
-     * This overrides the method from View.js
-     * 
-     * @param {Object} set Object with attributes to add
-     * @returns {Object} (modified) set
-     */
-    beforeAddSet(set) {
-        // You can check or transform the dataset here
-        return set;
-    }
-
-    /**
-     * Method thats called after a dataset was added.
-     * This overrides the method from View.js
-     * 
-     * @param {Object} set Object with attributes to add
-     * @param {DOMElement[]} repeateds Elements that where created as representation for the set
-     * @returns {undefined}
-     */
-    afterAddSet(set, repeateds) {
-        // You can do after adding actions here. At this timepoint the template
-        // repeatForSet is also repeated and accessable.
-        // e.g. generate a custom view for the data.
-
-        // Call Components afterAddSet and plugins afterAddSet
-        super.afterAddSet(set, repeateds);
-
-        return;
-    }
 }
-
-
