@@ -242,6 +242,11 @@ export default class View extends Component {
                 // Load elements that contain a data-src
                 const dataSrcElems = repeated.querySelectorAll("[data-src]");
                 dataSrcElems.forEach(elem => {
+                    // Prevents inserting path into src of imgs when uikit icons are used (name only)
+                    if(elem.nodeName === 'IMG' && !elem.getAttribute("data-src").includes('.')) {
+                        return;
+                    }
+                    
                     let src = elem.getAttribute("data-src");
                     // Finde alle Platzhalter im Format {key} oder {key.subkey}
                     const matches = src.match(/{([^}]+)}/g);
