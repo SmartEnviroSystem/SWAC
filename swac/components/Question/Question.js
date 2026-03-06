@@ -120,7 +120,7 @@ export default class Question extends View {
             desc: "The time (in seconds) that should pass before the user can reanswer.",
             example: 180
         };
-        if (!options.timeToReanswer)
+        if (typeof options.timeToReanswer === 'undefined')
             this.options.timeToReanswer = null;
         this.desc.opts[1] = {
             name: "afterSaveTxt",
@@ -755,7 +755,7 @@ export default class Question extends View {
         }
 
         if (this.options.timeToReanswer !== null) {
-            let timeInSeconds = this.options.timeToReanswer * 10000;
+            let timeInSeconds = this.options.timeToReanswer * 1000;
             // Insert countdown until reanswer
             msgElem.appendChild(document.createTextNode(' ' + SWAC.lang.dict.Question.reanswerText));
 
