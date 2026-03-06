@@ -892,6 +892,18 @@ export default class Bluetooth extends View {
     doCommand(cmd) {
         Msg.flow('Bluetooth', 'doCommand() cmd=' + cmd, this.requestor);
 
+        // addWlan: direkt Modal öffnen, kein Button-Matching, kein Device-Prompt
+        if (cmd === 'addWlan') {
+            if (this._connectedDevices.size === 0) {
+                return Promise.reject(new Error('No device connected.'));
+            }
+            const deviceId = this._connectedDevices.keys().next().value;
+            return this._showWlanModal().then(({ssid, password}) => {
+                Msg.info('Bluetooth', 'doCommand() -> sendCommand deviceId=' + deviceId + ' action=' + cmd, this.requestor);
+                return this.sendCommand(deviceId, cmd, {ssid, password});
+            });
+        }
+
         // Match the command against configured section buttons to pick up any preset param.
         // Falls back to a bare action object for commands not listed in any section.
         let matchedBtn = null;
@@ -900,12 +912,8 @@ export default class Bluetooth extends View {
                 matchedBtn = section.buttons.find(b => b.action === cmd) ?? matchedBtn;
             }
         }
-        if (!matchedBtn && cmd !== 'addWlan') {
-            matchedBtn = {action: cmd, param: null};
-        }
         if (!matchedBtn) {
-            Msg.warn('Bluetooth', 'doCommand(): unknown command "' + cmd + '"', this.requestor);
-            return Promise.reject(new Error('Unknown command: ' + cmd));
+            matchedBtn = {action: cmd, param: null};
         }
 
         // Resolve the target device — prompt the user if more than one is connected.
@@ -931,14 +939,6 @@ export default class Bluetooth extends View {
                 return Promise.reject(new Error('doCommand(): invalid device selection "' + choice + '"'));
             }
             deviceId = ids[idx];
-        }
-
-        // For addWlan, open the modal to collect credentials before sending.
-        if (cmd === 'addWlan') {
-            return this._showWlanModal().then(({ssid, password}) => {
-                Msg.info('Bluetooth', 'doCommand() -> sendCommand deviceId=' + deviceId + ' action=' + cmd, this.requestor);
-                return this.sendCommand(deviceId, cmd, {ssid, password});
-            });
         }
 
         // All other commands: send directly with the param from the section config (or null).
