@@ -17,48 +17,51 @@ export default class Dashboard extends View {
             name: 'default',
             desc: 'Default dashboard with mansory grid'
         };
-        this.desc.reqPerTpl[0] = {
+        this.desc.templates[1] = {
+            name: 'centered',
+            desc: 'Default dashboard but centered'
+        };
+        this.desc.optPerTpl[0] = {
             selc: '.swac_dashboard_visibility',
             desc: 'Toggle menue entry for hiding cards.'
         };
-        this.desc.reqPerTpl[1] = {
+        this.desc.optPerTpl[1] = {
             selc: '.swac_dashboard_hiddencards',
             desc: 'Area where to place info about hidden cards.'
         };
-        this.desc.reqPerTpl[2] = {
+        this.desc.optPerTpl[2] = {
             selc: '.swac_dashboard_admopts',
             desc: 'Area containing the admin options.'
         };
-        
-        this.desc.optPerTpl[0] = {
+        this.desc.optPerTpl[3] = {
             selc: '.swac_dashboard_data',
             desc: 'Elements that should only be displayed if the card is a data containing card.'
         };
-        this.desc.optPerTpl[1] = {
+        this.desc.optPerTpl[4] = {
             selc: '.swac_dashboard_datafrom',
             desc: 'Input element where user can select the date data is shown from.'
         };
-        this.desc.optPerTpl[2] = {
+        this.desc.optPerTpl[5] = {
             selc: '.swac_dashboard_datauntil',
             desc: 'Input element where user can select the date data is shown until.'
         };
-        this.desc.optPerTpl[3] = {
+        this.desc.optPerTpl[6] = {
             selc: '.swac_dashboard_advoptslink',
             desc: 'Link that shows the advanced options dialog for a card.'
         };
-        this.desc.optPerTpl[4] = {
+        this.desc.optPerTpl[7] = {
             selc: '.swac_dashbord_advopts',
             desc: 'Area where to show the advanced options.'
         };
-        this.desc.optPerTpl[5] = {
+        this.desc.optPerTpl[8] = {
             selc: '.swac_dashboard_cardcont',
             desc: 'Area where to show cards content.'
         };
-        this.desc.optPerTpl[6] = {
+        this.desc.optPerTpl[9] = {
             selc: '.swac_advopts_save',
             desc: 'Button to save advanced options'
         };
-        
+
         this.desc.reqPerSet[0] = {
             name: 'id',
             desc: 'The attribute id is required for the component to work properly.',
@@ -74,7 +77,7 @@ export default class Dashboard extends View {
             desc: 'Dashboard cards description',
             example: 'Displays the current weather.'
         };
-        
+
         this.desc.optPerSet[0] = {
             name: 'parent',
             desc: 'Id of the parent dataset for ordering.',
@@ -95,7 +98,7 @@ export default class Dashboard extends View {
 
         if (!options.showWhenNoData)
             this.options.showWhenNoData = true;
-        
+
         if (!options.ecoMode)
             this.options.ecoMode = {ecoColumn: 'ecomode'};
 
@@ -142,13 +145,23 @@ export default class Dashboard extends View {
             }
             // Register click for advOptsSave Button
             let advOptsSaveBtn = this.requestor.querySelector('.swac_advopts_save');
-            advOptsSaveBtn.addEventListener('click', this.onClickAdvOptsSaveBtn.bind(this));
+            if (advOptsSaveBtn) {
+                advOptsSaveBtn.addEventListener('click', this.onClickAdvOptsSaveBtn.bind(this));
+            }
+
             // Register date change events for advOpts
             let advOptsElem = document.querySelector('.swac_dashbord_advopts');
-            let datafromElem = advOptsElem.querySelector('[name="data_from"');
-            datafromElem.addEventListener('blur', this.onChgDate.bind(this));
-            let datauntilElem = advOptsElem.querySelector('[name="data_until"');
-            datauntilElem.addEventListener('blur', this.onChgDate.bind(this));
+            if (advOptsElem) {
+                let datafromElem = advOptsElem.querySelector('[name="data_from"');
+                if (datafromElem) {
+                    datafromElem.addEventListener('blur', this.onChgDate.bind(this));
+                }
+
+                let datauntilElem = advOptsElem.querySelector('[name="data_until"');
+                if (datauntilElem) {
+                    datauntilElem.addEventListener('blur', this.onChgDate.bind(this));
+                }
+            }
 
             resolve();
         });
@@ -185,7 +198,10 @@ export default class Dashboard extends View {
         // Register functions
         for (let curRep of repeateds) {
             let visElem = curRep.querySelector('.swac_dashboard_visibility');
-            visElem.addEventListener('click', this.onClickVisibility.bind(this));
+            if(visElem){
+                visElem.addEventListener('click', this.onClickVisibility.bind(this));
+            }
+            
 
             // Register event handler for advanced options
             let advOptsLink = curRep.querySelector('.swac_dashboard_advoptslink');
