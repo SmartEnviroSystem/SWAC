@@ -25,8 +25,12 @@ export default class Hygrometer extends Diagram {
         let minValue = this.datadescription.getAttributeMinValue(this.diagramDef.attr);
         let maxValue = this.datadescription.getAttributeMaxValue(this.diagramDef.attr);
 
+        // Cap the pointer value at maxValue so the needle stays within the dial,
+        // while keeping the original value intact for the numeric display below.
+        let pointerValue = Math.min(value, maxValue);
+
         // Calculate pointer line
-        let line = this.calculatePointer(value, 160, minValue, maxValue);
+        let line = this.calculatePointer(pointerValue, 160, minValue, maxValue);
 
         //creates the svg viewbox
         let svgViewBox = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -161,16 +165,11 @@ export default class Hygrometer extends Diagram {
         let coordinates;
         degree = ((value - absoluteMin) / (absoluteMax - absoluteMin)) * 180;
         degree = degree * (Math.PI / 180);
-        //if (degree > 90) {
-        //degree = 90 - (degree - 90);
-        //coordinates = [200+(Math.cos(degree)*r), 200-(Math.sin(degree)*r)];
-        //} else {		
         coordinates = [200 - (Math.cos(degree) * r), 200 - (Math.sin(degree) * r)];
-        //}
         return coordinates;
     }
 
     roundMax2(num) {
-        return Math.round(num * 100) / 100;
+        return Math.round((num + Number.EPSILON) * 100) / 100;
     }
 }
