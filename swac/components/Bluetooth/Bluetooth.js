@@ -642,6 +642,13 @@ export default class Bluetooth extends View {
 
         } catch (e) {
             Msg.error('Bluetooth', 'Communication error with ' + deviceId + ': ' + e.message, this.requestor);
+            let minimal_Btn = this.requestor.querySelector('.swac_bluetooth_connect_minimal_btn');
+            if (minimal_Btn) {
+                minimal_Btn.innerText = 'Getrennt';
+                minimal_Btn.classList.remove("uk-button-danger");
+                minimal_Btn.classList.remove("uk-label-success");
+                minimal_Btn.classList.add("uk-button-primary");
+            }
             throw e;
         }
     }
@@ -650,7 +657,8 @@ export default class Bluetooth extends View {
 
     // Sends a Pi command over BLE. action is the Pi command string (e.g. 'smartMobile_on_measuring')
     // or an object (e.g. {sendTimeStamp: '...'}). param is forwarded as content.param.
-    async sendCommand(deviceId, action, param = null) {
+    async sendCommand(deviceId, action, param = null)
+    {
         Msg.flow('Bluetooth', 'sendCommand() ' + deviceId + ' action=' + JSON.stringify(action), this.requestor);
         return await this.communicateWithPi(deviceId, JSON.stringify({
             type: 'request', status: null,
