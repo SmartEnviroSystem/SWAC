@@ -110,6 +110,14 @@ export default class Bluetooth extends View {
         if (!options.sections)
             this.options.sections = [];
 
+        this.desc.opts[10] = {
+            name: "deviceNameSource",
+            desc: "CSS Selector for an element containing the device name",
+            example: '.nameelement'
+        };
+        if (!options.deviceNameSource)
+            this.options.deviceNameSource = null;
+
         if (!options.showWhenNoData)
             this.options.showWhenNoData = true;
 
@@ -188,6 +196,18 @@ export default class Bluetooth extends View {
 
         try {
             let requestConf = {};
+
+            if (this.options.deviceNameSource) {
+                let name = '';
+                let nameElem = document.querySelector(this.options.deviceNameSource);
+                if (nameElem) {
+                    name = nameElem.children[0]?.innerHTML ?? nameElem.textContent.trim();
+                    this.options.filterDevices = [{namePrefix: name}];
+                } else {
+                    Msg.error('CommandRouter', 'Device name element not found.', this.requestor);
+                }
+            }
+
             if (this.options.filterDevices && this.options.filterDevices.length > 0) {
                 requestConf.filters = this.options.filterDevices;
             } else {
@@ -224,7 +244,7 @@ export default class Bluetooth extends View {
             this.options.onConnected.call(this, device.id, device);
 
             if (minimal_Btn) {
-                minimal_Btn.innerText = 'Device connected: ' + device.name;
+                minimal_Btn.innerText = "verbunden";
                 minimal_Btn.classList.remove("uk-button-primary");
                 minimal_Btn.classList.remove("uk-button-danger");
                 minimal_Btn.classList.add("uk-label-success");
@@ -234,7 +254,7 @@ export default class Bluetooth extends View {
 
         } catch (err) {
             if (minimal_Btn) {
-                minimal_Btn.innerText = 'Error, please try again';
+                minimal_Btn.innerText = 'Fehler';
                 minimal_Btn.classList.remove("uk-button-primary");
                 minimal_Btn.classList.remove("uk-label-success");
                 minimal_Btn.classList.add("uk-button-danger");
@@ -299,6 +319,14 @@ export default class Bluetooth extends View {
     // --- Internal disconnect handler ---
 
     _onDisconnected(deviceId) {
+        let minimal_Btn = this.requestor.querySelector('.swac_bluetooth_connect_minimal_btn');
+        if (minimal_Btn) {
+            minimal_Btn.innerText = 'Getrennt';
+            minimal_Btn.classList.remove("uk-button-danger");
+            minimal_Btn.classList.remove("uk-label-success");
+            minimal_Btn.classList.add("uk-button-primary");
+        }
+
         let entry = this._connectedDevices.get(deviceId);
         let name = entry ? entry.name : deviceId;
         Msg.info('Bluetooth', 'Disconnected: ' + name, this.requestor);
