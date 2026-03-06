@@ -201,10 +201,17 @@ export default class Question extends View {
                 Msg.warn('Question', 'Questiontype >' + set.type + '< is not supported.');
         }
 
-//        let questInputElem = this.createQuestionInput(curSet, questionNo);
         if (inputElem)
             collectContainerElem.appendChild(inputElem);
-//        questionNo++;
+
+        // Hide send button if autosend is enabled at only one question
+        let sendBtn = this.requestor.querySelector('.swac_question_sendbutton');
+        if(this.options.autoSave && this.data[set.swac_fromName].count === 1) {
+            sendBtn.classList.add('swac_dontdisplay');
+        } else {
+            sendBtn.classList.remove('swac_dontdisplay');
+        }
+
         return;
     }
 
