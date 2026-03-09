@@ -7,7 +7,7 @@ export default class Visualise extends View {
     constructor(options = {}) {
         super(options);
         this.name = 'Visualise';
-        this.desc.text = "This components visualises the data given. It uses thermometer, hydrometer or icon representation. This component is not finished yet.";
+        this.desc.text = "This components visualises the data given. It uses thermometer, hydrometer, circlevalue or icon representation. This component is not finished yet.";
         this.desc.developers = 'Florian Fehring (HSBI), Jonas Ahrend, Stephan Dresselmann';
         this.desc.license = 'GNU Lesser General Public License';
 
@@ -92,11 +92,24 @@ export default class Visualise extends View {
 
         this.desc.opts[0] = {
             name: 'visus',
-            desc: 'Array of visualisation definitions with "attr", "type" and "datadescription" attributes.',
+            desc: 'Array of visualisation definitions with "attr", "type" and "datadescription" attributes. '
+                    + 'Available diagram types: Thermometer, Hygrometer, CircleValue, Iconized. '
+                    + 'CircleValue displays a single value centered in a colored circle, '
+                    + 'where the background color is determined by the matching legend/definition range.',
             example: [
                 {
                     attr: 'temp',
                     type: 'Thermometer',
+                    datadescription: '#visualise_legend'
+                },
+                {
+                    attr: 'humidity',
+                    type: 'Hygrometer',
+                    datadescription: '#visualise_legend'
+                },
+                {
+                    attr: 'humidity',
+                    type: 'CircleValue',
                     datadescription: '#visualise_legend'
                 }
             ]
@@ -179,7 +192,9 @@ export default class Visualise extends View {
     }
 
     /**
-     * Creates a diagram for a single value
+     * Creates a diagram for a single value.
+     * The diagram type is resolved dynamically from the diagrams/ folder,
+     * so any type placed there (e.g. CircleValue.js) is available automatically.
      * 
      * @param {String} fromName         Name of the datasource
      * @param {Object} set              Dataset object
@@ -189,7 +204,7 @@ export default class Visualise extends View {
      */
     createDiagram(fromName, set, diagramdef, valueArea) {
         let thisRef = this;
-        // Search diagram class
+        // Dynamically import the diagram class by type name (e.g. 'CircleValue' → CircleValue.js)
         import('./diagrams/' + diagramdef.type + '.js?vers=' + SWAC.desc.version).then(function (module) {
 
             let datadescription = null;
@@ -208,14 +223,14 @@ export default class Visualise extends View {
                 thisRef.calculateDiagram(set, diagramdef, valueArea, module, datadescription)
             }
         }).catch(function (err) {
-            Msg.error('Visualise', 'Error createing diagram >' + diagramdef.type + '<: ' + err, thisRef.requestor);
+            Msg.error('Visualise', 'Error creating diagram >' + diagramdef.type + '<: ' + err, thisRef.requestor);
             return;
         });
     }
 
     calculateDiagram(set, diagramdef, valueArea, module, datadescription) {
         let thisRef = this;
-        
+
         let diagramClass = module.default;
         // Get attribute name
         let attr = diagramdef.attr;
@@ -263,7 +278,7 @@ export default class Visualise extends View {
                 transElem.swac_comp.translate();
             }
         } else {
-            //creates the diagram
+            // Creates the diagram using the resolved diagram class (e.g. CircleValue)
             diagram = new diagramClass(unit, name, width, height, datadescription, diagramdef, thisRef);
             diagramElem = diagram.drawValueDiagram(name, value);
             let vdattrElem = valueArea.querySelector('.swac_visualise_diagram_attr');
