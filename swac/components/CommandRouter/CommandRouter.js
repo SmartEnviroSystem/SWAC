@@ -135,11 +135,8 @@ export default class CommandRouter extends View {
      * and delegates to executeCommand().
      */
     executeCommandFromEvent(evt) {
-        let cmdElem = evt.target.closest('[cmd]');
-        if (!cmdElem)
-            return;
-        let cmd = cmdElem.getAttribute('cmd');
-        let param = cmdElem.getAttribute('param');
+        let cmd = evt.target.getAttribute('cmd');
+        let param = evt.target.getAttribute('param');
         this.executeCommand(cmd, param);
     }
 
