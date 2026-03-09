@@ -3,10 +3,6 @@ import Msg from '../../Msg.js';
 
 export default class CommandRouter extends View {
 
-    /**
-     * Registers all SWAC component metadata and sets default option values.
-     * Initialises internal state for component tracking and timer management.
-     */
     constructor(options = {}) {
         super(options);
         this.name = 'CommandRouter';
@@ -94,19 +90,11 @@ export default class CommandRouter extends View {
         this.countdownInterval = null;
     }
 
-    /**
-     * Waits for all SWAC components to finish loading, then binds commands
-     * and starts the configured timed command intervals.
-     */
     async init() {
         document.addEventListener('swac_components_complete', this.bindCommands.bind(this));
         this.startTimedCommands();
     }
 
-    /**
-     * Attaches click handlers to all elements with a [cmd] attribute.
-     * Collects all commandable SWAC components on the page for later use.
-     */
     bindCommands(evt) {
         Msg.flow('CommandRouter', 'bindCommands()', this.requestor);
 
@@ -125,28 +113,18 @@ export default class CommandRouter extends View {
                 }
             }
         } else {
-            // Fall back to all SWAC elements on the page
             this.comps = document.querySelectorAll('[swa]');
         }
     }
 
-    /**
-     * Extracts the command name and optional parameter from a click event
-     * and delegates to executeCommand().
-     */
     executeCommandFromEvent(evt) {
-        let cmd = evt.target.getAttribute('cmd');
-        let param = evt.target.getAttribute('param');
+        let cmdElem = evt.target.closest('[cmd]');
+        if (!cmdElem) return;
+        let cmd = cmdElem.getAttribute('cmd');
+        let param = cmdElem.getAttribute('param');
         this.executeCommand(cmd, param);
     }
 
-    /**
-     * Sends a command to all commandable components on the page.
-     * Falls back to the targetDatacapsule (WebSocket / REST) if no component handles it.
-     *
-     * @param {string}      cmd   - Command name (e.g. 'last_measuring', 'shutdown')
-     * @param {string|null} params - Optional parameter forwarded with the command, typically an object
-     */
     async executeCommand(cmd, params) {
         Msg.flow('CommandRouter', 'executeCommand()', this.requestor);
         let thisRef = this;
@@ -182,7 +160,7 @@ export default class CommandRouter extends View {
             }
         }
 
-        // No component handled the command – send it via WebSocket / REST
+        // No component handled the command – send via WebSocket / REST
         if (!executed && this.options.targetDatacapsule) {
             const curCapsule = Object.assign({}, this.options.targetDatacapsule);
 
@@ -199,19 +177,32 @@ export default class CommandRouter extends View {
             let dataPromise = Model.save(curCapsule, true);
 
             dataPromise.then(function (result) {
-                // Unwrap the Pi transport envelope: result[0].data[0]
-                let piEnvelope = result[0].data[0];
-                return thisRef.processResult(piEnvelope, null);
+                const raw = result[0].data[0];
+
+                let normalized;
+                if (raw && typeof raw === 'object' && raw.type === 'response') {
+                    // Real Pi envelope – use as-is (hostname, ts, status all present)
+                    normalized = raw;
+                } else if (raw && typeof raw === 'object') {
+                    // Unexpected flat object – wrap defensively
+                    normalized = {
+                        hostname: null,
+                        type:     'response',
+                        ts:       new Date().toISOString(),
+                        status:   'ok',
+                        data:     raw
+                    };
+                } else {
+                    normalized = raw;
+                }
+
+                thisRef.processResult(normalized, null);
             }).catch(function (err) {
                 Msg.error('CommandRouter', 'Could not process data: ' + err, thisRef.requestor);
             });
         }
     }
 
-    /**
-     * Starts a setInterval for every entry in options.commandTimer.
-     * Also drives the countdown display in the DOM using the shortest interval.
-     */
     startTimedCommands() {
         let thisRef = this;
         if (this.options.commandTimer && this.options.commandTimer.length > 0) {
@@ -220,7 +211,6 @@ export default class CommandRouter extends View {
             for (let curCommandTimer of this.options.commandTimer) {
                 (function (timerDef) {
                     let curInterval = setInterval(function () {
-                        // Suppress the modal so only the dashboard cards are updated silently
                         thisRef.suppressModal = true;
                         thisRef.executeCommand(timerDef.cmd, timerDef.param);
                     }, timerDef.interval);
@@ -249,9 +239,6 @@ export default class CommandRouter extends View {
         }
     }
 
-    /**
-     * Clears all active command intervals and resets the countdown display.
-     */
     stopTimedCommands() {
         for (let curCmdInterval of this.cmdIntervals) {
             clearInterval(curCmdInterval);
@@ -267,13 +254,6 @@ export default class CommandRouter extends View {
         }
     }
 
-    /**
-     * Extracts the payload from a BLE SWAC response envelope.
-     * Returns content.data if present, otherwise returns the input unchanged.
-     *
-     * @param   {*} response
-     * @returns {object}
-     */
     _unwrapBLE(response) {
         if (!response || typeof response !== 'object')
             return response;
@@ -290,17 +270,9 @@ export default class CommandRouter extends View {
         return response;
     }
 
-    /**
-     * Central handler called after every successful command execution.
-     * Dispatches the commandrouter_executed event so index.js can update the dashboard cards.
-     *
-     * @param {object|null}  result
-     * @param {Element|null} comp
-     */
     processResult(result, comp) {
         Msg.flow('CommandRouter', 'processResult()', this.requestor);
 
-        // Skip the modal for timer-triggered commands; reset flag afterwards
         if (!this.suppressModal) {
             this.generateView(result);
         }
@@ -312,12 +284,6 @@ export default class CommandRouter extends View {
         ));
     }
 
-    /**
-     * Renders the command result as a key/value table inside the last-measuring modal.
-     * Detects and unwraps the Pi transport envelope before rendering.
-     *
-     * @param {object|null} dataset
-     */
     generateView(dataset) {
         Msg.flow('CommandRouter', 'generateView()', this.requestor);
         if (!dataset)
@@ -338,7 +304,6 @@ export default class CommandRouter extends View {
             UIkit.dropdown(el).hide(false);
         });
 
-        // Reset modal to a clean state before rendering new data
         loading.style.display = 'none';
         error.style.display = 'none';
         tbody.innerHTML = '';
@@ -358,7 +323,6 @@ export default class CommandRouter extends View {
             let isError = /error|fail|err/i.test(String(statusValue));
             error.textContent = statusValue;
             error.style.display = '';
-            // Red for errors, blue for informational status
             error.style.color = isError ? '#e53e3e' : '#2b6cb0';
         }
 
