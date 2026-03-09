@@ -135,8 +135,11 @@ export default class CommandRouter extends View {
      * and delegates to executeCommand().
      */
     executeCommandFromEvent(evt) {
-        let cmd = evt.target.getAttribute('cmd');
-        let param = evt.target.getAttribute('param');
+        let cmdElem = evt.target.closest('[cmd]');
+        if (!cmdElem)
+            return;
+        let cmd = cmdElem.getAttribute('cmd');
+        let param = cmdElem.getAttribute('param');
         this.executeCommand(cmd, param);
     }
 
@@ -145,9 +148,9 @@ export default class CommandRouter extends View {
      * Falls back to the targetDatacapsule (WebSocket / REST) if no component handles it.
      *
      * @param {string}      cmd   - Command name (e.g. 'last_measuring', 'shutdown')
-     * @param {string|null} param - Optional parameter forwarded with the command
+     * @param {string|null} params - Optional parameter forwarded with the command, typically an object
      */
-    executeCommand(cmd, param) {
+    async executeCommand(cmd, params) {
         Msg.flow('CommandRouter', 'executeCommand()', this.requestor);
         let thisRef = this;
         let executed = false;
@@ -163,7 +166,7 @@ export default class CommandRouter extends View {
             }
 
             try {
-                let res = curComp.swac_comp.doCommand(cmd);
+                let res = curComp.swac_comp.doCommand(cmd, params);
                 executed = true;
 
                 if (typeof res?.then === 'function') {
@@ -194,15 +197,14 @@ export default class CommandRouter extends View {
                 Msg.info('CommandRouter', 'Device name element not found.', this.requestor);
             }
             curCapsule.fromName = curCapsule.fromName.replace('{name}', name);
-            curCapsule.data = [{action: cmd}];
-
+            curCapsule.data = [{action: cmd, params: params}];
             let Model = window.swac.Model;
             let dataPromise = Model.save(curCapsule, true);
 
             dataPromise.then(function (result) {
                 // Unwrap the Pi transport envelope: result[0].data[0]
                 let piEnvelope = result[0].data[0];
-                thisRef.processResult(piEnvelope, null);
+                return thisRef.processResult(piEnvelope, null);
             }).catch(function (err) {
                 Msg.error('CommandRouter', 'Could not process data: ' + err, thisRef.requestor);
             });
@@ -219,7 +221,7 @@ export default class CommandRouter extends View {
             let minimumTimer = Number.MAX_SAFE_INTEGER;
 
             for (let curCommandTimer of this.options.commandTimer) {
-                (function(timerDef) {
+                (function (timerDef) {
                     let curInterval = setInterval(function () {
                         // Suppress the modal so only the dashboard cards are updated silently
                         thisRef.suppressModal = true;
