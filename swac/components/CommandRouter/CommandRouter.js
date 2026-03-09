@@ -197,7 +197,7 @@ export default class CommandRouter extends View {
                 Msg.info('CommandRouter', 'Device name element not found.', this.requestor);
             }
             curCapsule.fromName = curCapsule.fromName.replace('{name}', name);
-            curCapsule.data = [{action: cmd, params: params}];
+            curCapsule.data = [{action: cmd, param: params}];
             let Model = window.swac.Model;
             let dataPromise = Model.save(curCapsule, true);
 
