@@ -67,21 +67,26 @@ export default class Dashboard extends View {
             desc: 'The attribute id is required for the component to work properly.',
             example: 1
         };
-        this.desc.reqPerSet[1] = {
-            name: 'title',
-            desc: 'Dashboard cards title',
-            example: 'Weather card'
-        };
-        this.desc.reqPerSet[2] = {
-            name: 'desc',
-            desc: 'Dashboard cards description',
-            example: 'Displays the current weather.'
-        };
 
         this.desc.optPerSet[0] = {
             name: 'parent',
             desc: 'Id of the parent dataset for ordering.',
             example: 1
+        };
+        this.desc.optPerSet[1] = {
+            name: 'title',
+            desc: 'Dashboard cards title',
+            example: 'Weather card'
+        };
+        this.desc.optPerSet[2] = {
+            name: 'desc',
+            desc: 'Dashboard cards description',
+            example: 'Displays the current weather.'
+        };
+        this.desc.optPerSet[3] = {
+            name: 'subtitle',
+            desc: 'Dashboard cards subtitle',
+            example: 'Displays the current subtitle.'
         };
 
         this.desc.opts[0] = {
@@ -198,10 +203,10 @@ export default class Dashboard extends View {
         // Register functions
         for (let curRep of repeateds) {
             let visElem = curRep.querySelector('.swac_dashboard_visibility');
-            if(visElem){
+            if (visElem) {
                 visElem.addEventListener('click', this.onClickVisibility.bind(this));
             }
-            
+
 
             // Register event handler for advanced options
             let advOptsLink = curRep.querySelector('.swac_dashboard_advoptslink');
