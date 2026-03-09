@@ -717,9 +717,8 @@ export default class Question extends View {
             // If target is a command router
             if (curDataCapsle.fromName.startsWith('cmd://')) {
                 curDataCapsle.fromName = curDataCapsle.fromName.replace('cmd://','');
-                let strCapsule = JSON.stringify(curDataCapsle);
                 let cmdRouterElem = document.querySelector('[swa^="CommandRouter"]');
-                savePromise = cmdRouterElem.swac_comp.executeCommand('POST', strCapsule);
+                savePromise = cmdRouterElem.swac_comp.executeCommand('POST', curDataCapsle);
             } else {
                 // Save data with model
                 savePromise = Model.save(curDataCapsle);
