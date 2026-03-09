@@ -206,7 +206,7 @@ export default class Question extends View {
 
         // Hide send button if autosend is enabled at only one question
         let sendBtn = this.requestor.querySelector('.swac_question_sendbutton');
-        if(this.options.autoSave && this.data[set.swac_fromName].count === 1) {
+        if (this.options.autoSave && this.data[set.swac_fromName].count === 1) {
             sendBtn.classList.add('swac_dontdisplay');
         } else {
             sendBtn.classList.remove('swac_dontdisplay');
@@ -505,7 +505,7 @@ export default class Question extends View {
      * @returns {undefined}
      */
     onMadeInput(evt) {
-        Msg.flow('Question','onMadeInput()',this.requestor);
+        Msg.flow('Question', 'onMadeInput()', this.requestor);
         // Get clicked element
         let clickedElem = evt.target;
         // Filter event thats are not occured at a img elem (click on icon input)
@@ -589,7 +589,7 @@ export default class Question extends View {
      * @returns {undefined}
      */
     onSend(evt) {
-        Msg.flow('Querstion','onSend()',this.requestor);
+        Msg.flow('Querstion', 'onSend()', this.requestor);
         let dataCapsles = new Map();
         // Get form element
         let formElem = this.requestor.querySelector('form');
@@ -667,6 +667,8 @@ export default class Question extends View {
                 }
                 target = parentSet.target;
             }
+
+            // Check if target is there
             if (!target) {
                 Msg.error('Question', 'There is no target defined for >' + set.id + '< data will not be saved.', this.requestor);
                 continue;
@@ -711,8 +713,17 @@ export default class Question extends View {
         let savePromises = [];
         for (let curName of dataCapsles.keys()) {
             let curDataCapsle = dataCapsles.get(curName);
-            // Save data with model
-            let savePromise = Model.save(curDataCapsle);
+            let savePromise;
+            // If target is a command router
+            if (curDataCapsle.fromName.startsWith('cmd://')) {
+                curDataCapsle.fromName = curDataCapsle.fromName.replace('cmd://','');
+                let strCapsule = JSON.stringify(curDataCapsle);
+                let cmdRouterElem = document.querySelector('[swa^="CommandRouter"]');
+                savePromise = cmdRouterElem.swac_comp.executeCommand('POST', strCapsule);
+            } else {
+                // Save data with model
+                savePromise = Model.save(curDataCapsle);
+            }
             savePromises.push(savePromise);
         }
         Promise.all(savePromises).then(
