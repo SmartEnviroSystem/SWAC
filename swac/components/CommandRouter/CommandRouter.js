@@ -198,14 +198,13 @@ export default class CommandRouter extends View {
             try {
                 const Model = window.swac.Model;
                 const result = await Model.save(curCapsule, true);
-                const normalized = result[0].data[0];
+                const data = result[0].data;
 
-                // When called from executeRequest the caller handles processResult itself
                 if (process) {
-                    thisRef.processResult(normalized, null);
+                    thisRef.processResult(data, null);
                 }
 
-                return normalized;
+                return data;
 
             } catch (err) {
                 Msg.error('CommandRouter', 'Could not process data: ' + err, thisRef.requestor);
@@ -323,6 +322,10 @@ export default class CommandRouter extends View {
         error.style.display = 'none';
         tbody.innerHTML = '';
         table.style.display = 'none';
+
+        // Unwrap array (WebSocket returns [{...}])
+        if (Array.isArray(dataset))
+            dataset = dataset[0];
 
         // Unwrap new unified envelope: data lives in records[0]
         let row = dataset;
