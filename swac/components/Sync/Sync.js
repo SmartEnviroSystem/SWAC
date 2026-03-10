@@ -284,7 +284,7 @@ export default class Sync extends View {
         var el = this.requestor.querySelector('.swac_sync_chart'); // get canvas
         let percent = 0;
         if (this.doneSets) {
-            percent = this.availSets / this.doneSets;
+            percent = (this.doneSets / this.availSets) * 100;
         }
         var options = {
             percent: percent.toFixed(2) || 0,
