@@ -91,13 +91,13 @@ export default class Model {
                     window.parent.swac.reactions.addReaction(function (requestors) {
                         let router = requestors[cmdRouterElem.id];
                         let result = router.swac_comp.executeRequest(uniformedDataRequest, false);
-
                         result.then(function (res) {
                             if(!res) {
                                 reject('No data recived from command');
+                                return;
                             }
                             let data = thisRef.convertData({data: res, fromName: dataRequest.fromName}, dataRequest, comp);
-                            comp.addData(dataRequest.fromName, [res.data]);
+                            comp.addData(dataRequest.fromName, res);
 
                             resolve(data);
                         }).catch(function(err) {
