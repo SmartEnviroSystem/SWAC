@@ -355,8 +355,8 @@ export default class Bluetooth extends View {
             return;
 
         Msg.flow('Bluetooth', 'Validating MAC for ' + deviceId, this.requestor);
-        let connectedMac = await this.getMacAddress(deviceId);
-        let formattedMac = this._formatMac(connectedMac);
+        const res = await this.getMacAddress(deviceId);
+        let formattedMac = this._formatMac(res.records[0].mac);
 
         if (formattedMac !== storedMac) {
             Msg.warn('Bluetooth', 'MAC mismatch! Expected ' + storedMac + ', got ' + formattedMac, this.requestor);
@@ -694,7 +694,7 @@ export default class Bluetooth extends View {
     // Also called internally by _validateDeviceMac().
     async getMacAddress(deviceId) {
         const res = await this.sendCommand(deviceId, 'getMac');
-        return res.content.data;
+        return res;
     }
 
     // Called by the WLAN form with ssid and password as separate arguments.
@@ -889,7 +889,7 @@ export default class Bluetooth extends View {
     // to choose when multiple devices are connected).
     // For 'addWlan', a modal dialog collects SSID and password before sending.
     // Returns a Promise that resolves with the Pi response object.
-    doCommand(cmd) {
+    doCommand(cmd, params = null) {
         Msg.flow('Bluetooth', 'doCommand() cmd=' + cmd, this.requestor);
 
         // addWlan: direkt Modal öffnen, kein Button-Matching, kein Device-Prompt
@@ -913,7 +913,7 @@ export default class Bluetooth extends View {
             }
         }
         if (!matchedBtn) {
-            matchedBtn = {action: cmd, param: null};
+            matchedBtn = {action: cmd, param: params};
         }
 
         // Resolve the target device — prompt the user if more than one is connected.

@@ -43,7 +43,7 @@ export default class CommandRouter extends View {
 
         this.desc.opts[1] = {
             name: "targetDatacapsule",
-            desc: "",
+            desc: "Template datacapsule for sending data. Here default data to send along can be placed.",
             example: {
                 fromName: 'mytablename',
                 fromWheres: {
@@ -125,82 +125,129 @@ export default class CommandRouter extends View {
         this.executeCommand(cmd, param);
     }
 
-    async executeCommand(cmd, params) {
+    /**
+     * Sends a command to all commandable components on the page.
+     * Falls back to the targetDatacapsule (WebSocket / REST) if no component handles it.
+     *
+     * @param {string}      cmd   - Command name (e.g. 'last_measuring', 'shutdown')
+     * @param {string|null} params - Optional parameter forwarded with the command, typically an object
+     */
+    async executeCommand(cmd, params, process) {
         Msg.flow('CommandRouter', 'executeCommand()', this.requestor);
-        let thisRef = this;
+        const thisRef = this;
         let executed = false;
 
+        // 1) Versuche, den Command an Komponenten zu senden
         for (let curComp of this.comps) {
+
+            // Komponente unterstützt keine Commands
             if (typeof curComp.swac_comp?.isCommandable !== 'function') {
-                Msg.warn('CommandRouter', 'Component ' + curComp.id + ' does not support commandable.', this.requestor);
+                Msg.warn('CommandRouter', `Component ${curComp.id} does not support commandable.`, this.requestor);
                 continue;
             }
+
+            // Komponente akzeptiert aktuell keine Commands
             if (!curComp.swac_comp.isCommandable()) {
-                Msg.warn('CommandRouter', 'Component ' + curComp.id + ' currently does not accept commands.', this.requestor);
+                Msg.warn('CommandRouter', `Component ${curComp.id} currently does not accept commands.`, this.requestor);
                 continue;
             }
 
             try {
+                // Command ausführen (kann Promise oder Wert sein)
                 let res = curComp.swac_comp.doCommand(cmd, params);
                 executed = true;
 
-                if (typeof res?.then === 'function') {
-                    res.then(function (response) {
-                        Msg.info('CommandRouter', 'Command >' + cmd + '< on component >' + curComp.id + '< executed.');
-                        thisRef.processResult(thisRef._unwrapBLE(response), curComp);
-                    }).catch(function (err) {
-                        Msg.error('CommandRouter', 'Command >' + cmd + '< rejected: ' + err, thisRef.requestor);
-                    });
-                } else {
-                    Msg.info('CommandRouter', 'Command >' + cmd + '< on component >' + curComp.id + '< executed.');
-                    thisRef.processResult(thisRef._unwrapBLE(res), curComp);
+                // Falls Promise → warten
+                if (res && typeof res.then === 'function') {
+                    res = await res;
                 }
+
+                Msg.info('CommandRouter', `Command >${cmd}< on component >${curComp.id}< executed.`);
+
+                const result = thisRef._unwrapBLE(res);
+
+                if (process) {
+                    thisRef.processResult(result, curComp);
+                }
+
+                return result;
+
             } catch (e) {
-                Msg.error('CommandRouter', 'Command >' + cmd + '< threw error: ' + e, this.requestor);
+                Msg.error('CommandRouter', `Command >${cmd}< threw error: ${e}`, this.requestor);
             }
         }
 
-        // No component handled the command – send via WebSocket / REST
+        // 2) Kein Component hat den Command verarbeitet → Fallback über Datacapsule
         if (!executed && this.options.targetDatacapsule) {
+
             const curCapsule = Object.assign({}, this.options.targetDatacapsule);
 
+            // Gerätenamen ermitteln
             let name = '';
-            let nameElem = document.querySelector(this.options.deviceNameSource);
+            const nameElem = document.querySelector(this.options.deviceNameSource);
+
             if (nameElem) {
                 name = nameElem.children[0]?.innerHTML ?? nameElem.textContent.trim();
             } else {
                 Msg.info('CommandRouter', 'Device name element not found.', this.requestor);
             }
+
             curCapsule.fromName = curCapsule.fromName.replace('{name}', name);
             curCapsule.data = [{action: cmd, param: params}];
-            let Model = window.swac.Model;
-            let dataPromise = Model.save(curCapsule, true);
 
-            dataPromise.then(function (result) {
+            try {
+                const Model = window.swac.Model;
+                let result = await Model.save(curCapsule, true);
+
                 const raw = result[0].data[0];
-
                 let normalized;
+
                 if (raw && typeof raw === 'object' && raw.type === 'response') {
-                    // Real Pi envelope – use as-is (hostname, ts, status all present)
+                    // Pi-typische Response
                     normalized = raw;
                 } else if (raw && typeof raw === 'object') {
-                    // Unexpected flat object – wrap defensively
+                    // Unerwartetes Objekt → defensiv wrappen
                     normalized = {
                         hostname: null,
-                        type:     'response',
-                        ts:       new Date().toISOString(),
-                        status:   'ok',
-                        data:     raw
+                        type: 'response',
+                        ts: new Date().toISOString(),
+                        status: 'ok',
+                        data: raw
                     };
                 } else {
                     normalized = raw;
                 }
 
-                thisRef.processResult(normalized, null);
-            }).catch(function (err) {
-                Msg.error('CommandRouter', 'Could not process data: ' + err, thisRef.requestor);
-            });
+                if (process) {
+                    thisRef.processResult(normalized, null);
+                }
+                console.log('TEST result CommandRouter', result);
+                return normalized;
+
+            } catch (err) {
+                Msg.error('CommandRouter', `Could not process data: ${err}`, thisRef.requestor);
+            }
         }
+
+        // 3) Falls weder Komponente noch Fallback etwas liefern
+        return undefined;
+    }
+
+    async executeRequest(dataRequest, processResult) {
+        let result;
+        // Get action if given
+        if (dataRequest.data) {
+            result = await this.executeCommand('POST', dataRequest, processResult);
+        } else {
+            console.log('TEST actioncommand');
+            // cmdaction aus der URL extrahieren
+            const params = new URLSearchParams(dataRequest.formName);
+            const action = params.get('cmdaction') || 'GET';
+            console.log('TEST action',action);
+            result = await this.executeCommand(action, dataRequest, processResult);
+        }
+
+        return result;
     }
 
     startTimedCommands() {

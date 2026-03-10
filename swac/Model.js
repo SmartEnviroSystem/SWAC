@@ -78,6 +78,40 @@ export default class Model {
                     dataRequest.fromWheres['filter'] = ecoFilter;
             }
 
+            // Special handling for command router sources
+            if (dataRequest.fromName.startsWith('cmd://')) {
+                // Search CommandRouter
+                let cmdRouterElem = window.parent.document.querySelector('[swa^="CommandRouter"]');
+                if (cmdRouterElem) {
+                    Msg.info('Model', 'Request >' + dataRequest.id + '< should be routed by ' + cmdRouterElem.id);
+
+                    let uniformedDataRequest = {};
+                    uniformedDataRequest.fromName = dataRequest.fromName.replace('cmd://','');
+                    uniformedDataRequest.fromWheres = dataRequest.fromWheres;
+                    window.parent.swac.reactions.addReaction(function (requestors) {
+                        let router = requestors[cmdRouterElem.id];
+                        let result = router.swac_comp.executeRequest(uniformedDataRequest, false);
+
+                        result.then(function (res) {
+                            if(!res) {
+                                reject('No data recived from command');
+                            }
+                            let data = thisRef.convertData({data: res, fromName: dataRequest.fromName}, dataRequest, comp);
+                            comp.addData(dataRequest.fromName, [res.data]);
+
+                            resolve(data);
+                        }).catch(function(err) {
+                            Msg.error('Model','Error getting data from CommandRouter: ' + err);
+                        });
+                    }, cmdRouterElem.id);
+                    return;
+                } else {
+                    Msg.error('Model', 'No CommandRouter found for request: ' + dataRequest.fromName);
+                    reject('No CommandRouter found for request: ' + dataRequest.fromName);
+                    return;
+                }
+            }
+
             // Create datasource if not exists
             if (comp && !comp.data[dataRequest.fromName]) {
                 // Create WS for component and (inside WatchableSource) if needed for Model.store
@@ -138,7 +172,7 @@ export default class Model {
             } else if (localStorage.getItem(dataRequest.fromName) != null) {
                 Msg.info('model', 'Useing data from local storage for >' + dataRequest.fromName + '<', comp);
                 let localStData = localStorage.getItem(dataRequest.fromName);
-                
+
                 dataCapsule = thisRef.convertData({data: localStData, fromName: dataRequest.fromName}, dataRequest, comp);
                 if (comp)
                     comp.lastloaded = dataCapsule.length - 1;
@@ -802,6 +836,22 @@ export default class Model {
 
     static createWatchableSet(set) {
         return new WatchableSet(set);
+    }
+    
+    /**
+     * Automatically detects the matching mode for data requests, useing Model.load() or Model.save()
+     * depending on if data is delivered or not.
+     */
+    static request(dataRequestor,supressMsgs,comp) {
+        if(!dataRequestor) {
+            Msg.error('Model','No dataRequestor given for request.',comp);
+            return;
+        }
+        if(dataRequestor.data) {
+            return Model.save(dataRequestor,supressMsgs);
+        } else {
+            return Model.load(dataRequestor,comp);
+        }
     }
 }
 

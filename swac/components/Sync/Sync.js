@@ -58,33 +58,99 @@ export default class Sync extends View {
         if (!options.transformFuncs)
             this.options.transformFuncs = new Map();
 
+        this.desc.opts[3] = {
+            name: "syncedFlagAttribute",
+            desc: "Attributes name that indicates if a dataset is allready synced."
+        };
+        if (!options.syncedFlagAttribute)
+            this.options.syncedFlagAttribute = 'synced';
+
+        this.desc.opts[4] = {
+            name: "syncModeRequestor",
+            desc: "DataRequestor for getting the sync mode state. Response dataset must contain an attribute",
+            example: {
+                fromName: 'syncStateApi'
+            }
+        };
+        if (!options.syncModeRequestor)
+            this.options.syncModeRequestor = null;
+
+        this.desc.opts[4] = {
+            name: "syncStateAttribute",
+            desc: "NAme of the attribute where to find the syncstate."
+        };
+        if (!options.syncStateAttribute)
+            this.options.syncStateAttribute = 'status';
+
+        this.desc.opts[4] = {
+            name: "syncStateRunningValue",
+            desc: "Value of the syncstate attribute that indicates a running synchronisation."
+        };
+        if (!options.syncStateRunningValue)
+            this.options.syncStateRunningValue = 'running';
+
+        this.desc.opts[5] = {
+            name: "syncStartRequestor",
+            desc: "DataRequestor to call for starting sync. Response must contain a status attribute. Where any state less then 400 means starting succseed.",
+            example: {
+                fromName: 'syncStateApi/activate'
+            }
+        };
+        if (!options.syncStartRequestor)
+            this.options.syncStartRequestor = null;
+
+        this.desc.opts[6] = {
+            name: "syncStopRequestor",
+            desc: "DataRequestor to call for stopping sync. Response must contain a status attribute. Where any state less then 400 means stoping succseed.",
+            example: {
+                fromName: 'syncStateApi/stop'
+            }
+        };
+        if (!options.syncStopRequestor)
+            this.options.syncStopRequestor = null;
+
+
         if (!options.showWhenNoData)
             this.options.showWhenNoData = true;
 
         // Internal attributes
         this.availSets = 0;
+        this.doneSets = 0;
     }
 
     init() {
         return new Promise((resolve, reject) => {
 
             let startBtn = this.requestor.querySelector('.swac_sync_startbtn');
-            startBtn.setAttribute('disabled', 'disabled');
-            if (this.options.syncTarget) {
-                startBtn.addEventListener('click', this.onClickStart.bind(this));
+            let stopBtn = this.requestor.querySelector('.swac_sync_stopbtn');
+
+            // Check frontend or backend sync support
+            if (this.options.syncModeRequestor) {
+                // Backend sync mode
+                this.updateSyncMode();
+                startBtn.addEventListener('click', this.onStartBackendSync.bind(this));
+                stopBtn.addEventListener('click', this.onStopBackendSync.bind(this));
             } else {
-                Msg.error('Sync', 'There is no option syncTarget specified, do not know where to sync.', this.requestor);
-                resolve();
-                return;
+                // Frontend sync mode
+                if (this.options.syncTarget) {
+                    startBtn.addEventListener('click', this.onClickStart.bind(this));
+                } else {
+                    startBtn.setAttribute('disabled', 'disabled');
+                    Msg.error('Sync', 'There is no option syncTarget specified, do not know where to sync.', this.requestor);
+                    resolve();
+                    return;
+                }
+
+                // Test if sync-target is reachable
+                fetch(this.options.syncTest, {method: 'HEAD'}).then(function (res) {
+                    if (res.status >= 400)
+                        startBtn.setAttribute('disabled', 'disabled');
+                    startBtn.parentElement.appendChild(document.createTextNode(SWAC.lang.dict.Sync.notavail));
+                }
+                );
             }
 
-            // Test if sync-target is reachable
-            fetch(this.options.syncTest, {method: 'HEAD'}).then(function (res) {
-                if (res.status < 400)
-                    startBtn.removeAttribute('disabled');
-                else
-                    startBtn.parentElement.appendChild(document.createTextNode(SWAC.lang.dict.Sync.notavail));
-            });
+            // Initial draw
             this.drawProgress();
             resolve();
         });
@@ -95,6 +161,15 @@ export default class Sync extends View {
         // Update avail counter
         let availOut = this.requestor.querySelector('[name="swac_sync_avail"]');
         availOut.innerHTML = this.availSets;
+        // If set is allready synced
+        if (set[this.options.syncedFlagAttribute]) {
+            this.doneSets++;
+            // Update done counter
+            let doneOut = this.requestor.querySelector('[name="swac_sync_done"]');
+            doneOut.innerHTML = this.doneSets;
+        }
+        this.drawProgress();
+
         return;
     }
 
@@ -107,7 +182,6 @@ export default class Sync extends View {
         evt.preventDefault();
 
         let el = this.requestor.querySelector('.swac_sync_chart');
-        let done = parseInt(el.getAttribute('data-percent'));
         let doneOut = this.requestor.querySelector('[name="swac_sync_done"]');
         let repForErr = this.requestor.querySelector('.swac_sync_repeatForError');
         let startBtn = this.requestor.querySelector('.swac_sync_startbtn');
@@ -144,9 +218,9 @@ export default class Sync extends View {
                     if (!res.ok)
                         throw res;
                     // Update progress bar
-                    done++;
-                    doneOut.innerHTML = done;
-                    let percent = done / thisRef.availSets * 100;
+                    thisRef.doneSets++;
+                    doneOut.innerHTML = thisRef.doneSets;
+                    let percent = thisRef.doneSets / thisRef.availSets * 100;
                     el.setAttribute('data-percent', percent.toFixed(2));
                     thisRef.drawProgress();
                     // Update local dataset
@@ -177,9 +251,9 @@ export default class Sync extends View {
                             fromName: set.swac_fromName
                         }, true).then(function () {
                             // Update progress bar
-                            done++;
-                            doneOut.innerHTML = done;
-                            let percent = done / thisRef.availSets * 100;
+                            thisRef.doneSets++;
+                            doneOut.innerHTML = thisRef.doneSets;
+                            let percent = thisRef.doneSets / thisRef.availSets * 100;
                             el.setAttribute('data-percent', percent.toFixed(2));
                             thisRef.drawProgress();
                         }).catch(function (err) {
@@ -208,9 +282,12 @@ export default class Sync extends View {
 
     drawProgress() {
         var el = this.requestor.querySelector('.swac_sync_chart'); // get canvas
-
+        let percent = 0;
+        if (this.doneSets) {
+            percent = this.availSets / this.doneSets;
+        }
         var options = {
-            percent: el.getAttribute('data-percent') || 25,
+            percent: percent.toFixed(2) || 0,
             size: el.getAttribute('data-size') || 220,
             lineWidth: el.getAttribute('data-line') || 15,
             rotate: el.getAttribute('data-rotate') || 0
@@ -249,6 +326,88 @@ export default class Sync extends View {
 
         drawCircle('#efefef', options.lineWidth, 100 / 100);
         drawCircle('#555555', options.lineWidth, options.percent / 100);
+    }
+
+    updateSyncMode() {
+        const thisRef = this;
+        // Get the model
+        let Model = window.swac.Model;
+        // Request data
+        let dataPromise = Model.request(this.options.syncModeRequestor);
+        // Wait for data to be loaded
+        dataPromise.then(function (data) {
+            // Get status dataset
+            let set = data[1];
+            if (set[thisRef.options.syncStateAttribute] && set[thisRef.options.syncStateAttribute] == thisRef.options.syncStateRunningValue) {
+                // update state button
+                let stateBtn = thisRef.requestor.querySelector('.swac_sync_startbtn');
+                stateBtn.classList.add('swac_dontdisplay');
+                let stopBtn = thisRef.requestor.querySelector('.swac_sync_stopbtn');
+                stopBtn.classList.remove('swac_dontdisplay');
+            } else {
+                Msg.info('Sync', 'Awaited that attribute >' + thisRef.options.syncStateAttribute + '< has value >' + thisRef.options.syncStateRunningValue + '< to indicate a running synchronisation. But got >' + set[thisRef.options.syncStateAttribute] + '<', thisRef.requestor);
+                // update state button
+                let stateBtn = thisRef.requestor.querySelector('.swac_sync_startbtn');
+                stateBtn.classList.remove('swac_dontdisplay');
+                let stopBtn = thisRef.requestor.querySelector('.swac_sync_stopbtn');
+                stopBtn.classList.add('swac_dontdisplay');
+            }
+        }).catch(function (err) {
+            // Handle load error
+            Msg.error('Sync', 'Error fetching backend sync state: ' + err, thisRef.requestor);
+        });
+    }
+
+    onStartBackendSync(evt) {
+        Msg.flow('Sync', 'onStartBackendSync()', this.requestor);
+        const thisRef = this;
+        // Get the model
+        let Model = window.swac.Model;
+        // Request data
+        let dataPromise = Model.request(this.options.syncStartRequestor);
+        // Wait for data to be loaded
+        dataPromise.then(function (data) {
+            let startBtn = thisRef.requestor.querySelector('.swac_sync_startbtn');
+            // Response should be in dataset 1
+            let set = data[1];
+            if (set.status <= 400) {
+                // update state button
+                startBtn.classList.add('swac_dontdisplay');
+                let stopBtn = thisRef.requestor.querySelector('.swac_sync_stopbtn');
+                stopBtn.classList.remove('swac_dontdisplay');
+            } else {
+                startBtn.classList.add('uk-label-danger');
+                UIkit.modal.alert(SWAC.lang.dict.Sync.backend_start_fail);
+            }
+        }).catch(function (err) {
+            Msg.error('Sync', 'Error sgtarting backend synchronisation: ' + err, thisRef.requestor);
+        });
+    }
+
+    onStopBackendSync(evt) {
+        Msg.flow('Sync', 'onStopBackendSync()', this.requestor);
+        const thisRef = this;
+        // Get the model
+        let Model = window.swac.Model;
+        // Request data
+        let dataPromise = Model.request(this.options.syncStopRequestor);
+        // Wait for data to be loaded
+        dataPromise.then(function (data) {
+            let stopBtn = thisRef.requestor.querySelector('.swac_sync_stopbtn');
+            // Response should be in dataset 1
+            let set = data[1];
+            if (set.status <= 400) {
+                // update state button
+                stopBtn.classList.add('swac_dontdisplay');
+                let startBtn = thisRef.requestor.querySelector('.swac_sync_startbtn');
+                startBtn.classList.remove('swac_dontdisplay');
+            } else {
+                stopBtn.classList.add('uk-label-danger');
+                UIkit.modal.alert(SWAC.lang.dict.Sync.backend_stop_fail);
+            }
+        }).catch(function (err) {
+            Msg.error('Sync', 'Error stopping backend synchronisation: ' + err, thisRef.requestor);
+        });
     }
 }
 
