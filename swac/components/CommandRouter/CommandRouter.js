@@ -119,7 +119,8 @@ export default class CommandRouter extends View {
 
     executeCommandFromEvent(evt) {
         let cmdElem = evt.target.closest('[cmd]');
-        if (!cmdElem) return;
+        if (!cmdElem)
+            return;
         let cmd = cmdElem.getAttribute('cmd');
         let param = cmdElem.getAttribute('param');
         this.executeCommand(cmd, param);
@@ -129,63 +130,64 @@ export default class CommandRouter extends View {
      * Sends a command to all commandable components on the page.
      * Falls back to the targetDatacapsule (WebSocket / REST) if no component handles it.
      *
-     * @param {string}      cmd   - Command name (e.g. 'last_measuring', 'shutdown')
-     * @param {string|null} params - Optional parameter forwarded with the command, typically an object
+     * @param {string}      cmd    - Command name (e.g. 'last_measuring', 'POST')
+     * @param {*}           params - Optional parameter forwarded with the command
+     * @param {boolean}     process - If true, processResult() is called explicitly by
+     *                               the caller (used by executeRequest). For all normal
+     *                               command flows processResult is always called here.
      */
     async executeCommand(cmd, params, process) {
         Msg.flow('CommandRouter', 'executeCommand()', this.requestor);
         const thisRef = this;
         let executed = false;
 
-        // 1) Versuche, den Command an Komponenten zu senden
-        for (let curComp of this.comps) {
+        // POST commands (e.g. label saves) should never open the result modal
+        if (cmd === 'POST') {
+            this.suppressModal = true;
+        }
 
-            // Komponente unterstützt keine Commands
+        // 1) Try to send the command to a commandable component (e.g. Bluetooth)
+        for (let curComp of this.comps) {
             if (typeof curComp.swac_comp?.isCommandable !== 'function') {
-                Msg.warn('CommandRouter', `Component ${curComp.id} does not support commandable.`, this.requestor);
+                Msg.warn('CommandRouter', 'Component ' + curComp.id + ' does not support commandable.', this.requestor);
                 continue;
             }
-
-            // Komponente akzeptiert aktuell keine Commands
             if (!curComp.swac_comp.isCommandable()) {
-                Msg.warn('CommandRouter', `Component ${curComp.id} currently does not accept commands.`, this.requestor);
+                Msg.warn('CommandRouter', 'Component ' + curComp.id + ' currently does not accept commands.', this.requestor);
                 continue;
             }
 
             try {
-                // Command ausführen (kann Promise oder Wert sein)
                 let res = curComp.swac_comp.doCommand(cmd, params);
                 executed = true;
 
-                // Falls Promise → warten
+                // Await if Promise
                 if (res && typeof res.then === 'function') {
                     res = await res;
                 }
 
-                Msg.info('CommandRouter', `Command >${cmd}< on component >${curComp.id}< executed.`);
+                Msg.info('CommandRouter', 'Command >' + cmd + '< on component >' + curComp.id + '< executed.');
 
                 const result = thisRef._unwrapBLE(res);
 
-                if (process) {
+                // When called from executeRequest the caller handles processResult itself
+                if (!process) {
                     thisRef.processResult(result, curComp);
                 }
 
                 return result;
 
             } catch (e) {
-                Msg.error('CommandRouter', `Command >${cmd}< threw error: ${e}`, this.requestor);
+                Msg.error('CommandRouter', 'Command >' + cmd + '< threw error: ' + e, this.requestor);
             }
         }
 
-        // 2) Kein Component hat den Command verarbeitet → Fallback über Datacapsule
+        // 2) No component handled the command – fall back to WebSocket / REST datacapsule
         if (!executed && this.options.targetDatacapsule) {
-
             const curCapsule = Object.assign({}, this.options.targetDatacapsule);
 
-            // Gerätenamen ermitteln
             let name = '';
             const nameElem = document.querySelector(this.options.deviceNameSource);
-
             if (nameElem) {
                 name = nameElem.children[0]?.innerHTML ?? nameElem.textContent.trim();
             } else {
@@ -197,16 +199,15 @@ export default class CommandRouter extends View {
 
             try {
                 const Model = window.swac.Model;
-                let result = await Model.save(curCapsule, true);
-
+                const result = await Model.save(curCapsule, true);
                 const raw = result[0].data[0];
-                let normalized;
 
+                let normalized;
                 if (raw && typeof raw === 'object' && raw.type === 'response') {
-                    // Pi-typische Response
+                    // Real Pi envelope – use as-is
                     normalized = raw;
                 } else if (raw && typeof raw === 'object') {
-                    // Unerwartetes Objekt → defensiv wrappen
+                    // Unexpected flat object – wrap defensively
                     normalized = {
                         hostname: null,
                         type: 'response',
@@ -218,21 +219,28 @@ export default class CommandRouter extends View {
                     normalized = raw;
                 }
 
-                if (process) {
+                // When called from executeRequest the caller handles processResult itself
+                if (!process) {
                     thisRef.processResult(normalized, null);
                 }
-                console.log('TEST result CommandRouter', result);
+
                 return normalized;
 
             } catch (err) {
-                Msg.error('CommandRouter', `Could not process data: ${err}`, thisRef.requestor);
+                Msg.error('CommandRouter', 'Could not process data: ' + err, thisRef.requestor);
             }
         }
 
-        // 3) Falls weder Komponente noch Fallback etwas liefern
         return undefined;
     }
 
+    /**
+     * Executes a data request by mapping it to a POST or GET command.
+     * Used by Question.js and other components that work with datacapsules.
+     *
+     * @param {Object}  dataRequest   - Datacapsule with fromName and optional data
+     * @param {boolean} processResult - Whether to call processResult() on the response
+     */
     async executeRequest(dataRequest, processResult) {
         let result;
         // Get action if given
@@ -246,7 +254,6 @@ export default class CommandRouter extends View {
             console.log('TEST action',action);
             result = await this.executeCommand(action, dataRequest, processResult);
         }
-
         return result;
     }
 
@@ -305,6 +312,11 @@ export default class CommandRouter extends View {
         if (!response || typeof response !== 'object')
             return response;
 
+        // New unified envelope: { hostname, type, ts, records: [{...}] }
+        if (response.records !== undefined)
+            return response;
+
+        // Legacy BLE envelope: { content: { data: ... } }
         if (response.content !== undefined) {
             const inner = response.content?.data;
             if (inner !== null && typeof inner === 'object')
@@ -356,16 +368,18 @@ export default class CommandRouter extends View {
         tbody.innerHTML = '';
         table.style.display = 'none';
 
-        // Unwrap Pi transport envelope if dataset.data contains the actual measurement
+        // Unwrap new unified envelope: data lives in records[0]
         let row = dataset;
-        if (dataset.data !== null
-                && dataset.data !== undefined
-                && typeof dataset.data === 'object'
-                && !Array.isArray(dataset.data)) {
+        if (Array.isArray(dataset.records) && dataset.records[0] &&
+                typeof dataset.records[0] === 'object') {
+            row = dataset.records[0];
+        } else if (dataset.data !== null && dataset.data !== undefined &&
+                typeof dataset.data === 'object' && !Array.isArray(dataset.data)) {
+            // Legacy fallback
             row = dataset.data;
         }
 
-        let statusValue = dataset.status ?? dataset.message ?? dataset.msg ?? null;
+        let statusValue = dataset.status ?? row.status ?? dataset.message ?? null;
         if (statusValue) {
             let isError = /error|fail|err/i.test(String(statusValue));
             error.textContent = statusValue;
@@ -374,6 +388,10 @@ export default class CommandRouter extends View {
         }
 
         Object.entries(row).forEach(function ([key, value]) {
+            // Skip internal status field already shown in the error/info banner
+            if (key === 'status')
+                return;
+
             let tr = document.createElement('tr');
             let tdKey = document.createElement('td');
             let tdVal = document.createElement('td');
