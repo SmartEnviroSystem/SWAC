@@ -83,10 +83,13 @@ export default class Navigation extends View {
             name: 'parent',
             desc: 'Reference path ref:// to the parent navigation entry.'
         };
-
         this.desc.optPerSet[2] = {
             name: 'icon',
             desc: 'path to icon file.'
+        };
+        this.desc.optPerSet[3] = {
+            name: 'frame',
+            desc: 'ID of the frame where the target should appear.'
         };
 
         this.desc.opts[0] = {
@@ -200,8 +203,16 @@ export default class Navigation extends View {
                         imgElem.remove();
                     }
                 }
-
-                curA.setAttribute('href', curHref);
+                
+                // Open in frame
+                if(set.frame) {
+                    curA.setAttribute('href', '#');
+                    curA.addEventListener('click', function(evt) {
+                        document.getElementById(set.frame).src = curHref;
+                    });
+                } else {
+                    curA.setAttribute('href', curHref);
+                }
             }
         }
 
