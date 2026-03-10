@@ -136,7 +136,7 @@ export default class CommandRouter extends View {
      *                               the caller (used by executeRequest). For all normal
      *                               command flows processResult is always called here.
      */
-    async executeCommand(cmd, params, process) {
+    async executeCommand(cmd, params, process = true) {
         Msg.flow('CommandRouter', 'executeCommand()', this.requestor);
         const thisRef = this;
         let executed = false;
@@ -168,14 +168,12 @@ export default class CommandRouter extends View {
 
                 Msg.info('CommandRouter', 'Command >' + cmd + '< on component >' + curComp.id + '< executed.');
 
-                const result = thisRef._unwrapBLE(res);
-
                 // When called from executeRequest the caller handles processResult itself
-                if (!process) {
-                    thisRef.processResult(result, curComp);
+                if (process) {
+                    thisRef.processResult(res, curComp);
                 }
 
-                return result;
+                return res;
 
             } catch (e) {
                 Msg.error('CommandRouter', 'Command >' + cmd + '< threw error: ' + e, this.requestor);
@@ -200,27 +198,10 @@ export default class CommandRouter extends View {
             try {
                 const Model = window.swac.Model;
                 const result = await Model.save(curCapsule, true);
-                const raw = result[0].data[0];
-
-                let normalized;
-                if (raw && typeof raw === 'object' && raw.type === 'response') {
-                    // Real Pi envelope – use as-is
-                    normalized = raw;
-                } else if (raw && typeof raw === 'object') {
-                    // Unexpected flat object – wrap defensively
-                    normalized = {
-                        hostname: null,
-                        type: 'response',
-                        ts: new Date().toISOString(),
-                        status: 'ok',
-                        data: raw
-                    };
-                } else {
-                    normalized = raw;
-                }
+                const normalized = result[0].data[0];
 
                 // When called from executeRequest the caller handles processResult itself
-                if (!process) {
+                if (process) {
                     thisRef.processResult(normalized, null);
                 }
 
@@ -243,15 +224,11 @@ export default class CommandRouter extends View {
      */
     async executeRequest(dataRequest, processResult) {
         let result;
-        // Get action if given
         if (dataRequest.data) {
             result = await this.executeCommand('POST', dataRequest, processResult);
         } else {
-            console.log('TEST actioncommand');
-            // cmdaction aus der URL extrahieren
             const params = new URLSearchParams(dataRequest.formName);
             const action = params.get('cmdaction') || 'GET';
-            console.log('TEST action',action);
             result = await this.executeCommand(action, dataRequest, processResult);
         }
         return result;
@@ -306,27 +283,6 @@ export default class CommandRouter extends View {
         if (countDownElemMax) {
             countDownElemMax.innerHTML = '';
         }
-    }
-
-    _unwrapBLE(response) {
-        if (!response || typeof response !== 'object')
-            return response;
-
-        // New unified envelope: { hostname, type, ts, records: [{...}] }
-        if (response.records !== undefined)
-            return response;
-
-        // Legacy BLE envelope: { content: { data: ... } }
-        if (response.content !== undefined) {
-            const inner = response.content?.data;
-            if (inner !== null && typeof inner === 'object')
-                return inner;
-            if (inner !== undefined)
-                return {value: inner, status: response.status};
-            return response.content;
-        }
-
-        return response;
     }
 
     processResult(result, comp) {
