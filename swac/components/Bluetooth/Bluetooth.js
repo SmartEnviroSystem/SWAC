@@ -237,8 +237,7 @@ export default class Bluetooth extends View {
             }
 
             await this._validateDeviceMac(device.id);
-
-            this.requestor.dispatchEvent(new CustomEvent('swac_' + this.requestor.id + '_bluetooth_connected', {
+            document.dispatchEvent(new CustomEvent('swac_' + this.requestor.id + '_connected', {
                 detail: {deviceId: device.id, device}
             }));
             this.options.onConnected.call(this, device.id, device);
