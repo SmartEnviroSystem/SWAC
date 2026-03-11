@@ -80,14 +80,14 @@ export default class Sync extends View {
             desc: "NAme of the attribute where to find the syncstate."
         };
         if (!options.syncStateAttribute)
-            this.options.syncStateAttribute = 'status';
+            this.options.syncStateAttribute = 'active';
 
         this.desc.opts[4] = {
             name: "syncStateRunningValue",
             desc: "Value of the syncstate attribute that indicates a running synchronisation."
         };
         if (!options.syncStateRunningValue)
-            this.options.syncStateRunningValue = 'running';
+            this.options.syncStateRunningValue = true;
 
         this.desc.opts[5] = {
             name: "syncStartRequestor",
@@ -126,11 +126,13 @@ export default class Sync extends View {
 
             // Check frontend or backend sync support
             if (this.options.syncModeRequestor) {
+                Msg.info('Sync', 'runs in backend controlled sync mode.', this.requestor);
                 // Backend sync mode
                 this.updateSyncMode();
                 startBtn.addEventListener('click', this.onStartBackendSync.bind(this));
                 stopBtn.addEventListener('click', this.onStopBackendSync.bind(this));
             } else {
+                Msg.info('Sync', 'runs in frontend controlled sync mode.', this.requestor);
                 // Frontend sync mode
                 if (this.options.syncTarget) {
                     startBtn.addEventListener('click', this.onClickStart.bind(this));
@@ -337,20 +339,23 @@ export default class Sync extends View {
         // Wait for data to be loaded
         dataPromise.then(function (data) {
             // Get status dataset
-            let set = data[1];
-            if (set[thisRef.options.syncStateAttribute] && set[thisRef.options.syncStateAttribute] == thisRef.options.syncStateRunningValue) {
-                // update state button
-                let stateBtn = thisRef.requestor.querySelector('.swac_sync_startbtn');
-                stateBtn.classList.add('swac_dontdisplay');
-                let stopBtn = thisRef.requestor.querySelector('.swac_sync_stopbtn');
-                stopBtn.classList.remove('swac_dontdisplay');
-            } else {
-                Msg.info('Sync', 'Awaited that attribute >' + thisRef.options.syncStateAttribute + '< has value >' + thisRef.options.syncStateRunningValue + '< to indicate a running synchronisation. But got >' + set[thisRef.options.syncStateAttribute] + '<', thisRef.requestor);
-                // update state button
-                let stateBtn = thisRef.requestor.querySelector('.swac_sync_startbtn');
-                stateBtn.classList.remove('swac_dontdisplay');
-                let stopBtn = thisRef.requestor.querySelector('.swac_sync_stopbtn');
-                stopBtn.classList.add('swac_dontdisplay');
+            for (let curSet of data) {
+                if (!curSet)
+                    continue;
+                if (curSet[thisRef.options.syncStateAttribute] && curSet[thisRef.options.syncStateAttribute] == thisRef.options.syncStateRunningValue) {
+                    // update state button
+                    let stateBtn = thisRef.requestor.querySelector('.swac_sync_startbtn');
+                    stateBtn.classList.add('swac_dontdisplay');
+                    let stopBtn = thisRef.requestor.querySelector('.swac_sync_stopbtn');
+                    stopBtn.classList.remove('swac_dontdisplay');
+                } else {
+                    Msg.info('Sync', 'Awaited that attribute >' + thisRef.options.syncStateAttribute + '< has value >' + thisRef.options.syncStateRunningValue + '< to indicate a running synchronisation. But got >' + curSet[thisRef.options.syncStateAttribute] + '<', thisRef.requestor);
+                    // update state button
+                    let stateBtn = thisRef.requestor.querySelector('.swac_sync_startbtn');
+                    stateBtn.classList.remove('swac_dontdisplay');
+                    let stopBtn = thisRef.requestor.querySelector('.swac_sync_stopbtn');
+                    stopBtn.classList.add('swac_dontdisplay');
+                }
             }
         }).catch(function (err) {
             // Handle load error
@@ -369,12 +374,15 @@ export default class Sync extends View {
         dataPromise.then(function (data) {
             let startBtn = thisRef.requestor.querySelector('.swac_sync_startbtn');
             // Response should be in dataset 1
-            let set = data[1];
-            if (set.status <= 400) {
+            let set = data[0];
+            if (set.updated >= 1) {
                 // update state button
                 startBtn.classList.add('swac_dontdisplay');
                 let stopBtn = thisRef.requestor.querySelector('.swac_sync_stopbtn');
                 stopBtn.classList.remove('swac_dontdisplay');
+                // Start auto reload intrval
+//                thisRef.options.reloadInterval = 1;
+//                thisRef.startReloadInterval();
             } else {
                 startBtn.classList.add('uk-label-danger');
                 UIkit.modal.alert(SWAC.lang.dict.Sync.backend_start_fail);
@@ -395,8 +403,8 @@ export default class Sync extends View {
         dataPromise.then(function (data) {
             let stopBtn = thisRef.requestor.querySelector('.swac_sync_stopbtn');
             // Response should be in dataset 1
-            let set = data[1];
-            if (set.status <= 400) {
+            let set = data[0];
+            if (set.updated >= 1) {
                 // update state button
                 stopBtn.classList.add('swac_dontdisplay');
                 let startBtn = thisRef.requestor.querySelector('.swac_sync_startbtn');
