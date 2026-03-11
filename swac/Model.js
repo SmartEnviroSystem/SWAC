@@ -97,7 +97,8 @@ export default class Model {
                                 return;
                             }
                             let data = thisRef.convertData({data: res, fromName: dataRequest.fromName}, dataRequest, comp);
-                            comp.addData(dataRequest.fromName, res);
+                            if(comp)
+                                comp.addData(dataRequest.fromName, res);
 
                             resolve(data);
                         }).catch(function(err) {
@@ -454,7 +455,7 @@ export default class Model {
     /**
      * Method for saveing data
      * 
-     * @param {Object} dataCapsle Casple with data
+     * @param {Object} dataRequest Casple with data
      * 
      * An data capsle is an object of form;
      * {
@@ -470,27 +471,61 @@ export default class Model {
      * @returns {Promise} Returns an promise that resolves with the information
      * deliverd by the save or update REST-interface
      */
-    static save(dataCapsle, supressMessages = false) {
+    static save(dataRequest, supressMessages = false) {
 // Return promise for loading and initialising the view
         return new Promise((resolve, reject) => {
             // Build "create" interface resource url
-            if (typeof dataCapsle.fromName === 'undefined') {
+            if (typeof dataRequest.fromName === 'undefined') {
                 Msg.error('model', 'fromName in datacapsle is missing. Check your dataCapsle metadata.');
             }
+            
+                        // Special handling for command router sources
+            if (dataRequest.fromName.startsWith('cmd://')) {
+                let thisRef = this;
+                // Search CommandRouter
+                let cmdRouterElem = window.parent.document.querySelector('[swa^="CommandRouter"]');
+                if (cmdRouterElem) {
+                    Msg.info('Model', 'Request >' + dataRequest.id + '< should be routed by ' + cmdRouterElem.id);
+
+                    let uniformedDataRequest = {};
+                    uniformedDataRequest.fromName = dataRequest.fromName.replace('cmd://','');
+                    uniformedDataRequest.fromWheres = dataRequest.fromWheres;
+                    uniformedDataRequest.data = dataRequest.data;
+                    window.parent.swac.reactions.addReaction(function (requestors) {
+                        let router = requestors[cmdRouterElem.id];
+                        let result = router.swac_comp.executeRequest(uniformedDataRequest, false);
+                        result.then(function (res) {
+                            if(!res) {
+                                reject('No data recived from command');
+                                return;
+                            }
+                            resolve(res);
+                        }).catch(function(err) {
+                            Msg.error('Model','Error getting data from CommandRouter: ' + err);
+                        });
+                    }, cmdRouterElem.id);
+                    return;
+                } else {
+                    Msg.error('Model', 'No CommandRouter found for request: ' + dataRequest.fromName);
+                    reject('No CommandRouter found for request: ' + dataRequest.fromName);
+                    return;
+                }
+            }
+            
             Remote.clearDatasourceStates();
             let saveProms = [];
             // Save every dataset
-            for (let j in dataCapsle.data) {
+            for (let j in dataRequest.data) {
                 // Exclude non data attributes
                 if (j === 'map') // || (j.startsWith('swac_') && j !== 'swac_from'))
                     continue;
-                if (dataCapsle.data[j].swac_isnew) {
-                    delete dataCapsle.data[j].id;
+                if (dataRequest.data[j].swac_isnew) {
+                    delete dataRequest.data[j].id;
                 }
                 let saveObj = {};
                 // Check data if it can be converted to number or booelan
-                for (let attr in dataCapsle.data[j]) {
-                    let curValue = dataCapsle.data[j][attr];
+                for (let attr in dataRequest.data[j]) {
+                    let curValue = dataRequest.data[j][attr];
                     // TODO Send null values? Remove null check in component.js and edit.js
                     if (curValue === null) // || (attr.startsWith('swac_') && j !== 'swac_from'))
                         continue;
@@ -526,7 +561,7 @@ export default class Model {
                     remoteFailMsg = SWAC.lang.dict.core.updateerror;
                 }
                 // Send request
-                let curSaveProm = remoteFunc(dataCapsle.fromName, dataCapsle.fromWheres, dataCapsle.fromHeaders, supressMessages, saveObj).then(
+                let curSaveProm = remoteFunc(dataRequest.fromName, dataRequest.fromWheres, dataRequest.fromHeaders, supressMessages, saveObj).then(
                         function (dataCap) {
                             if (!supressMessages) {
                                 UIkit.notification({
