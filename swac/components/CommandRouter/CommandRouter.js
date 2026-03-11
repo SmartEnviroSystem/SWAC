@@ -224,7 +224,12 @@ export default class CommandRouter extends View {
     async executeRequest(dataRequest, processResult) {
         let result;
         if (dataRequest.data) {
-            result = await this.executeCommand('POST', dataRequest, processResult);
+            const hasValidId = dataRequest.data.some(obj => obj.id != null);
+            if(hasValidId) {
+                result = await this.executeCommand('PUT', dataRequest, processResult);
+            } else {
+                result = await this.executeCommand('POST', dataRequest, processResult);
+            }
         } else {
             const params = new URLSearchParams(dataRequest.formName);
             const action = params.get('cmdaction') || 'GET';
