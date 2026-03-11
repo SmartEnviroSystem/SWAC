@@ -208,6 +208,7 @@ export default class Navigation extends View {
                 if(set.frame) {
                     curA.setAttribute('href', '#');
                     curA.addEventListener('click', function(evt) {
+                        evt.preventDefault();
                         document.getElementById(set.frame).src = curHref;
                     });
                 } else {
