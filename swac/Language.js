@@ -120,11 +120,11 @@ export default class Language {
                 filepath += '_';
             }
             let filep = filepath + lang + '.js?vers=' + SWAC.desc.version;
-            if(this.loadedLngFiles.includes(filep)) {
+            if (this.loadedLngFiles.includes(filep)) {
                 resolve();
                 return;
             }
-            
+
             Msg.flow('Language', 'Try to load language file >' + filep + '<');
             import(filep).then(module => {
                 thisRef.loadedLngFiles.push(filep);
@@ -186,6 +186,18 @@ export default class Language {
         this.translateInButtons(elem);
         this.translateAttributenames(elem);
         this.translateFormatLocale(elem);
+
+        // Find frames and translate in them
+        for (let frame of elem.querySelectorAll("iframe, frame")) {
+            try {
+                let framedoc = frame.contentDocument || frame.contentWindow.document;
+                if (framedoc) {
+                    this.translateAll(framedoc); // rekursiver Aufruf
+                }
+            } catch (e) {
+                Msg.warn('Language','Can not translate frame >' + frame.src + '< becourse it is a cross origin frame.');
+            }
+        }
     }
 
     /**
