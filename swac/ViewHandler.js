@@ -107,7 +107,9 @@ export default class ViewHandler extends ComponentHandler {
 
         // Create loading component
         requestor.swac_comp = {};
+        //TODO move componentname to swac_componentname but better componentname should be available at swac_comp
         requestor.componentname = component_config.split(" ")[0];
+        requestor.swac_originalHTML = requestor.outerHTML;
         requestor.swac_comp.state = 'loading';
 
         // Positions and options stack
