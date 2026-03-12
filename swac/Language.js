@@ -178,6 +178,11 @@ export default class Language {
      * @returns {undefined}
      */
     translateAll(elem = document) {
+        // If translation called from frame do translation from top
+        if (window !== window.top) {
+            return window.top.swac.lang.translateAll();
+        }
+
         Msg.flow('Language', 'translateAll()');
         this.translateTexts(elem);
         this.translateInAttributes(elem);
@@ -195,9 +200,9 @@ export default class Language {
                     this.translateAll(framedoc); // rekursiver Aufruf
                 }
             } catch (e) {
-                Msg.warn('Language','Can not translate frame >' + frame.src + '< becourse it is a cross origin frame.');
+                Msg.warn('Language', 'Can not translate frame >' + frame.src + '< becourse it is a cross origin frame.');
             }
-        }
+    }
     }
 
     /**
