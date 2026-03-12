@@ -98,7 +98,7 @@ export default class Model {
                             }
                             let data = thisRef.convertData({data: res, fromName: dataRequest.fromName}, dataRequest, comp);
                             if(comp)
-                                comp.addData(dataRequest.fromName, res);
+                                comp.addData(dataRequest.fromName, data);
 
                             resolve(data);
                         }).catch(function(err) {
