@@ -190,8 +190,8 @@ export default class CommandRouter extends View {
                 Msg.error('CommandRouter', 'Command >' + cmd + '< threw error: ' + e, this.requestor);
             }
         }
-
-        // 2) No component handled the command — fall back to WebSocket / REST datacapsule
+        Msg.info('CommandRouter','Did not find command >' + cmd + '< at components. Try useing datarequest.',this.requestor);
+        // 2) No component handled the command – fall back to WebSocket / REST datacapsule
         if (!executed && this.options.targetDatacapsule) {
             const curCapsule = Object.assign({}, this.options.targetDatacapsule);
 
@@ -237,15 +237,20 @@ export default class CommandRouter extends View {
         let result;
         if (dataRequest.data) {
             const hasValidId = dataRequest.data.some(obj => obj.id != null);
-            if (hasValidId) {
+            if(hasValidId) {
+                Msg.flow('CommandRouter','executeRequest with action PUT');
                 result = await this.executeCommand('PUT', dataRequest, processResult);
             } else {
+                Msg.flow('CommandRouter','executeRequest with action POST');
                 result = await this.executeCommand('POST', dataRequest, processResult);
             }
-        } else {
-            const params = new URLSearchParams(dataRequest.formName);
-            const action = params.get('cmdaction') || 'GET';
+        } else if(dataRequest.fromName.startsWith('action=')) {
+            let action = dataRequest.fromName.replace('action=','');
+            Msg.flow('CommandRouter','executeRequest with action ' + action);
             result = await this.executeCommand(action, dataRequest, processResult);
+        } else {
+            Msg.flow('CommandRouter','executeRequest with action GET');
+            result = await this.executeCommand('GET', dataRequest, processResult);
         }
         return result;
     }

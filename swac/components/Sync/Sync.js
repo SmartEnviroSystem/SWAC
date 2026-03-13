@@ -75,21 +75,21 @@ export default class Sync extends View {
         if (!options.syncModeRequestor)
             this.options.syncModeRequestor = null;
 
-        this.desc.opts[4] = {
+        this.desc.opts[5] = {
             name: "syncStateAttribute",
             desc: "NAme of the attribute where to find the syncstate."
         };
         if (!options.syncStateAttribute)
             this.options.syncStateAttribute = 'active';
 
-        this.desc.opts[4] = {
+        this.desc.opts[6] = {
             name: "syncStateRunningValue",
             desc: "Value of the syncstate attribute that indicates a running synchronisation."
         };
         if (!options.syncStateRunningValue)
             this.options.syncStateRunningValue = true;
 
-        this.desc.opts[5] = {
+        this.desc.opts[7] = {
             name: "syncStartRequestor",
             desc: "DataRequestor to call for starting sync. Response must contain a status attribute. Where any state less then 400 means starting succseed.",
             example: {
@@ -99,7 +99,21 @@ export default class Sync extends View {
         if (!options.syncStartRequestor)
             this.options.syncStartRequestor = null;
 
-        this.desc.opts[6] = {
+        this.desc.opts[8] = {
+            name: "syncStartResponseAttribute",
+            desc: "Path to attribute where to find the response code for a change request."
+        };
+        if (!options.syncStartResponseAttribute)
+            this.options.syncStartResponseAttribute = 'active';
+
+        this.desc.opts[9] = {
+            name: "syncStartResponseSuccsessValue",
+            desc: "Value that indicates a succsessfull change of sync state."
+        };
+        if (!options.syncStartResponseSuccsessValue)
+            this.options.syncStartResponseSuccsessValue = '200';
+
+        this.desc.opts[10] = {
             name: "syncStopRequestor",
             desc: "DataRequestor to call for stopping sync. Response must contain a status attribute. Where any state less then 400 means stoping succseed.",
             example: {
@@ -109,6 +123,19 @@ export default class Sync extends View {
         if (!options.syncStopRequestor)
             this.options.syncStopRequestor = null;
 
+        this.desc.opts[11] = {
+            name: "syncStopResponseAttribute",
+            desc: "Path to attribute where to find the response code for a change request."
+        };
+        if (!options.syncStopResponseAttribute)
+            this.options.syncStopResponseAttribute = 'active';
+
+        this.desc.opts[12] = {
+            name: "syncStopResponseSuccsessValue",
+            desc: "Value that indicates a succsessfull change of sync state."
+        };
+        if (!options.syncStopResponseSuccsessValue)
+            this.options.syncStopResponseSuccsessValue = '200';
 
         if (!options.showWhenNoData)
             this.options.showWhenNoData = true;
@@ -373,9 +400,10 @@ export default class Sync extends View {
         // Wait for data to be loaded
         dataPromise.then(function (data) {
             let startBtn = thisRef.requestor.querySelector('.swac_sync_startbtn');
-            // Response should be in dataset 1
-            let set = data[0] ? null : data.records[0];
-            if (set.updated >= 1) {
+
+            let value = thisRef.getByPath(data,thisRef.options.syncStartResponseAttribute);
+            // Check Response value
+            if (value == thisRef.options.syncStartResponseSuccsessValue) {
                 // update state button
                 startBtn.classList.add('swac_dontdisplay');
                 let stopBtn = thisRef.requestor.querySelector('.swac_sync_stopbtn');
@@ -402,9 +430,9 @@ export default class Sync extends View {
         // Wait for data to be loaded
         dataPromise.then(function (data) {
             let stopBtn = thisRef.requestor.querySelector('.swac_sync_stopbtn');
-            // Response should be in dataset 1
-            let set = data[0] ? null : data.records[0];
-            if (set.updated >= 1) {
+            // Check response value
+            let value = thisRef.getByPath(data,thisRef.options.syncStopResponseAttribute);
+            if (value == thisRef.options.syncStopResponseSuccsessValue) {
                 // update state button
                 stopBtn.classList.add('swac_dontdisplay');
                 let startBtn = thisRef.requestor.querySelector('.swac_sync_startbtn');
@@ -416,6 +444,24 @@ export default class Sync extends View {
         }).catch(function (err) {
             Msg.error('Sync', 'Error stopping backend synchronisation: ' + err, thisRef.requestor);
         });
+    }
+
+    getByPath(data, path) {
+        // Pfad in Tokens zerlegen: "a.b[2].c" → ["a", "b", "2", "c"]
+        const tokens = path
+                .replace(/\[(\w+)\]/g, '.$1') // [2] → .2
+                .split('.')
+                .filter(Boolean);
+
+        let current = data;
+
+        for (const key of tokens) {
+            if (current == null)
+                return undefined;
+            current = current[key];
+        }
+
+        return current;
     }
 }
 
