@@ -420,7 +420,7 @@ export default class Model {
             // Add Data to source
             //Model.store[curSet.swac_fromName].addSet(wset);
             if (!Model.store[dataRequest.storeId]) {
-                Msg.error('model', 'Model.store for >' + dataRequest.storeId + '< is missing. Autofix by createing one.');
+                Msg.warn('model', 'Model.store for >' + dataRequest.storeId + '< is missing. Autofix by createing one.');
                 Model.store[dataRequest.storeId] = {};
                 Model.store[dataRequest.storeId] = new WatchableSource(dataRequest.fromName, Model);
             }

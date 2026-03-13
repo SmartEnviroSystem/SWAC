@@ -614,20 +614,38 @@ export default class Bluetooth extends View {
             const notifyChar = await service.getCharacteristic(this.options.uartNotifyUUID);
 
             const responsePromise = new Promise((resolve, reject) => {
+                // Accumulate chunks until the JSON is complete and parseable.
+                let accumulated = '';
+
                 const handleNotification = (event) => {
+                    const chunk = new TextDecoder().decode(event.target.value);
+                    accumulated += chunk;
+                    Msg.flow('Bluetooth', 'RX chunk <- ' + deviceId + ' (' + accumulated.length + ' bytes so far)', this.requestor);
+
+                    // Try to parse — if it succeeds the response is complete.
                     try {
-                        const text = new TextDecoder().decode(event.target.value);
-                        Msg.flow('Bluetooth', 'RX <- ' + deviceId + ': ' + text, this.requestor);
+                        const parsed = JSON.parse(accumulated);
+                        Msg.flow('Bluetooth', 'RX complete <- ' + deviceId + ': ' + accumulated, this.requestor);
                         notifyChar.removeEventListener('characteristicvaluechanged', handleNotification);
-                        resolve(JSON.parse(text));
+                        resolve(parsed);
                     } catch (err) {
-                        reject(new Error('Parse error for response from ' + deviceId + ': ' + err.message));
+                        // JSON not yet complete — wait for the next chunk.
+                        Msg.flow('Bluetooth', 'RX incomplete, waiting for more chunks...', this.requestor);
                     }
                 };
+
                 notifyChar.addEventListener('characteristicvaluechanged', handleNotification);
+
                 setTimeout(() => {
                     notifyChar.removeEventListener('characteristicvaluechanged', handleNotification);
-                    reject(new Error('Timeout: No response from ' + deviceId + ' within ' + this.options.communicationTimeout + 'ms.'));
+                    if (accumulated.length > 0) {
+                        reject(new Error('Timeout: Incomplete response from ' + deviceId +
+                                ' after ' + this.options.communicationTimeout + 'ms (' +
+                                accumulated.length + ' bytes received).'));
+                    } else {
+                        reject(new Error('Timeout: No response from ' + deviceId +
+                                ' within ' + this.options.communicationTimeout + 'ms.'));
+                    }
                 }, this.options.communicationTimeout);
             });
 
@@ -641,12 +659,21 @@ export default class Bluetooth extends View {
 
         } catch (e) {
             Msg.error('Bluetooth', 'Communication error with ' + deviceId + ': ' + e.message, this.requestor);
-            let minimal_Btn = this.requestor.querySelector('.swac_bluetooth_connect_minimal_btn');
-            if (minimal_Btn) {
-                minimal_Btn.innerText = 'Getrennt';
-                minimal_Btn.classList.remove("uk-button-danger");
-                minimal_Btn.classList.remove("uk-label-success");
-                minimal_Btn.classList.add("uk-button-primary");
+
+            // Only mark as disconnected for real GATT errors.
+            // Parse errors and timeouts with partial data mean the connection is still alive
+            // but the response exceeded the BLE MTU — do NOT show "Getrennt".
+            const isParseError = e.message && e.message.startsWith('Parse error');
+            const isIncomplete = e.message && e.message.startsWith('Timeout: Incomplete');
+
+            if (!isParseError && !isIncomplete) {
+                let minimal_Btn = this.requestor.querySelector('.swac_bluetooth_connect_minimal_btn');
+                if (minimal_Btn) {
+                    minimal_Btn.innerText = 'Getrennt';
+                    minimal_Btn.classList.remove("uk-button-danger");
+                    minimal_Btn.classList.remove("uk-label-success");
+                    minimal_Btn.classList.add("uk-button-primary");
+                }
             }
             throw e;
         }
