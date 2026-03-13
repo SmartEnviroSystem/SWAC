@@ -90,11 +90,19 @@ export default class CommandRouter extends View {
         this.countdownInterval = null;
     }
 
+    /**
+     * Initialises the component by registering the command binding listener and starting timed commands.
+     */
     async init() {
         document.addEventListener('swac_components_complete', this.bindCommands.bind(this));
         this.startTimedCommands();
     }
 
+    /**
+     * Binds click listeners to all [cmd] elements and collects commandable components from the DOM.
+     *
+     * @param {Event} evt - The swac_components_complete event that triggers binding.
+     */
     bindCommands(evt) {
         Msg.flow('CommandRouter', 'bindCommands()', this.requestor);
 
@@ -117,6 +125,11 @@ export default class CommandRouter extends View {
         }
     }
 
+    /**
+     * Extracts the command and param attributes from the clicked element and delegates to executeCommand.
+     *
+     * @param {Event} evt - The click event fired by a [cmd] element.
+     */
     executeCommandFromEvent(evt) {
         let cmdElem = evt.target.closest('[cmd]');
         if (!cmdElem)
@@ -130,11 +143,10 @@ export default class CommandRouter extends View {
      * Sends a command to all commandable components on the page.
      * Falls back to the targetDatacapsule (WebSocket / REST) if no component handles it.
      *
-     * @param {string}      cmd    - Command name (e.g. 'last_measuring', 'POST')
-     * @param {*}           params - Optional parameter forwarded with the command
-     * @param {boolean}     process - If true, processResult() is called explicitly by
-     *                               the caller (used by executeRequest). For all normal
-     *                               command flows processResult is always called here.
+     * @param {string}  cmd     - Command name (e.g. 'last_measuring', 'POST').
+     * @param {*}       params  - Optional parameter forwarded with the command.
+     * @param {boolean} process - If false, the caller handles processResult itself (used by executeRequest).
+     * @returns {Promise<*>} The result returned by the component or the datacapsule.
      */
     async executeCommand(cmd, params, process = true) {
         Msg.flow('CommandRouter', 'executeCommand()', this.requestor);
@@ -161,14 +173,13 @@ export default class CommandRouter extends View {
                 let res = curComp.swac_comp.doCommand(cmd, params);
                 executed = true;
 
-                // Await if Promise
+                // Await if the component returns a Promise
                 if (res && typeof res.then === 'function') {
                     res = await res;
                 }
 
                 Msg.info('CommandRouter', 'Command >' + cmd + '< on component >' + curComp.id + '< executed.');
 
-                // When called from executeRequest the caller handles processResult itself
                 if (process) {
                     thisRef.processResult(res, curComp);
                 }
@@ -180,7 +191,7 @@ export default class CommandRouter extends View {
             }
         }
 
-        // 2) No component handled the command – fall back to WebSocket / REST datacapsule
+        // 2) No component handled the command — fall back to WebSocket / REST datacapsule
         if (!executed && this.options.targetDatacapsule) {
             const curCapsule = Object.assign({}, this.options.targetDatacapsule);
 
@@ -215,17 +226,18 @@ export default class CommandRouter extends View {
     }
 
     /**
-     * Executes a data request by mapping it to a POST or GET command.
+     * Executes a data request by mapping it to a POST, PUT or GET command.
      * Used by Question.js and other components that work with datacapsules.
      *
-     * @param {Object}  dataRequest   - Datacapsule with fromName and optional data
-     * @param {boolean} processResult - Whether to call processResult() on the response
+     * @param {Object}  dataRequest   - Datacapsule with fromName and optional data array.
+     * @param {boolean} processResult - Whether to call processResult() on the response.
+     * @returns {Promise<*>} The result of the executed command.
      */
     async executeRequest(dataRequest, processResult) {
         let result;
         if (dataRequest.data) {
             const hasValidId = dataRequest.data.some(obj => obj.id != null);
-            if(hasValidId) {
+            if (hasValidId) {
                 result = await this.executeCommand('PUT', dataRequest, processResult);
             } else {
                 result = await this.executeCommand('POST', dataRequest, processResult);
@@ -238,6 +250,9 @@ export default class CommandRouter extends View {
         return result;
     }
 
+    /**
+     * Registers setInterval timers for all entries in options.commandTimer and starts the countdown display.
+     */
     startTimedCommands() {
         let thisRef = this;
         if (this.options.commandTimer && this.options.commandTimer.length > 0) {
@@ -274,6 +289,9 @@ export default class CommandRouter extends View {
         }
     }
 
+    /**
+     * Clears all timed command intervals and resets the countdown display elements.
+     */
     stopTimedCommands() {
         for (let curCmdInterval of this.cmdIntervals) {
             clearInterval(curCmdInterval);
@@ -289,6 +307,12 @@ export default class CommandRouter extends View {
         }
     }
 
+    /**
+     * Dispatches the commandrouter_executed event and optionally opens the result modal.
+     *
+     * @param {*}           result - The data returned by the executed command.
+     * @param {HTMLElement} comp   - The component element that handled the command, or null for datacapsule.
+     */
     processResult(result, comp) {
         Msg.flow('CommandRouter', 'processResult()', this.requestor);
 
@@ -298,11 +322,16 @@ export default class CommandRouter extends View {
         this.suppressModal = false;
 
         document.dispatchEvent(new CustomEvent(
-                'swac_' + this.requestor.id + '_commandrouter_executed',
-                {detail: {comp, result}}
+            'swac_' + this.requestor.id + '_commandrouter_executed',
+            {detail: {comp, result}}
         ));
     }
 
+    /**
+     * Renders the command result into the last-measuring modal table and opens it.
+     *
+     * @param {Object|Array} dataset - The raw result object or array to display.
+     */
     generateView(dataset) {
         Msg.flow('CommandRouter', 'generateView()', this.requestor);
         if (!dataset)
@@ -328,17 +357,17 @@ export default class CommandRouter extends View {
         tbody.innerHTML = '';
         table.style.display = 'none';
 
-        // Unwrap array (WebSocket returns [{...}])
+        // Unwrap array envelope (WebSocket returns [{...}])
         if (Array.isArray(dataset))
             dataset = dataset[0];
 
-        // Unwrap new unified envelope: data lives in records[0]
+        // Unwrap unified envelope: data lives in records[0]
         let row = dataset;
         if (Array.isArray(dataset.records) && dataset.records[0] &&
-                typeof dataset.records[0] === 'object') {
+            typeof dataset.records[0] === 'object') {
             row = dataset.records[0];
         } else if (dataset.data !== null && dataset.data !== undefined &&
-                typeof dataset.data === 'object' && !Array.isArray(dataset.data)) {
+            typeof dataset.data === 'object' && !Array.isArray(dataset.data)) {
             // Legacy fallback
             row = dataset.data;
         }
@@ -352,7 +381,7 @@ export default class CommandRouter extends View {
         }
 
         Object.entries(row).forEach(function ([key, value]) {
-            // Skip internal status field already shown in the error/info banner
+            // Skip the status field — it is already shown in the info/error banner above
             if (key === 'status')
                 return;
 

@@ -97,15 +97,6 @@ export default class Bluetooth extends View {
         if (!options.deviceMismatchKey)
             this.options.deviceMismatchKey = 'deviceMac';
 
-        // sections: array of section config objects rendered as button groups on each device card.
-        // Button definition fields:
-        //   icon, label, description  - visual appearance
-        //   action                    - Pi command string sent via sendCommand() (e.g. 'smartMobile_on_measuring')
-        //                               set param: '__method__' to invoke a named Bluetooth method instead
-        //   param                     - optional payload forwarded as content.param (default: null)
-        //   style                     - optional CSS modifier: 'warn' | 'danger'
-        // Section with type: 'wlan' renders the built-in WLAN form instead of a button grid.
-        // Default is empty — all layout must come from the project config file (e.g. example1.js).
         this.desc.opts[9] = {name: 'sections', type: 'array', desc: 'Array of section config objects defining command buttons on each device card.'};
         if (!options.sections)
             this.options.sections = [];
@@ -139,17 +130,13 @@ export default class Bluetooth extends View {
             this.options.plugins = new Map();
 
         this._connectedDevices = new Map();
-        // Per-device Promise chain used as a sequential queue.
-        // Every communicateWithPi() call appends itself to the tail so that
-        // concurrent requests from the same device are serialised automatically.
         this._queues = new Map();
     }
 
-    // --- Lifecycle ---
-
+    /**
+     * Initialises the component, checks for Web Bluetooth support and binds the connect button.
+     */
     async init() {
-        // Merge project-specific config from window["<elementId>_conf_options"] into options.
-        // This ensures config values always override constructor defaults.
         let projectConf = window[this.requestor.id + '_conf_options'];
         if (projectConf) {
             Object.assign(this.options, projectConf);
@@ -164,11 +151,11 @@ export default class Bluetooth extends View {
                 minimal_Btn.classList.remove("uk-button-primary");
                 minimal_Btn.classList.add("uk-button-danger");
             }
-
             this._setStatus('Web Bluetooth is not supported by this browser.', 'error');
             Msg.error('Bluetooth', 'Web Bluetooth is not supported.', this.requestor);
             return;
         }
+
         Msg.info('Bluetooth', 'Web Bluetooth is supported.', this.requestor);
         this._setStatus('Ready — no device connected');
 
@@ -180,14 +167,17 @@ export default class Bluetooth extends View {
         }
     }
 
-    // --- Connection management ---
-
+    /**
+     * Opens the browser BLE device picker, connects the selected device and registers it in the internal map.
+     *
+     * @returns {Promise<string|null>} The connected device ID, or null if the limit was already reached.
+     */
     async connectDevice() {
         Msg.flow('Bluetooth', 'connectDevice()', this.requestor);
 
-        // Check which template is active
         let minimal_Btn = this.requestor.querySelector('.swac_bluetooth_connect_minimal_btn');
 
+        // Minimal template always limits to one device
         if (minimal_Btn) {
             this.options.maxDevices = 1;
         }
@@ -203,10 +193,9 @@ export default class Bluetooth extends View {
             let requestConf = {};
 
             if (this.options.deviceNameSource) {
-                let name = '';
                 let nameElem = document.querySelector(this.options.deviceNameSource);
                 if (nameElem) {
-                    name = nameElem.children[0]?.innerHTML ?? nameElem.textContent.trim();
+                    let name = nameElem.children[0]?.innerHTML ?? nameElem.textContent.trim();
                     this.options.filterDevices = [{namePrefix: name}];
                 } else {
                     Msg.error('CommandRouter', 'Device name element not found.', this.requestor);
@@ -234,16 +223,18 @@ export default class Bluetooth extends View {
             let server = await device.gatt.connect();
 
             this._connectedDevices.set(device.id, {device, server, name: device.name ?? device.id});
-            // Initialise an empty (already-resolved) queue for this device.
+            // Start with an already-resolved promise as the initial empty queue
             this._queues.set(device.id, Promise.resolve());
 
             Msg.info('Bluetooth', 'Connected: ' + device.name + ' | Total: ' + this._connectedDevices.size, this.requestor);
+
             if (!minimal_Btn) {
                 this._setStatus(this._connectedDevices.size + ' device(s) connected', 'connected');
                 this._addDeviceCard(device.id, device.name ?? device.id);
             }
 
             await this._validateDeviceMac(device.id);
+
             document.dispatchEvent(new CustomEvent('swac_' + this.requestor.id + '_connected', {
                 detail: {deviceId: device.id, device}
             }));
@@ -265,13 +256,17 @@ export default class Bluetooth extends View {
                 minimal_Btn.classList.remove("uk-label-success");
                 minimal_Btn.classList.add("uk-button-danger");
             }
-
             this._setStatus('Connection failed: ' + err.message, 'error');
             Msg.error('Bluetooth', 'Connection failed: ' + err.message, this.requestor);
             throw err;
         }
     }
 
+    /**
+     * Disconnects a single device by ID and triggers the internal handler if GATT is already down.
+     *
+     * @param {string} deviceId - The ID of the device to disconnect.
+     */
     disconnectDevice(deviceId) {
         Msg.flow('Bluetooth', 'disconnectDevice() id=' + deviceId, this.requestor);
         let entry = this._connectedDevices.get(deviceId);
@@ -282,6 +277,9 @@ export default class Bluetooth extends View {
         }
     }
 
+    /**
+     * Disconnects all currently connected devices.
+     */
     disconnectAll() {
         Msg.flow('Bluetooth', 'disconnectAll() - ' + this._connectedDevices.size + ' device(s)', this.requestor);
         for (let deviceId of Array.from(this._connectedDevices.keys())) {
@@ -289,18 +287,32 @@ export default class Bluetooth extends View {
         }
     }
 
+    /**
+     * Returns an array of all currently connected device IDs.
+     *
+     * @returns {string[]} Array of device ID strings.
+     */
     getConnectedDeviceIds() {
         return Array.from(this._connectedDevices.keys());
     }
 
+    /**
+     * Returns the display name of a connected device.
+     *
+     * @param {string} deviceId - The ID of the device to look up.
+     * @returns {string|null} The device name, or null if not found.
+     */
     getDeviceName(deviceId) {
         let entry = this._connectedDevices.get(deviceId);
         return entry ? entry.name : null;
     }
 
-    // Returns the deviceId of the first connected device,
-    // or the first device whose name contains the given nameFilter (case-insensitive).
-    // Returns null if no matching device is connected.
+    /**
+     * Returns the ID of the first connected device, or the first whose name matches the optional filter.
+     *
+     * @param {string|null} nameFilter - Optional case-insensitive substring to match against device names.
+     * @returns {string|null} The matching device ID, or null if no device is connected or found.
+     */
     getDeviceId(nameFilter = null) {
         if (this._connectedDevices.size === 0) {
             Msg.warn('Bluetooth', 'getDeviceId() called but no devices are connected.', this.requestor);
@@ -322,8 +334,11 @@ export default class Bluetooth extends View {
         return null;
     }
 
-    // --- Internal disconnect handler ---
-
+    /**
+     * Cleans up internal state after a device disconnects and fires the disconnect event.
+     *
+     * @param {string} deviceId - The ID of the device that disconnected.
+     */
     _onDisconnected(deviceId) {
         let minimal_Btn = this.requestor.querySelector('.swac_bluetooth_connect_minimal_btn');
         if (minimal_Btn) {
@@ -338,14 +353,14 @@ export default class Bluetooth extends View {
         Msg.info('Bluetooth', 'Disconnected: ' + name, this.requestor);
 
         this._connectedDevices.delete(deviceId);
-        this._queues.delete(deviceId); // Clean up the queue for this device.
+        this._queues.delete(deviceId);
         this._removeDeviceCard(deviceId);
 
         let count = this._connectedDevices.size;
         this._setStatus(
-                count > 0 ? count + ' device(s) connected' : 'Ready - no device connected',
-                count > 0 ? 'connected' : ''
-                );
+            count > 0 ? count + ' device(s) connected' : 'Ready - no device connected',
+            count > 0 ? 'connected' : ''
+        );
 
         this.requestor.dispatchEvent(new CustomEvent('swac_' + this.requestor.id + '_bluetooth_disconnected', {
             detail: {deviceId}
@@ -353,8 +368,12 @@ export default class Bluetooth extends View {
         this.options.onDisconnected.call(this, deviceId);
     }
 
-    // --- MAC validation ---
-
+    /**
+     * Reads the stored MAC for a device and disconnects it if the live MAC does not match.
+     *
+     * @param {string} deviceId - The ID of the device to validate.
+     * @returns {Promise<void>}
+     */
     async _validateDeviceMac(deviceId) {
         let storageKey = this.options.deviceMismatchKey + '_' + deviceId;
         let storedMac = localStorage.getItem(storageKey);
@@ -373,8 +392,12 @@ export default class Bluetooth extends View {
         Msg.info('Bluetooth', 'MAC validated for ' + deviceId, this.requestor);
     }
 
-    // --- Status bar ---
-
+    /**
+     * Updates the status bar text and applies the matching CSS state class.
+     *
+     * @param {string} message - The text to display in the status bar.
+     * @param {string} [state] - Optional state modifier: 'connected' or 'error'.
+     */
     _setStatus(message, state = '') {
         let el = this.requestor.querySelector('.swac_bluetooth_status');
         if (!el)
@@ -387,8 +410,12 @@ export default class Bluetooth extends View {
             el.classList.add('ble-status-error');
     }
 
-    // --- Device card ---
-
+    /**
+     * Creates and appends a device card with all configured command sections to the device list.
+     *
+     * @param {string} deviceId   - The BLE device ID.
+     * @param {string} deviceName - The display name shown in the card header.
+     */
     _addDeviceCard(deviceId, deviceName) {
         let listElem = this.requestor.querySelector('.swac_bluetooth_device_list');
         if (!listElem)
@@ -466,6 +493,7 @@ export default class Bluetooth extends View {
             toggleBtn.title = collapsed ? 'Collapse commands' : 'Expand commands';
         });
 
+        // Hide the toggle arrow when there are no sections to collapse
         if (!this.options.sections || this.options.sections.length === 0) {
             toggleBtn.style.display = 'none';
         }
@@ -473,6 +501,15 @@ export default class Bluetooth extends View {
         listElem.appendChild(card);
     }
 
+    /**
+     * Builds a labelled group of command buttons for a single section config object.
+     *
+     * @param {string}      deviceId    - The target device ID.
+     * @param {string}      title       - The section heading text.
+     * @param {Object[]}    buttons     - Array of button definition objects.
+     * @param {HTMLElement} responseLog - The shared response log element for this card.
+     * @returns {HTMLElement} The section div containing the label and button grid.
+     */
     _buildButtonSection(deviceId, title, buttons, responseLog) {
         let section = document.createElement('div');
         section.classList.add('ble-cmd-section');
@@ -493,6 +530,14 @@ export default class Bluetooth extends View {
         return section;
     }
 
+    /**
+     * Creates a single command button that either invokes a named method or sends a BLE action on click.
+     *
+     * @param {string}      deviceId    - The target device ID.
+     * @param {Object}      btnDef      - Button definition with icon, label, description, action and param.
+     * @param {HTMLElement} responseLog - The shared response log element updated after each click.
+     * @returns {HTMLElement} The configured button element.
+     */
     _buildActionButton(deviceId, btnDef, responseLog) {
         let btn = document.createElement('button');
         btn.classList.add('ble-cmd-btn');
@@ -500,9 +545,9 @@ export default class Bluetooth extends View {
             btn.classList.add('ble-cmd-' + btnDef.style);
 
         btn.innerHTML =
-                (btnDef.icon ? '<span class="ble-cmd-icon">' + btnDef.icon + '</span>' : '') +
-                (btnDef.label ? '<span class="ble-cmd-name">' + btnDef.label + '</span>' : '') +
-                (btnDef.description ? '<span class="ble-cmd-desc">' + btnDef.description + '</span>' : '');
+            (btnDef.icon ? '<span class="ble-cmd-icon">' + btnDef.icon + '</span>' : '') +
+            (btnDef.label ? '<span class="ble-cmd-name">' + btnDef.label + '</span>' : '') +
+            (btnDef.description ? '<span class="ble-cmd-desc">' + btnDef.description + '</span>' : '');
 
         btn.addEventListener('click', async () => {
             btn.disabled = true;
@@ -512,8 +557,7 @@ export default class Bluetooth extends View {
 
             try {
                 let result;
-                // param: '__method__' triggers a named method (e.g. sendTimeStamp, getMacAddress)
-                // that have special logic beyond a plain sendCommand() call.
+                // param '__method__' means call a named Bluetooth method instead of sendCommand
                 if (btnDef.param === '__method__' && typeof this[btnDef.action] === 'function') {
                     result = await this[btnDef.action](deviceId);
                 } else {
@@ -533,8 +577,14 @@ export default class Bluetooth extends View {
         return btn;
     }
 
-    // Renders a WLAN section with a single button that opens the modal dialog.
-    // The inline input fields have been removed — the modal is the only entry point.
+    /**
+     * Builds a WLAN section containing a single button that opens the WLAN modal dialog on click.
+     *
+     * @param {string}      deviceId    - The target device ID.
+     * @param {HTMLElement} responseLog - The shared response log element updated after each attempt.
+     * @param {Object}      [sectionDef={}] - Optional section config with title, icon, label and description.
+     * @returns {HTMLElement} The section div containing the WLAN button.
+     */
     _buildWlanSection(deviceId, responseLog, sectionDef = {}) {
         let section = document.createElement('div');
         section.classList.add('ble-cmd-section');
@@ -547,9 +597,9 @@ export default class Bluetooth extends View {
         let wlanBtn = document.createElement('button');
         wlanBtn.classList.add('ble-cmd-btn');
         wlanBtn.innerHTML =
-                '<span class="ble-cmd-icon">' + (sectionDef.icon || '📶') + '</span>' +
-                '<span class="ble-cmd-name">' + (sectionDef.label || 'Add WLAN') + '</span>' +
-                '<span class="ble-cmd-desc">' + (sectionDef.description || 'Configure WLAN on the Pi') + '</span>';
+            '<span class="ble-cmd-icon">' + (sectionDef.icon || '📶') + '</span>' +
+            '<span class="ble-cmd-name">' + (sectionDef.label || 'Add WLAN') + '</span>' +
+            '<span class="ble-cmd-desc">' + (sectionDef.description || 'Configure WLAN on the Pi') + '</span>';
 
         wlanBtn.addEventListener('click', async () => {
             try {
@@ -564,7 +614,7 @@ export default class Bluetooth extends View {
                 responseLog.className = 'ble-response ble-response-visible ble-response-ok';
                 responseLog.textContent = (sectionDef.label || 'Add WLAN') + ': ' + JSON.stringify(result, null, 2);
             } catch (e) {
-                // Modal cancelled: no error shown in response log
+                // Modal was cancelled — no error shown to the user
                 if (e.message.includes('cancelled'))
                     return;
                 responseLog.className = 'ble-response ble-response-visible ble-response-err';
@@ -579,6 +629,11 @@ export default class Bluetooth extends View {
         return section;
     }
 
+    /**
+     * Fades out and removes the device card for the given device ID from the DOM.
+     *
+     * @param {string} deviceId - The ID of the device whose card should be removed.
+     */
     _removeDeviceCard(deviceId) {
         let listElem = this.requestor.querySelector('.swac_bluetooth_device_list');
         if (!listElem)
@@ -592,14 +647,13 @@ export default class Bluetooth extends View {
         setTimeout(() => card.remove(), 320);
     }
 
-    // --- BLE communication ---
-
-    // Public entry point: enqueues the request so that concurrent calls for the
-    // same device are serialised. Each call appends itself to the tail of the
-    // per-device Promise chain; the chain advances as soon as the previous
-    // request resolves or rejects.  A failed request does NOT block subsequent
-    // ones — the queue tail is always updated with a silently-caught version so
-    // the chain stays alive even after an error.
+    /**
+     * Public BLE communication entry point — queues the request so concurrent calls for the same device are serialised.
+     *
+     * @param {string} deviceId   - The ID of the target device.
+     * @param {string} jsonString - The JSON payload to send.
+     * @returns {Promise<Object>} The parsed response object from the Pi.
+     */
     async communicateWithPi(deviceId, jsonString) {
         Msg.flow('Bluetooth', 'communicateWithPi() queuing for device=' + deviceId, this.requestor);
 
@@ -608,20 +662,25 @@ export default class Bluetooth extends View {
             throw new Error('No device with id >' + deviceId + '< connected. Call connectDevice() first.');
         }
 
-        // Append this request to the tail of the device's queue.
+        // Append to the tail of the queue; run even if the previous request failed
         const result = this._queues.get(deviceId).then(
             () => this._doCommunicateWithPi(deviceId, jsonString),
-            () => this._doCommunicateWithPi(deviceId, jsonString) // run even if previous request failed
+            () => this._doCommunicateWithPi(deviceId, jsonString)
         );
 
-        // Advance the queue pointer; swallow the error so the chain stays alive.
+        // Advance the queue pointer and swallow errors so the chain stays alive
         this._queues.set(deviceId, result.catch(() => {}));
 
         return result;
     }
 
-    // Internal: performs the actual BLE write + notify round-trip for one request.
-    // Called exclusively by communicateWithPi() — never directly.
+    /**
+     * Performs the actual BLE write and waits for the notify response, accumulating chunks until valid JSON arrives.
+     *
+     * @param {string} deviceId   - The ID of the target device.
+     * @param {string} jsonString - The JSON payload to send.
+     * @returns {Promise<Object>} The parsed response object from the Pi.
+     */
     async _doCommunicateWithPi(deviceId, jsonString) {
         Msg.flow('Bluetooth', '_doCommunicateWithPi() device=' + deviceId, this.requestor);
 
@@ -650,7 +709,6 @@ export default class Bluetooth extends View {
             const notifyChar = await service.getCharacteristic(this.options.uartNotifyUUID);
 
             const responsePromise = new Promise((resolve, reject) => {
-                // Accumulate chunks until the JSON is complete and parseable.
                 let accumulated = '';
 
                 const handleNotification = (event) => {
@@ -658,15 +716,13 @@ export default class Bluetooth extends View {
                     accumulated += chunk;
                     Msg.flow('Bluetooth', 'RX chunk <- ' + deviceId + ' (' + accumulated.length + ' bytes so far)', this.requestor);
 
-                    // Try to parse — if it succeeds the response is complete.
                     try {
                         const parsed = JSON.parse(accumulated);
                         Msg.flow('Bluetooth', 'RX complete <- ' + deviceId + ': ' + accumulated, this.requestor);
                         notifyChar.removeEventListener('characteristicvaluechanged', handleNotification);
                         resolve(parsed);
                     } catch (err) {
-                        // JSON not yet complete — wait for the next chunk.
-                        Msg.flow('Bluetooth', 'RX incomplete, waiting for more chunks...', this.requestor);
+                        // JSON is not yet complete — wait for the next chunk
                     }
                 };
 
@@ -676,11 +732,11 @@ export default class Bluetooth extends View {
                     notifyChar.removeEventListener('characteristicvaluechanged', handleNotification);
                     if (accumulated.length > 0) {
                         reject(new Error('Timeout: Incomplete response from ' + deviceId +
-                                ' after ' + this.options.communicationTimeout + 'ms (' +
-                                accumulated.length + ' bytes received).'));
+                            ' after ' + this.options.communicationTimeout + 'ms (' +
+                            accumulated.length + ' bytes received).'));
                     } else {
                         reject(new Error('Timeout: No response from ' + deviceId +
-                                ' within ' + this.options.communicationTimeout + 'ms.'));
+                            ' within ' + this.options.communicationTimeout + 'ms.'));
                     }
                 }, this.options.communicationTimeout);
             });
@@ -696,9 +752,7 @@ export default class Bluetooth extends View {
         } catch (e) {
             Msg.error('Bluetooth', 'Communication error with ' + deviceId + ': ' + e.message, this.requestor);
 
-            // Only mark as disconnected for real GATT errors.
-            // Parse errors and timeouts with partial data mean the connection is still alive
-            // but the response exceeded the BLE MTU — do NOT show "Getrennt".
+            // Parse errors and incomplete timeouts do not indicate a lost connection
             const isParseError = e.message && e.message.startsWith('Parse error');
             const isIncomplete = e.message && e.message.startsWith('Timeout: Incomplete');
 
@@ -715,12 +769,15 @@ export default class Bluetooth extends View {
         }
     }
 
-    // --- Commands ---
-
-    // Sends a Pi command over BLE. action is the Pi command string (e.g. 'smartMobile_on_measuring')
-    // or an object (e.g. {sendTimeStamp: '...'}). param is forwarded as content.param.
-    async sendCommand(deviceId, action, param = null)
-    {
+    /**
+     * Serialises a command and optional parameter into the Pi JSON protocol and sends it via BLE.
+     *
+     * @param {string} deviceId - The ID of the target device.
+     * @param {string|Object} action - The Pi command string or object (e.g. {sendTimeStamp: '...'}).
+     * @param {*} [param=null] - Optional parameter forwarded as content.param.
+     * @returns {Promise<Object>} The parsed response object from the Pi.
+     */
+    async sendCommand(deviceId, action, param = null) {
         Msg.flow('Bluetooth', 'sendCommand() ' + deviceId + ' action=' + JSON.stringify(action), this.requestor);
         return await this.communicateWithPi(deviceId, JSON.stringify({
             type: 'request', status: null,
@@ -728,56 +785,76 @@ export default class Bluetooth extends View {
         }));
     }
 
-    // Builds a local-time ISO-like string (YYYY-MM-DDTHH:MM:SS) from the current system clock.
-    // toLocaleString('de-DE') is NOT used because its output format varies between browsers and
-    // OS locales, making it unreliable for strptime parsing on the Pi.
-    // toISOString() is also not used because it returns UTC, not the user's local wall-clock time.
+    /**
+     * Builds a local-time timestamp string in YYYY-MM-DDTHH:MM:SS format from the current system clock.
+     *
+     * @returns {string} Local ISO-like timestamp string.
+     */
     _buildLocalIsoTimestamp() {
         const now = new Date();
         const pad = (n) => String(n).padStart(2, '0');
+        // toISOString() is not used because it returns UTC rather than the local wall-clock time
         return now.getFullYear() + '-' +
-                pad(now.getMonth() + 1) + '-' +
-                pad(now.getDate()) + 'T' +
-                pad(now.getHours()) + ':' +
-                pad(now.getMinutes()) + ':' +
-                pad(now.getSeconds());
+            pad(now.getMonth() + 1) + '-' +
+            pad(now.getDate()) + 'T' +
+            pad(now.getHours()) + ':' +
+            pad(now.getMinutes()) + ':' +
+            pad(now.getSeconds());
     }
 
-    // Sends the current local wall-clock time to the Pi so it can set its system clock.
-    // The timestamp is embedded directly inside the 'data' object so the Pi dispatcher
-    // can identify it via isinstance(command, dict) and "sendTimeStamp" in command.
+    /**
+     * Sends the current local wall-clock time to the Pi so it can synchronise its system clock.
+     *
+     * @param {string} deviceId - The ID of the target device.
+     * @returns {Promise<Object>} The parsed response object from the Pi.
+     */
     async sendTimeStamp(deviceId) {
         const ts = this._buildLocalIsoTimestamp();
         Msg.flow('Bluetooth', 'sendTimeStamp() ts=' + ts, this.requestor);
         return await this.sendCommand(deviceId, {sendTimeStamp: ts});
     }
 
-    // Fetches the MAC address and unwraps it from the response envelope.
-    // Also called internally by _validateDeviceMac().
+    /**
+     * Requests the MAC address of the given device from the Pi.
+     *
+     * @param {string} deviceId - The ID of the target device.
+     * @returns {Promise<Object>} The raw response object containing the MAC address.
+     */
     async getMacAddress(deviceId) {
         const res = await this.sendCommand(deviceId, 'getMac');
         return res;
     }
 
-    // Called by the WLAN form with ssid and password as separate arguments.
+    /**
+     * Sends SSID and password to the Pi to configure a new WLAN connection.
+     *
+     * @param {string} deviceId  - The ID of the target device.
+     * @param {string} ssid      - The WLAN network name.
+     * @param {string} password  - The WLAN password.
+     * @returns {Promise<Object>} The parsed response object from the Pi.
+     */
     async addWLANToPi(deviceId, ssid, password) {
         return await this.sendCommand(deviceId, 'addWlan', {ssid, password});
     }
 
-    // --- Utilities ---
-
+    /**
+     * Normalises a MAC address string to the XX-XX-XX-XX-XX-XX uppercase format.
+     *
+     * @param {string} input - Raw MAC string with any separator style.
+     * @returns {string} Formatted MAC address string.
+     */
     _formatMac(input) {
         const clean = input.replace(/[-\s:]/g, '').toUpperCase();
         return clean.match(/.{1,2}/g)?.join('-') || '';
     }
 
-    // --- WLAN modal ---
-
-    // Opens a styled modal dialog to collect SSID and password from the user.
-    // Returns a Promise<{ssid, password}> that resolves on confirm and rejects on cancel.
+    /**
+     * Shows a modal dialog that collects SSID and password from the user.
+     *
+     * @returns {Promise<{ssid: string, password: string}>} Resolves with the entered credentials, or rejects if cancelled.
+     */
     _showWlanModal() {
         return new Promise((resolve, reject) => {
-            // Backdrop overlay
             let overlay = document.createElement('div');
             overlay.style.cssText = `
                 position: fixed; inset: 0; z-index: 9999;
@@ -785,7 +862,6 @@ export default class Bluetooth extends View {
                 display: flex; align-items: center; justify-content: center;
             `;
 
-            // Modal box
             let modal = document.createElement('div');
             modal.style.cssText = `
                 background: #fff; border-radius: 12px; padding: 28px 32px;
@@ -794,12 +870,10 @@ export default class Bluetooth extends View {
                 font-family: inherit;
             `;
 
-            // Title
             let title = document.createElement('h3');
             title.textContent = '📶 Add WLAN';
             title.style.cssText = 'margin: 0 0 20px 0; font-size: 1.1rem; color: #1a1a2e;';
 
-            // SSID label + input
             let ssidLabel = document.createElement('label');
             ssidLabel.textContent = 'WLAN Name (SSID)';
             ssidLabel.style.cssText = 'display: block; font-size: 0.85rem; color: #555; margin-bottom: 4px;';
@@ -815,7 +889,6 @@ export default class Bluetooth extends View {
             ssidInput.addEventListener('focus', () => ssidInput.style.borderColor = '#4a90e2');
             ssidInput.addEventListener('blur', () => ssidInput.style.borderColor = '#ccc');
 
-            // Password label + input row
             let pwLabel = document.createElement('label');
             pwLabel.textContent = 'Password';
             pwLabel.style.cssText = 'display: block; font-size: 0.85rem; color: #555; margin-bottom: 4px;';
@@ -834,7 +907,6 @@ export default class Bluetooth extends View {
             pwInput.addEventListener('focus', () => pwInput.style.borderColor = '#4a90e2');
             pwInput.addEventListener('blur', () => pwInput.style.borderColor = '#ccc');
 
-            // Toggle password visibility
             let pwToggle = document.createElement('button');
             pwToggle.textContent = '👁';
             pwToggle.title = 'Show password';
@@ -851,14 +923,12 @@ export default class Bluetooth extends View {
             pwRow.appendChild(pwInput);
             pwRow.appendChild(pwToggle);
 
-            // Inline validation error message
             let errorMsg = document.createElement('div');
             errorMsg.style.cssText = `
                 color: #e53e3e; font-size: 0.82rem;
                 margin-bottom: 12px; display: none;
             `;
 
-            // Action buttons
             let btnRow = document.createElement('div');
             btnRow.style.cssText = 'display: flex; gap: 10px; justify-content: flex-end;';
 
@@ -877,7 +947,6 @@ export default class Bluetooth extends View {
                 font-size: 0.9rem; font-weight: 600;
             `;
 
-            // Close and reject helpers
             const close = () => document.body.removeChild(overlay);
 
             cancelBtn.addEventListener('click', () => {
@@ -885,7 +954,7 @@ export default class Bluetooth extends View {
                 reject(new Error('doCommand() cancelled: WLAN modal dismissed.'));
             });
 
-            // Click on the backdrop also cancels
+            // Clicking outside the modal box also cancels
             overlay.addEventListener('click', (e) => {
                 if (e.target === overlay) {
                     close();
@@ -893,7 +962,6 @@ export default class Bluetooth extends View {
                 }
             });
 
-            // Confirm: validate SSID then resolve
             const confirm = () => {
                 let ssid = ssidInput.value.trim();
                 if (!ssid) {
@@ -907,15 +975,12 @@ export default class Bluetooth extends View {
             };
 
             confirmBtn.addEventListener('click', confirm);
-            // Enter in SSID field moves focus to password field
+            // Enter in the SSID field moves focus to the password field
             ssidInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter')
-                    pwInput.focus();
+                if (e.key === 'Enter') pwInput.focus();
             });
-            // Enter in password field confirms
             pwInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter')
-                    confirm();
+                if (e.key === 'Enter') confirm();
             });
 
             btnRow.appendChild(cancelBtn);
@@ -931,14 +996,15 @@ export default class Bluetooth extends View {
             overlay.appendChild(modal);
             document.body.appendChild(overlay);
 
-            // Auto-focus SSID input after the modal is rendered
             setTimeout(() => ssidInput.focus(), 50);
         });
     }
 
-    // --- Commandable interface ---
-
-    // Returns true only when at least one device is connected and ready to receive commands.
+    /**
+     * Returns true if at least one device is connected and ready to receive commands.
+     *
+     * @returns {boolean}
+     */
     isCommandable() {
         if (this._connectedDevices.size === 0) {
             Msg.warn('Bluetooth', 'isCommandable() = false: no devices connected.', this.requestor);
@@ -947,14 +1013,16 @@ export default class Bluetooth extends View {
         return true;
     }
 
-    // Executes a command string on the first connected device (or prompts the user
-    // to choose when multiple devices are connected).
-    // For 'addWlan', a modal dialog collects SSID and password before sending.
-    // Returns a Promise that resolves with the Pi response object.
+    /**
+     * Executes a command on a connected device, prompting the user to choose one if multiple devices are connected.
+     *
+     * @param {string} cmd       - The command name to execute (e.g. 'addWlan', 'getMac').
+     * @param {*}      [params]  - Optional parameter forwarded with the command.
+     * @returns {Promise<Object>} The parsed response object from the Pi.
+     */
     doCommand(cmd, params = null) {
         Msg.flow('Bluetooth', 'doCommand() cmd=' + cmd, this.requestor);
 
-        // addWlan: direkt Modal öffnen, kein Button-Matching, kein Device-Prompt
         if (cmd === 'addWlan') {
             if (this._connectedDevices.size === 0) {
                 return Promise.reject(new Error('No device connected.'));
@@ -966,8 +1034,7 @@ export default class Bluetooth extends View {
             });
         }
 
-        // Match the command against configured section buttons to pick up any preset param.
-        // Falls back to a bare action object for commands not listed in any section.
+        // Try to match the command to a section button to inherit its preset param
         let matchedBtn = null;
         for (let section of this.options.sections) {
             if (section.buttons) {
@@ -978,11 +1045,11 @@ export default class Bluetooth extends View {
             matchedBtn = {action: cmd, param: params};
         }
 
-        // Resolve the target device — prompt the user if more than one is connected.
         let deviceId;
         if (this._connectedDevices.size === 1) {
             deviceId = this._connectedDevices.keys().next().value;
         } else {
+            // Prompt the user to pick a device when more than one is connected
             let deviceOptions = [];
             let i = 1;
             for (let [id, entry] of this._connectedDevices) {
@@ -990,8 +1057,8 @@ export default class Bluetooth extends View {
                 i++;
             }
             let choice = window.prompt(
-                    'Multiple devices connected. Choose a device:\n\n' + deviceOptions.join('\n'), '1'
-                    );
+                'Multiple devices connected. Choose a device:\n\n' + deviceOptions.join('\n'), '1'
+            );
             if (!choice) {
                 return Promise.reject(new Error('doCommand() cancelled: no device selected.'));
             }
@@ -1003,7 +1070,6 @@ export default class Bluetooth extends View {
             deviceId = ids[idx];
         }
 
-        // All other commands: send directly with the param from the section config (or null).
         let param = matchedBtn.param ?? null;
         Msg.info('Bluetooth', 'doCommand() -> sendCommand deviceId=' + deviceId + ' action=' + cmd, this.requestor);
         return this.sendCommand(deviceId, cmd, param);
