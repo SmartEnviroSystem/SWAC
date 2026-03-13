@@ -137,7 +137,12 @@ export default class Bluetooth extends View {
 
         if (!options.plugins)
             this.options.plugins = new Map();
+
         this._connectedDevices = new Map();
+        // Per-device Promise chain used as a sequential queue.
+        // Every communicateWithPi() call appends itself to the tail so that
+        // concurrent requests from the same device are serialised automatically.
+        this._queues = new Map();
     }
 
     // --- Lifecycle ---
@@ -229,6 +234,8 @@ export default class Bluetooth extends View {
             let server = await device.gatt.connect();
 
             this._connectedDevices.set(device.id, {device, server, name: device.name ?? device.id});
+            // Initialise an empty (already-resolved) queue for this device.
+            this._queues.set(device.id, Promise.resolve());
 
             Msg.info('Bluetooth', 'Connected: ' + device.name + ' | Total: ' + this._connectedDevices.size, this.requestor);
             if (!minimal_Btn) {
@@ -331,6 +338,7 @@ export default class Bluetooth extends View {
         Msg.info('Bluetooth', 'Disconnected: ' + name, this.requestor);
 
         this._connectedDevices.delete(deviceId);
+        this._queues.delete(deviceId); // Clean up the queue for this device.
         this._removeDeviceCard(deviceId);
 
         let count = this._connectedDevices.size;
@@ -586,8 +594,36 @@ export default class Bluetooth extends View {
 
     // --- BLE communication ---
 
+    // Public entry point: enqueues the request so that concurrent calls for the
+    // same device are serialised. Each call appends itself to the tail of the
+    // per-device Promise chain; the chain advances as soon as the previous
+    // request resolves or rejects.  A failed request does NOT block subsequent
+    // ones — the queue tail is always updated with a silently-caught version so
+    // the chain stays alive even after an error.
     async communicateWithPi(deviceId, jsonString) {
-        Msg.flow('Bluetooth', 'communicateWithPi() device=' + deviceId, this.requestor);
+        Msg.flow('Bluetooth', 'communicateWithPi() queuing for device=' + deviceId, this.requestor);
+
+        let entry = this._connectedDevices.get(deviceId);
+        if (!entry) {
+            throw new Error('No device with id >' + deviceId + '< connected. Call connectDevice() first.');
+        }
+
+        // Append this request to the tail of the device's queue.
+        const result = this._queues.get(deviceId).then(
+            () => this._doCommunicateWithPi(deviceId, jsonString),
+            () => this._doCommunicateWithPi(deviceId, jsonString) // run even if previous request failed
+        );
+
+        // Advance the queue pointer; swallow the error so the chain stays alive.
+        this._queues.set(deviceId, result.catch(() => {}));
+
+        return result;
+    }
+
+    // Internal: performs the actual BLE write + notify round-trip for one request.
+    // Called exclusively by communicateWithPi() — never directly.
+    async _doCommunicateWithPi(deviceId, jsonString) {
+        Msg.flow('Bluetooth', '_doCommunicateWithPi() device=' + deviceId, this.requestor);
 
         let entry = this._connectedDevices.get(deviceId);
         if (!entry) {
