@@ -1,4 +1,4 @@
 var Coder_en = {
-    languagemark: 'Languagemark'
+    code_copy: 'Copy code'
 };
 export default Coder_en;

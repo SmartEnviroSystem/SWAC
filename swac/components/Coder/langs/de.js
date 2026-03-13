@@ -1,4 +1,4 @@
 var Coder_de = {
-    languagemark: 'Sprachmarke'
+    code_copy: 'Code kopieren'
 };
 export default Coder_de;

@@ -1,0 +1,15 @@
+.swac_coder_wrapper {
+    position: relative;
+    display: inline-block; /* oder block, je nach Layout */
+    width: 100%;
+}
+
+.swac_coder_copy {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    cursor: pointer;
+    width: 10px;
+    height: 10px;
+    font-size: 16pt;
+}
