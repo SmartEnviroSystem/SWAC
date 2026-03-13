@@ -374,7 +374,7 @@ export default class Sync extends View {
         dataPromise.then(function (data) {
             let startBtn = thisRef.requestor.querySelector('.swac_sync_startbtn');
             // Response should be in dataset 1
-            let set = data[0];
+            let set = data[0] ? null : data.records[0];
             if (set.updated >= 1) {
                 // update state button
                 startBtn.classList.add('swac_dontdisplay');
@@ -388,7 +388,7 @@ export default class Sync extends View {
                 UIkit.modal.alert(SWAC.lang.dict.Sync.backend_start_fail);
             }
         }).catch(function (err) {
-            Msg.error('Sync', 'Error sgtarting backend synchronisation: ' + err, thisRef.requestor);
+            Msg.error('Sync', 'Error starting backend synchronisation: ' + err, thisRef.requestor);
         });
     }
 
@@ -403,7 +403,7 @@ export default class Sync extends View {
         dataPromise.then(function (data) {
             let stopBtn = thisRef.requestor.querySelector('.swac_sync_stopbtn');
             // Response should be in dataset 1
-            let set = data[0];
+            let set = data[0] ? null : data.records[0];
             if (set.updated >= 1) {
                 // update state button
                 stopBtn.classList.add('swac_dontdisplay');
