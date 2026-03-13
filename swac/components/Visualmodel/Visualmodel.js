@@ -135,7 +135,7 @@ export default class Visualmodel extends View {
                 yAttr: null, // Attribute that gives the y value (default: y)
                 xFactor: 1,
                 yFactor: 1,
-                width: 100,
+                width: 50,
                 widthFactor: 1,
                 height: 50,
                 heightFactor: 1,
@@ -487,7 +487,7 @@ move: The siblings are moved along."
 
         // Draw element
         let drawnElem;
-        if (set.type === 'con') {
+        if (set.type === 'con' || (set.part1 && set.part2)) {
             drawnElem = this.drawSetAsConnection(set, parentDrawn);
         } else {
             drawnElem = this.drawSetAsElement(set, parentDrawn);
