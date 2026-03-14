@@ -36,7 +36,6 @@ export default class Coder extends View {
 
             let source = this.requestor.fromName;
             let outElem = this.requestor.querySelector('.swac_coder_code');
-console.log('TEST source',source);
             // Check if source is a file
             var pathX = "[?:[a-zA-Z0-9-_\.]+(?:.json|.js|.html)"; /* File validation using extension*/
             // Check if path is pointing to a file
