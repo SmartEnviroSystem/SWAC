@@ -260,6 +260,16 @@ export default class ComponentHandler {
      */
     loadData(requestor) {
         return new Promise((resolve, reject) => {
+            // Create dataRequestor
+            let dataRequestor = {};
+            // Set dataRequestor options (equal the ViewRequestor options)
+            dataRequestor = requestor.swac_comp.options;
+            
+            // Overwrite fromName when ViewRequestor has it's own
+            if(requestor.fromName)
+                dataRequestor.fromName = requestor.fromName;
+            
+            // Overwrite fromName when fromName is given by url
             // Get fromName from URL if available
             let dataurlParam = requestor.swac_comp.options.dataurlparam;
             if(!dataurlParam) {
@@ -267,9 +277,10 @@ export default class ComponentHandler {
             }
             let fromNameURL = SWAC.getParameterFromURL(dataurlParam);
             if(fromNameURL)
-                requestor.fromName = fromNameURL;
+                dataRequestor.fromName = fromNameURL;
+            
             // Resolve if no data is requested
-            if (!requestor.fromName || requestor.fromName === 'none') {
+            if (!dataRequestor.fromName || dataRequestor.fromName === 'none') {
                 Msg.info('ComponentHandler', 'No data requested', requestor);
                 resolve(null);
                 return;
@@ -278,7 +289,7 @@ export default class ComponentHandler {
             //TODO unify this with other ways adding data
             requestor.swac_comp.options.mainSource = requestor.fromName;
             // Load the data
-            Model.load(requestor, requestor.swac_comp).then(function (dataCapsule) {
+            Model.load(dataRequestor, requestor.swac_comp).then(function (dataCapsule) {
                 resolve(dataCapsule);
             }).catch(function (err) {
                 reject(err);
