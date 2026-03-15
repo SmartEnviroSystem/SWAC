@@ -65,21 +65,21 @@ export default class Component {
         };
         if (!this.options.attributeDefaults)
             this.options.attributeDefaults = new Map();
-        this.desc.opts[1004] = {
+        this.desc.opts[1005] = {
             name: "attributeRenames",
             desc: "Renameing of attributes. Define incoming attribute name as key and target name as value",
             example: new Map([['doubleval', 'float'], ['intval', 'long']])
         };
         if (!this.options.attributeRenames)
             this.options.attributeRenames = new Map();
-        this.desc.opts[1005] = {
+        this.desc.opts[1006] = {
             name: "reloadInterval",
             desc: "Interval in which the component automaticaly reloads its data (-1 to deactivate)",
             example: 30
         };
         if (typeof this.options.reloadInterval === 'undefined')
             this.options.reloadInterval = -1;
-        this.desc.opts[1006] = {
+        this.desc.opts[1007] = {
             name: "plugins",
             desc: "Configurations for plugins",
             type: 'Map',
@@ -87,7 +87,7 @@ export default class Component {
         };
         if (!this.options.plugins)
             this.options.plugins = null;
-        this.desc.opts[1007] = {
+        this.desc.opts[1008] = {
             name: "saveAlongData",
             desc: "Data that shold be send to the API along with every saveDataset call.",
             example: {someattr: 'with some value'}
@@ -95,15 +95,16 @@ export default class Component {
         if (!this.options.saveAlongData)
             this.options.saveAlongData = null;
 
-        this.desc.opts[1008] = {
+        this.desc.opts[1009] = {
             name: "mainSource",
             desc: "Name / Path of the source that contains the main datasets",
-            example: 'mydata.json'
+            example: 'mydata.json',
+            deprecated: 'Use options.fromName instead.'
         };
         if (!this.options.mainSource)
             this.options.mainSource = null;
 
-        this.desc.opts[1009] = {
+        this.desc.opts[1010] = {
             name: 'parentIdAttr',
             desc: 'Name of the attribute that stores the reference to the parent dataset in child datasets',
             example: 'parent_id'
@@ -111,7 +112,7 @@ export default class Component {
         if (!options.parentIdAttr)
             this.options.parentIdAttr = 'parent';
 
-        this.desc.opts[1010] = {
+        this.desc.opts[1011] = {
             name: "customAfterLoad",
             desc: "Function to execute after components load. Executed in Component context.",
             params: [
@@ -125,7 +126,7 @@ export default class Component {
         };
         if (!options.customAfterLoad)
             this.options.customAfterLoad = function () {};
-        this.desc.opts[1011] = {
+        this.desc.opts[1012] = {
             name: 'customBeforeAddSet',
             desc: 'Function to execute before a set is added. Executed in Component context.',
             params: [
@@ -139,7 +140,7 @@ export default class Component {
         };
         if (!options.customBeforeAddSet)
             this.options.customBeforeAddSet = function () {};
-        this.desc.opts[1012] = {
+        this.desc.opts[1013] = {
             name: 'customAfterAddSet',
             desc: 'Function to execute after a set was added. Executed in Component context.',
             params: [
@@ -152,7 +153,7 @@ export default class Component {
         };
         if (!options.customAfterAddSet)
             this.options.customAfterAddSet = function () {};
-        this.desc.opts[1013] = {
+        this.desc.opts[1014] = {
             name: 'customAfterRemoveSet',
             desc: 'Function to execute after a set was removed. Executed in Component context.',
             params: [
@@ -166,7 +167,7 @@ export default class Component {
         };
         if (!options.customAfterRemoveSet)
             this.options.customAfterRemoveSet = function () {};
-        this.desc.opts[1014] = {
+        this.desc.opts[1015] = {
             name: 'customBeforeSave',
             desc: 'Method that should be executed before save. Executed in Component context. \n\
                     If it returns false the save process is stopped.',
@@ -185,7 +186,7 @@ export default class Component {
         };
         if (!options.customBeforeSave)
             this.options.customBeforeSave = function () {};
-        this.desc.opts[1015] = {
+        this.desc.opts[1016] = {
             name: 'customAfterSave',
             desc: 'Method that should be executed after succsessfull save. Executed in Component context.',
             params: [
@@ -199,14 +200,14 @@ export default class Component {
         if (!options.customAfterSave)
             this.options.customAfterSave = function () {};
 
-        this.desc.opts[1016] = {
+        this.desc.opts[1017] = {
             name: 'supressChildMessages',
             desc: 'If true messages from saveing childs are not shown.',
         };
         if (!options.supressChildMessages)
             this.options.supressChildMessages = true;
 
-        this.desc.opts[1017] = {
+        this.desc.opts[1018] = {
             name: 'makereadableDatesFrom',
             desc: 'Makes user readable dates from ISO Dates of the given attributes if present.',
             example: ['ts', 'date']
@@ -214,14 +215,14 @@ export default class Component {
         if (!options.makereadableDatesFrom)
             this.options.makereadableDatesFrom = [];
 
-        this.desc.opts[1018] = {
+        this.desc.opts[1019] = {
             name: 'hideAfter',
             desc: 'Makes the dataset is hidden, after the date stated in the given attribute.',
         };
         if (!options.hideAfter)
             this.options.hideAfter = 'swac_until';
 
-        this.desc.opts[1019] = {
+        this.desc.opts[1020] = {
             name: 'checkSets',
             desc: 'If true sets are checked on matching fromWheres before adding them. Setting nothing lets automatic determine right mode.',
             example: true
@@ -229,14 +230,14 @@ export default class Component {
         if (!options.checkSets)
             this.options.checkSets = null;
 
-        this.desc.opts[1020] = {
+        this.desc.opts[1021] = {
             name: 'definitions',
             desc: 'Map of definitions about expected data in the component. The key is the name of the datasource the definitions apply to and the value is an arraylist of objects with name, type, required attributes.',
         };
         if (!options.definitions)
             this.options.definitions = new Map();
 
-        this.desc.opts[1021] = {
+        this.desc.opts[1022] = {
             name: 'lazyLoading',
             desc: 'Number of sets that should be lazy loaded on lazy load events. If 0 all data is loaded at once.',
             example: 10
@@ -244,14 +245,14 @@ export default class Component {
         if (!options.lazyLoading)
             this.options.lazyLoading = 0;
 
-        this.desc.opts[1022] = {
+        this.desc.opts[1023] = {
             name: 'lazyOrder',
             desc: 'Name of the attribute to order by when useing lazy fetching, and type of ordering e.g. DESC|ASC.'
         };
         if (!options.lazyOrder)
             this.options.lazyOrder = 'id,DESC';
 
-        this.desc.opts[1023] = {
+        this.desc.opts[1024] = {
             name: 'activeOn',
             desc: 'A datarequestor that indicates if the component should be shown or not. If the request returns with at least one dataset, the component is shown, otherwise it is not loaded.',
             example: {
@@ -263,7 +264,7 @@ export default class Component {
         };
         if (!options.activeOn)
             this.options.activeOn = null;
-        this.desc.opts[1024] = {
+        this.desc.opts[1025] = {
             name: 'fetchNewSetsEvery',
             desc: 'Time in seconds when to fetch new datasets from the datasource(s)',
             example: 10
@@ -271,13 +272,13 @@ export default class Component {
         if (!options.fetchNewSetsEvery)
             this.options.fetchNewSetsEvery = null;
 
-        this.desc.opts[1025] = {
+        this.desc.opts[1026] = {
             name: 'ecoMode',
             desc: 'Options for ecoMode. {fetchNewSetsEvery= Seconds for fetchNewSetsEvery update in ecoMode, reloadinterval= Seconds for reload in ecoMode, ecoColumn= Name of the column identifying sets for ecoMode}'
         };
         if (!options.ecoMode)
             this.options.ecoMode = false;
-        this.desc.opts[1026] = {
+        this.desc.opts[1027] = {
             name: 'apiActualUrlAttr',
             desc: 'Name of the attribute that holds an url to an api that delivers actual data for a set',
             example: 'link'
