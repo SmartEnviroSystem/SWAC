@@ -251,6 +251,267 @@ export default class Model {
      * @returns {WatchableSet[]} Array of WatchableSets
      */
     static convertData(dataCapsule, dataRequest, comp) {
+
+        // ------------------------------------------------------------
+        // 1) INPUT NORMALISIEREN
+        // ------------------------------------------------------------
+        function normalizeInput(capsule) {
+            if (capsule?.data?.list) {
+                const list = capsule.data.list;
+                list.metadata = {};
+                for (const key of Object.keys(capsule.data)) {
+                    if (key !== "list")
+                        list.metadata[key] = capsule.data[key];
+                }
+                return list;
+            }
+            if (capsule?.data?.records)
+                return capsule.data.records;
+            if (Array.isArray(capsule?.data))
+                return capsule.data;
+            if (capsule?.data)
+                return [capsule.data];
+            if (Array.isArray(capsule))
+                return capsule;
+            return [capsule];
+        }
+
+        const idAttr = dataRequest.idAttr || "id";
+        const data = normalizeInput(dataCapsule);
+
+
+        // ------------------------------------------------------------
+        // 2) HÖCHSTE ID ERMITTELN (ohne Spread/Map)
+        // ------------------------------------------------------------
+        function findMaxId(arr, idAttr) {
+            let max = 0;
+            for (let i = 0; i < arr.length; i++) {
+                const obj = arr[i];
+                if (!obj || typeof obj !== "object")
+                    continue;
+                const id = obj[idAttr];
+                if (typeof id === "number" && id > max)
+                    max = id;
+            }
+            return max || 0;
+        }
+
+        dataRequest.highestId = findMaxId(data, idAttr);
+
+
+        // ------------------------------------------------------------
+        // 3) DEFAULTS VORBEREITEN
+        // ------------------------------------------------------------
+        function prepareDefaults(req) {
+            if (!req.attributeDefaults)
+                return null;
+            const local = req.attributeDefaults.get(req.fromName);
+            const global = req.attributeDefaults.get("*");
+
+            if (local && global)
+                return Object.assign({}, local, global);
+            if (local)
+                return Object.assign({}, local);
+            if (global)
+                return Object.assign({}, global);
+            return null;
+        }
+
+        const defaults = prepareDefaults(dataRequest);
+        const defaultKeys = defaults ? Object.keys(defaults) : null;
+        const placeholderRegex = /%\w+%/g;
+
+
+        // ------------------------------------------------------------
+        // 4) DEFAULTS ANWENDEN
+        // ------------------------------------------------------------
+        function applyDefaults(curSet) {
+            if (!defaultKeys)
+                return;
+
+            for (let i = 0; i < defaultKeys.length; i++) {
+                const attr = defaultKeys[i];
+                if (typeof curSet[attr] !== "undefined")
+                    continue;
+
+                let val = defaults[attr];
+
+                if (typeof val !== "string") {
+                    curSet[attr] = val;
+                    continue;
+                }
+
+                const placeholders = val.match(placeholderRegex);
+                if (placeholders) {
+                    let expr = val;
+                    let ok = true;
+
+                    for (let p = 0; p < placeholders.length; p++) {
+                        const ph = placeholders[p];
+                        const name = ph.slice(1, -1);
+                        if (typeof curSet[name] === "undefined") {
+                            Msg.error("Model", `Variable >${name}< not found for default expression >${expr}<`);
+                            ok = false;
+                            break;
+                        }
+                        expr = expr.replace(ph, curSet[name]);
+                    }
+
+                    if (ok)
+                        val = eval(expr);
+                }
+
+                curSet[attr] = val;
+            }
+        }
+
+
+        // ------------------------------------------------------------
+        // 5) ZEITFILTER
+        // ------------------------------------------------------------
+        const now = Date.now();
+
+        function passesTimeFilter(curSet) {
+            if (curSet.swac_from) {
+                const ts = Date.parse(curSet.swac_from);
+                if (!isNaN(ts) && now < ts)
+                    return false;
+            }
+            if (curSet.swac_until) {
+                const ts = Date.parse(curSet.swac_until);
+                if (!isNaN(ts) && now > ts)
+                    return false;
+            }
+            return true;
+        }
+
+
+        // ------------------------------------------------------------
+        // 6) JOIN-INFOS
+        // ------------------------------------------------------------
+        const joinName = dataRequest?.fromWheres?.join || null;
+
+        function applyJoinInfo(curSet) {
+            if (!joinName || !curSet[joinName]) {
+                curSet.swac_joinsetsCount = 0;
+                return;
+            }
+
+            const arr = curSet[joinName];
+            curSet.swac_joinsetsCount = arr.length;
+
+            const ids = new Array(arr.length);
+            for (let i = 0; i < arr.length; i++)
+                ids[i] = arr[i].id;
+            ids.sort((a, b) => a - b);
+
+            curSet.joinsetsIds = ids.join(",");
+        }
+
+
+        // ------------------------------------------------------------
+        // 7) ATTRIBUTE-RENAMING
+        // ------------------------------------------------------------
+        const renames = dataRequest.attributeRenames || null;
+
+        function applyRenames(curSet) {
+            if (!renames)
+                return;
+
+            if (!curSet.swac_renamedAttrsByRequest)
+                curSet.swac_renamedAttrsByRequest = {};
+
+            for (const [oldAttr, newAttr] of renames) {
+                if (typeof curSet[oldAttr] !== "undefined") {
+                    curSet[newAttr] = curSet[oldAttr];
+                    curSet[oldAttr] = undefined; // statt delete
+                    curSet.swac_renamedAttrsByRequest[oldAttr] = newAttr;
+                }
+            }
+        }
+
+
+        // ------------------------------------------------------------
+        // 8) WATCHABLESET ERZEUGEN
+        // ------------------------------------------------------------
+        function wrapWatchable(curSet) {
+            if (curSet.constructor.name === "WatchableSet")
+                return curSet;
+
+            if (isNaN(curSet[idAttr])) {
+                curSet[idAttr] = ++genid;
+                dataRequest.highestId = curSet[idAttr];
+            }
+
+            curSet.swac_fromName = dataRequest.fromName;
+            return new WatchableSet(curSet);
+        }
+
+
+        // ------------------------------------------------------------
+        // 9) STORE SICHERSTELLEN
+        // ------------------------------------------------------------
+        if (!Model.store[dataRequest.storeId]) {
+            Msg.warn("model", `Model.store for >${dataRequest.storeId}< missing. Creating automatically.`);
+            Model.store[dataRequest.storeId] = new WatchableSource(dataRequest.fromName, Model);
+        }
+
+        const store = Model.store[dataRequest.storeId];
+
+
+        // ------------------------------------------------------------
+        // 10) HAUPTSCHLEIFE
+        // ------------------------------------------------------------
+        const transdata = Object.create(null);
+        let genid = 0;
+
+        const lazyLimit = comp?.options?.lazyLoading || 0;
+        const lastLoaded = comp?.lastloaded || 0;
+        let loadedCount = 0;
+
+        for (let i = 0; i < data.length; i++) {
+            let curSet = data[i];
+            if (!curSet || typeof curSet !== "object")
+                continue;
+
+            const curId = curSet[idAttr];
+
+            // Lazy Loading
+            if (lazyLimit > 0 && typeof curId === "number" && curId > lastLoaded) {
+                if (loadedCount >= lazyLimit)
+                    break;
+                loadedCount++;
+            }
+
+            // Cache-Reuse
+            if (store.hasSet(curId)) {
+                const fresh = curSet;
+                curSet = store.getSet(curId);
+
+                for (const key of Object.keys(fresh)) {
+                    if (typeof curSet[key] === "undefined")
+                        curSet[key] = fresh[key];
+                }
+            }
+
+            if (!passesTimeFilter(curSet))
+                continue;
+
+            applyDefaults(curSet);
+            applyJoinInfo(curSet);
+            applyRenames(curSet);
+
+            const wset = wrapWatchable(curSet);
+            wset.swac_dataRequest = dataRequest;
+
+            transdata[curSet[idAttr]] = wset;
+            store.addSet(wset);
+        }
+
+        return transdata;
+    }
+
+    static convertDataOld(dataCapsule, dataRequest, comp) {
         // Get attribute that contains the id
         let idAttr = dataRequest.idAttr ? dataRequest.idAttr : 'id';
 
@@ -304,132 +565,231 @@ export default class Model {
                 defaults = gdefaults;
         }
 
-        // Test and transform sets
-        let genid = 0;
-        let transdata = [];
+        const now = Date.now();
+        const lazyLimit = comp?.options?.lazyLoading || 0;
+        const lastLoaded = comp?.lastloaded || 0;
+        const joinName = dataRequest?.fromWheres?.join;
+        const placeholderRegex = /%\w+%/g;
+
         let newLoaded = 0;
+        let genid = 0;
+        const transdata = {};
+
         for (let i = 0; i < data.length; i++) {
             let curSet = data[i];
-            if (!curSet || typeof curSet != 'object')
+            if (!curSet || typeof curSet !== 'object')
                 continue;
-            // Break for lazy loading on sources, that does not support lazy requesting
-            if (comp?.options?.lazyLoading > 0 && curSet[idAttr] > comp.lastloaded) {
-                if (newLoaded >= comp.options.lazyLoading) {
+
+            // Lazy loading
+            const curId = curSet[idAttr];
+            if (lazyLimit > 0 && curId > lastLoaded) {
+                if (newLoaded >= lazyLimit)
                     break;
-                }
                 newLoaded++;
             }
-            // If set is included in store, use old set instead, so that observers remain on the set
-            if (this.store[dataRequest.storeId]?.hasSet(curSet[idAttr])) {
-                let newSet = curSet;
-                curSet = this.store[dataRequest.storeId].getSet(curSet[idAttr]);
-                // Transfer added information to cached object
-                for (let curAttr in newSet) {
-                    if (!curSet[curAttr]) {
-                        curSet[curAttr] = newSet[curAttr];
-                    }
-                }
-            }
-            // Filter data that should not be shown by time
-            if (curSet['swac_from']) {
-                let fromDate = new Date(curSet['swac_from']);
-                if ((new Date().getTime() - fromDate.getTime()) < 0) {
-                    continue;
+
+            // Cache reuse
+            const store = this.store[dataRequest.storeId];
+            if (store?.hasSet(curId)) {
+                const newSet = curSet;
+                curSet = store.getSet(curId);
+                for (const attr of Object.keys(newSet)) {
+                    if (curSet[attr] === undefined)
+                        curSet[attr] = newSet[attr];
                 }
             }
 
-            if (curSet['swac_until']) {
-                let untilDate = new Date(curSet['swac_until']);
-                if ((new Date().getTime() - untilDate.getTime()) > 0) {
-                    continue;
-                }
-            }
-            // Filter for fromWheres (no effect on data from sources that support filtering allready)
-//            if (!this.matchFilter(curSet, dataRequest.fromWheres)) {
-//                continue;
-//            }
-            // Set default values
-            for (let curAttr in defaults) {
-                if (typeof curSet[curAttr] === 'undefined') {
-                    let curVal = defaults[curAttr];
-                    // Set default value
-                    curSet[curAttr] = curVal;
-                    if(!curVal || !curVal.match)
-                        continue;
-                    // Calculate default value
-                    let placeholders = curVal.match(/%\w+%/g);
-                    if (placeholders && placeholders.length > 0) {
-                        let eq = curVal;
-                        let repall = true;
-                        for (let curPlaceh of placeholders) {
-                            let curName = curPlaceh.split('%').join('');
-                            if (typeof curSet[curName] !== 'undefined')
-                                eq = eq.replace(curPlaceh, curSet[curName]);
-                            else {
-                                Msg.error('Model', 'Variable >' + curName + '< for calculation >' + eq + '< not found in set >' + dataRequest.fromName + '[' + curSet.id + ']<');
-                                repall = false;
-                                break;
-                            }
+            // Time filtering
+            if (curSet.swac_from && now < new Date(curSet.swac_from).getTime())
+                continue;
+            if (curSet.swac_until && now > new Date(curSet.swac_until).getTime())
+                continue;
+
+            // Defaults
+            if (defaults) {
+                for (const attr of Object.keys(defaults)) {
+                    if (curSet[attr] === undefined) {
+                        let val = defaults[attr];
+                        if (typeof val === 'string' && placeholderRegex.test(val)) {
+                            let expr = val.replace(placeholderRegex, m => {
+                                const key = m.slice(1, -1);
+                                return curSet[key] ?? '';
+                            });
+                            val = eval(expr);
                         }
-                        if (repall) {
-                            curSet[curAttr] = eval(eq);
-                        }
+                        curSet[attr] = val;
                     }
                 }
             }
 
-            // Count subsets
-            let joinName = dataRequest?.fromWheres?.join;
-            if (curSet[joinName]) {
-                curSet['swac_joinsetsCount'] = curSet[joinName].length;
-                let joinSetIds = [];
-                for (let joinSet of curSet[joinName]) {
-                    joinSetIds.push(joinSet.id);
-                }
-                joinSetIds.sort(function (a, b) {
-                    return a - b
-                });
-                curSet['joinsetsIds'] = joinSetIds.join(',');
-            } else
-                curSet['swac_joinsetsCount'] = 0;
+            // Join count
+            if (joinName && curSet[joinName]) {
+                const ids = curSet[joinName].map(s => s.id).sort((a, b) => a - b);
+                curSet.swac_joinsetsCount = ids.length;
+                curSet.joinsetsIds = ids.join(',');
+            } else {
+                curSet.swac_joinsetsCount = 0;
+            }
 
-            // Set attribute renameing
+            // Renaming
             if (dataRequest.attributeRenames) {
-                curSet['swac_renamedAttrsByRequest'] = {};
-                for (let [curAttr, curRename] of dataRequest.attributeRenames) {
-                    if (typeof curSet[curAttr] !== 'undefined') {
-                        curSet[curRename] = curSet[curAttr];
-                        delete curSet[curAttr];
-                        curSet['swac_renamedAttrsByRequest'][curAttr] = curRename;
+                curSet.swac_renamedAttrsByRequest = {};
+                for (const [oldAttr, newAttr] of dataRequest.attributeRenames) {
+                    if (curSet[oldAttr] !== undefined) {
+                        curSet[newAttr] = curSet[oldAttr];
+                        curSet[oldAttr] = undefined;
+                        curSet.swac_renamedAttrsByRequest[oldAttr] = newAttr;
                     }
                 }
             }
 
-            let wset;
+            // WatchableSet
+            let wset = curSet;
             if (curSet.constructor.name !== 'WatchableSet') {
-                // Auto generate id
-                if (isNaN(curSet[idAttr])) {
+                if (isNaN(curId)) {
                     curSet[idAttr] = ++genid;
-                    dataRequest.highestId = curSet[idAttr];
+                    dataRequest.highestId = genid;
                 }
                 curSet.swac_fromName = dataRequest.fromName;
-                // Transform set
                 wset = new WatchableSet(curSet);
-            } else {
-                wset = curSet;
             }
+
             wset.swac_dataRequest = dataRequest;
             transdata[curSet[idAttr]] = wset;
 
-            // Add Data to source
-            //Model.store[curSet.swac_fromName].addSet(wset);
-            if (!Model.store[dataRequest.storeId]) {
-                Msg.warn('model', 'Model.store for >' + dataRequest.storeId + '< is missing. Autofix by createing one.');
-                Model.store[dataRequest.storeId] = {};
+            // Add to store
+            if (!store) {
                 Model.store[dataRequest.storeId] = new WatchableSource(dataRequest.fromName, Model);
             }
             Model.store[dataRequest.storeId].addSet(wset);
         }
+
+//        // Test and transform sets
+//        let genid = 0;
+//        let transdata = [];
+//        let newLoaded = 0;
+//        for (let i = 0; i < data.length; i++) {
+//            let curSet = data[i];
+//            if (!curSet || typeof curSet != 'object')
+//                continue;
+//            // Break for lazy loading on sources, that does not support lazy requesting
+//            if (comp?.options?.lazyLoading > 0 && curSet[idAttr] > comp.lastloaded) {
+//                if (newLoaded >= comp.options.lazyLoading) {
+//                    break;
+//                }
+//                newLoaded++;
+//            }
+//            // If set is included in store, use old set instead, so that observers remain on the set
+//            if (this.store[dataRequest.storeId]?.hasSet(curSet[idAttr])) {
+//                let newSet = curSet;
+//                curSet = this.store[dataRequest.storeId].getSet(curSet[idAttr]);
+//                // Transfer added information to cached object
+//                for (let curAttr in newSet) {
+//                    if (!curSet[curAttr]) {
+//                        curSet[curAttr] = newSet[curAttr];
+//                    }
+//                }
+//            }
+//            // Filter data that should not be shown by time
+//            if (curSet['swac_from']) {
+//                let fromDate = new Date(curSet['swac_from']);
+//                if ((new Date().getTime() - fromDate.getTime()) < 0) {
+//                    continue;
+//                }
+//            }
+//
+//            if (curSet['swac_until']) {
+//                let untilDate = new Date(curSet['swac_until']);
+//                if ((new Date().getTime() - untilDate.getTime()) > 0) {
+//                    continue;
+//                }
+//            }
+//            // Filter for fromWheres (no effect on data from sources that support filtering allready)
+////            if (!this.matchFilter(curSet, dataRequest.fromWheres)) {
+////                continue;
+////            }
+//            // Set default values
+//            for (let curAttr in defaults) {
+//                if (typeof curSet[curAttr] === 'undefined') {
+//                    let curVal = defaults[curAttr];
+//                    // Set default value
+//                    curSet[curAttr] = curVal;
+//                    if(!curVal || !curVal.match)
+//                        continue;
+//                    // Calculate default value
+//                    let placeholders = curVal.match(/%\w+%/g);
+//                    if (placeholders && placeholders.length > 0) {
+//                        let eq = curVal;
+//                        let repall = true;
+//                        for (let curPlaceh of placeholders) {
+//                            let curName = curPlaceh.split('%').join('');
+//                            if (typeof curSet[curName] !== 'undefined')
+//                                eq = eq.replace(curPlaceh, curSet[curName]);
+//                            else {
+//                                Msg.error('Model', 'Variable >' + curName + '< for calculation >' + eq + '< not found in set >' + dataRequest.fromName + '[' + curSet.id + ']<');
+//                                repall = false;
+//                                break;
+//                            }
+//                        }
+//                        if (repall) {
+//                            curSet[curAttr] = eval(eq);
+//                        }
+//                    }
+//                }
+//            }
+//
+//            // Count subsets
+//            let joinName = dataRequest?.fromWheres?.join;
+//            if (curSet[joinName]) {
+//                curSet['swac_joinsetsCount'] = curSet[joinName].length;
+//                let joinSetIds = [];
+//                for (let joinSet of curSet[joinName]) {
+//                    joinSetIds.push(joinSet.id);
+//                }
+//                joinSetIds.sort(function (a, b) {
+//                    return a - b
+//                });
+//                curSet['joinsetsIds'] = joinSetIds.join(',');
+//            } else
+//                curSet['swac_joinsetsCount'] = 0;
+//
+//            // Set attribute renameing
+//            if (dataRequest.attributeRenames) {
+//                curSet['swac_renamedAttrsByRequest'] = {};
+//                for (let [curAttr, curRename] of dataRequest.attributeRenames) {
+//                    if (typeof curSet[curAttr] !== 'undefined') {
+//                        curSet[curRename] = curSet[curAttr];
+//                        delete curSet[curAttr];
+//                        curSet['swac_renamedAttrsByRequest'][curAttr] = curRename;
+//                    }
+//                }
+//            }
+//
+//            let wset;
+//            if (curSet.constructor.name !== 'WatchableSet') {
+//                // Auto generate id
+//                if (isNaN(curSet[idAttr])) {
+//                    curSet[idAttr] = ++genid;
+//                    dataRequest.highestId = curSet[idAttr];
+//                }
+//                curSet.swac_fromName = dataRequest.fromName;
+//                // Transform set
+//                wset = new WatchableSet(curSet);
+//            } else {
+//                wset = curSet;
+//            }
+//            wset.swac_dataRequest = dataRequest;
+//            transdata[curSet[idAttr]] = wset;
+//
+//            // Add Data to source
+//            //Model.store[curSet.swac_fromName].addSet(wset);
+//            if (!Model.store[dataRequest.storeId]) {
+//                Msg.warn('model', 'Model.store for >' + dataRequest.storeId + '< is missing. Autofix by createing one.');
+//                Model.store[dataRequest.storeId] = {};
+//                Model.store[dataRequest.storeId] = new WatchableSource(dataRequest.fromName, Model);
+//            }
+//            Model.store[dataRequest.storeId].addSet(wset);
+//        }
         return transdata;
     }
 
