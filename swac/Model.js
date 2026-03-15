@@ -86,23 +86,23 @@ export default class Model {
                     Msg.info('Model', 'Request >' + dataRequest.id + '< should be routed by ' + cmdRouterElem.id);
 
                     let uniformedDataRequest = {};
-                    uniformedDataRequest.fromName = dataRequest.fromName.replace('cmd://','');
+                    uniformedDataRequest.fromName = dataRequest.fromName.replace('cmd://', '');
                     uniformedDataRequest.fromWheres = dataRequest.fromWheres;
                     window.parent.swac.reactions.addReaction(function (requestors) {
                         let router = requestors[cmdRouterElem.id];
                         let result = router.swac_comp.executeRequest(uniformedDataRequest, false);
                         result.then(function (res) {
-                            if(!res) {
+                            if (!res) {
                                 reject('No data recived from command');
                                 return;
                             }
                             let data = thisRef.convertData({data: res, fromName: dataRequest.fromName}, dataRequest, comp);
-                            if(comp)
+                            if (comp)
                                 comp.addData(dataRequest.fromName, data);
 
                             resolve(data);
-                        }).catch(function(err) {
-                            Msg.error('Model','Error getting data from CommandRouter: ' + err);
+                        }).catch(function (err) {
+                            Msg.error('Model', 'Error getting data from CommandRouter: ' + err);
                         });
                     }, cmdRouterElem.id);
                     return;
@@ -293,6 +293,17 @@ export default class Model {
             maxId = 0;
         dataRequest.highestId = maxId;
 
+        // Get default values
+        let defaults = [];
+        if (dataRequest.attributeDefaults) {
+            defaults = dataRequest.attributeDefaults.get(dataRequest.fromName);
+            let gdefaults = dataRequest.attributeDefaults.get('*');
+            if (defaults && gdefaults)
+                defaults = Object.assign(defaults, gdefaults);
+            else if (gdefaults)
+                defaults = gdefaults;
+        }
+
         // Test and transform sets
         let genid = 0;
         let transdata = [];
@@ -338,37 +349,30 @@ export default class Model {
 //                continue;
 //            }
             // Set default values
-            if (dataRequest.attributeDefaults) {
-                let defaults = dataRequest.attributeDefaults.get(dataRequest.fromName);
-                let gdefaults = dataRequest.attributeDefaults.get('*');
-                if (defaults && gdefaults)
-                    defaults = Object.assign(defaults, gdefaults);
-                else if (gdefaults)
-                    defaults = gdefaults;
-                if (defaults) {
-                    for (let curAttr in defaults) {
-                        if (typeof curSet[curAttr] === 'undefined') {
-                            let curVal = defaults[curAttr];
-                            // Calculate default value
-                            let placeholders = curVal.match(/%\w+%/g);
-                            if (placeholders && placeholders.length > 0) {
-                                let eq = curVal;
-                                let repall = true;
-                                for (let curPlaceh of placeholders) {
-                                    let curName = curPlaceh.split('%').join('');
-                                    if (typeof curSet[curName] !== 'undefined')
-                                        eq = eq.replace(curPlaceh, curSet[curName]);
-                                    else {
-                                        Msg.error('Model', 'Variable >' + curName + '< for calculation >' + eq + '< not found in set >' + dataRequest.fromName + '[' + curSet.id + ']<');
-                                        repall = false;
-                                        break;
-                                    }
-                                }
-                                if (repall) {
-                                    curSet[curAttr] = eval(eq);
-                                }
-                            } else
-                                curSet[curAttr] = curVal;
+            for (let curAttr in defaults) {
+                if (typeof curSet[curAttr] === 'undefined') {
+                    let curVal = defaults[curAttr];
+                    // Set default value
+                    curSet[curAttr] = curVal;
+                    if(!curVal || !curVal.match)
+                        continue;
+                    // Calculate default value
+                    let placeholders = curVal.match(/%\w+%/g);
+                    if (placeholders && placeholders.length > 0) {
+                        let eq = curVal;
+                        let repall = true;
+                        for (let curPlaceh of placeholders) {
+                            let curName = curPlaceh.split('%').join('');
+                            if (typeof curSet[curName] !== 'undefined')
+                                eq = eq.replace(curPlaceh, curSet[curName]);
+                            else {
+                                Msg.error('Model', 'Variable >' + curName + '< for calculation >' + eq + '< not found in set >' + dataRequest.fromName + '[' + curSet.id + ']<');
+                                repall = false;
+                                break;
+                            }
+                        }
+                        if (repall) {
+                            curSet[curAttr] = eval(eq);
                         }
                     }
                 }
@@ -478,8 +482,8 @@ export default class Model {
             if (typeof dataRequest.fromName === 'undefined') {
                 Msg.error('model', 'fromName in datacapsle is missing. Check your dataCapsle metadata.');
             }
-            
-                        // Special handling for command router sources
+
+            // Special handling for command router sources
             if (dataRequest.fromName.startsWith('cmd://')) {
                 let thisRef = this;
                 // Search CommandRouter
@@ -488,20 +492,20 @@ export default class Model {
                     Msg.info('Model', 'Request >' + dataRequest.id + '< should be routed by ' + cmdRouterElem.id);
 
                     let uniformedDataRequest = {};
-                    uniformedDataRequest.fromName = dataRequest.fromName.replace('cmd://','');
+                    uniformedDataRequest.fromName = dataRequest.fromName.replace('cmd://', '');
                     uniformedDataRequest.fromWheres = dataRequest.fromWheres;
                     uniformedDataRequest.data = dataRequest.data;
                     window.parent.swac.reactions.addReaction(function (requestors) {
                         let router = requestors[cmdRouterElem.id];
                         let result = router.swac_comp.executeRequest(uniformedDataRequest, false);
                         result.then(function (res) {
-                            if(!res) {
+                            if (!res) {
                                 reject('No data recived from command');
                                 return;
                             }
                             resolve(res);
-                        }).catch(function(err) {
-                            Msg.error('Model','Error getting data from CommandRouter: ' + err);
+                        }).catch(function (err) {
+                            Msg.error('Model', 'Error getting data from CommandRouter: ' + err);
                         });
                     }, cmdRouterElem.id);
                     return;
@@ -511,7 +515,7 @@ export default class Model {
                     return;
                 }
             }
-            
+
             Remote.clearDatasourceStates();
             let saveProms = [];
             // Save every dataset
@@ -872,20 +876,20 @@ export default class Model {
     static createWatchableSet(set) {
         return new WatchableSet(set);
     }
-    
+
     /**
      * Automatically detects the matching mode for data requests, useing Model.load() or Model.save()
      * depending on if data is delivered or not.
      */
-    static request(dataRequestor,supressMsgs,comp) {
-        if(!dataRequestor) {
-            Msg.error('Model','No dataRequestor given for request.',comp);
+    static request(dataRequestor, supressMsgs, comp) {
+        if (!dataRequestor) {
+            Msg.error('Model', 'No dataRequestor given for request.', comp);
             return;
         }
-        if(dataRequestor.data) {
-            return Model.save(dataRequestor,supressMsgs);
+        if (dataRequestor.data) {
+            return Model.save(dataRequestor, supressMsgs);
         } else {
-            return Model.load(dataRequestor,comp);
+            return Model.load(dataRequestor, comp);
         }
     }
 }
