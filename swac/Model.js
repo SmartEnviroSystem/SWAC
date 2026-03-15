@@ -279,9 +279,8 @@ export default class Model {
         const idAttr = dataRequest.idAttr || "id";
         const data = normalizeInput(dataCapsule);
 
-
         // ------------------------------------------------------------
-        // 2) HÖCHSTE ID ERMITTELN (ohne Spread/Map)
+        // 2) HÖCHSTE ID ERMITTELN
         // ------------------------------------------------------------
         function findMaxId(arr, idAttr) {
             let max = 0;
@@ -297,7 +296,6 @@ export default class Model {
         }
 
         dataRequest.highestId = findMaxId(data, idAttr);
-
 
         // ------------------------------------------------------------
         // 3) DEFAULTS VORBEREITEN
@@ -319,12 +317,30 @@ export default class Model {
 
         const defaults = prepareDefaults(dataRequest);
         const defaultKeys = defaults ? Object.keys(defaults) : null;
-        const placeholderRegex = /%\w+%/g;
-
 
         // ------------------------------------------------------------
-        // 4) DEFAULTS ANWENDEN
+        // 4) DEFAULT-EXPRESSIONS KOMPILIEREN
         // ------------------------------------------------------------
+        function compileExpression(expr) {
+            const js = expr.replace(/%(\w+)%/g, (_, v) => `obj.${v}`);
+            return new Function("obj", `return ${js};`);
+        }
+
+        function prepareCompiledDefaults(defaults) {
+            if (!defaults)
+                return null;
+            const compiled = {};
+            for (const key of Object.keys(defaults)) {
+                const val = defaults[key];
+                if (typeof val === "string" && /%\w+%/.test(val)) {
+                    compiled[key] = compileExpression(val);
+                }
+            }
+            return compiled;
+        }
+
+        const compiledDefaults = prepareCompiledDefaults(defaults);
+
         function applyDefaults(curSet) {
             if (!defaultKeys)
                 return;
@@ -334,37 +350,21 @@ export default class Model {
                 if (typeof curSet[attr] !== "undefined")
                     continue;
 
-                let val = defaults[attr];
-
-                if (typeof val !== "string") {
-                    curSet[attr] = val;
-                    continue;
-                }
-
-                const placeholders = val.match(placeholderRegex);
-                if (placeholders) {
-                    let expr = val;
-                    let ok = true;
-
-                    for (let p = 0; p < placeholders.length; p++) {
-                        const ph = placeholders[p];
-                        const name = ph.slice(1, -1);
-                        if (typeof curSet[name] === "undefined") {
-                            Msg.error("Model", `Variable >${name}< not found for default expression >${expr}<`);
-                            ok = false;
-                            break;
-                        }
-                        expr = expr.replace(ph, curSet[name]);
+                if (compiledDefaults && compiledDefaults[attr]) {
+                    try {
+                        curSet[attr] = compiledDefaults[attr](curSet);
+                    } catch (e) {
+                        Msg.error(
+                                "Model",
+                                `Error evaluating default for >${attr}< in >${dataRequest.fromName}[${curSet.id}]<: ${e}`
+                                );
+                        curSet[attr] = defaults[attr];
                     }
-
-                    if (ok)
-                        val = eval(expr);
+                } else {
+                    curSet[attr] = defaults[attr];
                 }
-
-                curSet[attr] = val;
             }
         }
-
 
         // ------------------------------------------------------------
         // 5) ZEITFILTER
@@ -384,7 +384,6 @@ export default class Model {
             }
             return true;
         }
-
 
         // ------------------------------------------------------------
         // 6) JOIN-INFOS
@@ -408,7 +407,6 @@ export default class Model {
             curSet.joinsetsIds = ids.join(",");
         }
 
-
         // ------------------------------------------------------------
         // 7) ATTRIBUTE-RENAMING
         // ------------------------------------------------------------
@@ -430,10 +428,11 @@ export default class Model {
             }
         }
 
-
         // ------------------------------------------------------------
         // 8) WATCHABLESET ERZEUGEN
         // ------------------------------------------------------------
+        let genid = 0;
+
         function wrapWatchable(curSet) {
             if (curSet.constructor.name === "WatchableSet")
                 return curSet;
@@ -447,7 +446,6 @@ export default class Model {
             return new WatchableSet(curSet);
         }
 
-
         // ------------------------------------------------------------
         // 9) STORE SICHERSTELLEN
         // ------------------------------------------------------------
@@ -458,12 +456,10 @@ export default class Model {
 
         const store = Model.store[dataRequest.storeId];
 
-
         // ------------------------------------------------------------
         // 10) HAUPTSCHLEIFE
         // ------------------------------------------------------------
         const transdata = Object.create(null);
-        let genid = 0;
 
         const lazyLimit = comp?.options?.lazyLoading || 0;
         const lastLoaded = comp?.lastloaded || 0;
