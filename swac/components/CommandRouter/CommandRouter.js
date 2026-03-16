@@ -1,3 +1,5 @@
+/* global UIkit */
+
 import View from '../../View.js';
 import Msg from '../../Msg.js';
 
@@ -190,7 +192,7 @@ export default class CommandRouter extends View {
                 Msg.error('CommandRouter', 'Command >' + cmd + '< threw error: ' + e, this.requestor);
             }
         }
-        Msg.info('CommandRouter','Did not find command >' + cmd + '< at components. Try useing datarequest.',this.requestor);
+        Msg.info('CommandRouter', 'Did not find command >' + cmd + '< at components. Try useing datarequest.', this.requestor);
         // 2) No component handled the command – fall back to WebSocket / REST datacapsule
         if (!executed && this.options.targetDatacapsule) {
             const curCapsule = Object.assign({}, this.options.targetDatacapsule);
@@ -237,19 +239,19 @@ export default class CommandRouter extends View {
         let result;
         if (dataRequest.data) {
             const hasValidId = dataRequest.data.some(obj => obj.id != null);
-            if(hasValidId) {
-                Msg.flow('CommandRouter','executeRequest with action PUT');
+            if (hasValidId) {
+                Msg.flow('CommandRouter', 'executeRequest with action PUT');
                 result = await this.executeCommand('PUT', dataRequest, processResult);
             } else {
-                Msg.flow('CommandRouter','executeRequest with action POST');
+                Msg.flow('CommandRouter', 'executeRequest with action POST');
                 result = await this.executeCommand('POST', dataRequest, processResult);
             }
-        } else if(dataRequest.fromName.startsWith('action=')) {
-            let action = dataRequest.fromName.replace('action=','');
-            Msg.flow('CommandRouter','executeRequest with action ' + action);
+        } else if (dataRequest.fromName.startsWith('action=')) {
+            let action = dataRequest.fromName.replace('action=', '');
+            Msg.flow('CommandRouter', 'executeRequest with action ' + action);
             result = await this.executeCommand(action, dataRequest, processResult);
         } else {
-            Msg.flow('CommandRouter','executeRequest with action GET');
+            Msg.flow('CommandRouter', 'executeRequest with action GET');
             result = await this.executeCommand('GET', dataRequest, processResult);
         }
         return result;
@@ -327,8 +329,8 @@ export default class CommandRouter extends View {
         this.suppressModal = false;
 
         document.dispatchEvent(new CustomEvent(
-            'swac_' + this.requestor.id + '_commandrouter_executed',
-            {detail: {comp, result}}
+                'swac_' + this.requestor.id + '_commandrouter_executed',
+                {detail: {comp, result}}
         ));
     }
 
@@ -369,10 +371,10 @@ export default class CommandRouter extends View {
         // Unwrap unified envelope: data lives in records[0]
         let row = dataset;
         if (Array.isArray(dataset.records) && dataset.records[0] &&
-            typeof dataset.records[0] === 'object') {
+                typeof dataset.records[0] === 'object') {
             row = dataset.records[0];
         } else if (dataset.data !== null && dataset.data !== undefined &&
-            typeof dataset.data === 'object' && !Array.isArray(dataset.data)) {
+                typeof dataset.data === 'object' && !Array.isArray(dataset.data)) {
             // Legacy fallback
             row = dataset.data;
         }
@@ -385,22 +387,45 @@ export default class CommandRouter extends View {
             error.style.color = isError ? '#e53e3e' : '#2b6cb0';
         }
 
+        let usedAttributes = []
+        if (this.options.attributeOrder) {
+            for (var curAttr of this.options.attributeOrder) {
+                if (!row[curAttr]) {
+                    continue;
+                }
+
+                usedAttributes.push(curAttr);
+                let tr = document.createElement('tr');
+                let tdKey = document.createElement('td');
+                let tdVal = document.createElement('td');
+
+                tdKey.textContent = curAttr;
+                tdKey.style.fontWeight = '600';
+                tdVal.textContent = row[curAttr];
+
+                tr.appendChild(tdKey);
+                tr.appendChild(tdVal);
+                tbody.appendChild(tr);
+            }
+        }
+
         Object.entries(row).forEach(function ([key, value]) {
-            // Skip the status field — it is already shown in the info/error banner above
-            if (key === 'status')
-                return;
+            if (!usedAttributes.includes(key)) {
+                // Skip the status field — it is already shown in the info/error banner above
+                if (key === 'status')
+                    return;
+                let tr = document.createElement('tr');
+                let tdKey = document.createElement('td');
+                let tdVal = document.createElement('td');
 
-            let tr = document.createElement('tr');
-            let tdKey = document.createElement('td');
-            let tdVal = document.createElement('td');
+                tdKey.textContent = key;
+                tdKey.style.fontWeight = '600';
+                tdVal.textContent = (value !== null && value !== undefined) ? value : '—';
 
-            tdKey.textContent = key;
-            tdKey.style.fontWeight = '600';
-            tdVal.textContent = (value !== null && value !== undefined) ? value : '—';
-
-            tr.appendChild(tdKey);
-            tr.appendChild(tdVal);
-            tbody.appendChild(tr);
+                tr.appendChild(tdKey);
+                tr.appendChild(tdVal);
+                tbody.appendChild(tr);
+        }
         });
 
         table.style.display = '';
