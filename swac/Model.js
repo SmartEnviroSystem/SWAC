@@ -463,8 +463,6 @@ export default class Model {
         // ------------------------------------------------------------
         // 10) HAUPTSCHLEIFE
         // ------------------------------------------------------------
-        const transdata = Object.create(null);
-
         const lazyLimit = comp?.options?.lazyLoading || 0;
         const lastLoaded = comp?.lastloaded || 0;
         let loadedCount = 0;
@@ -503,12 +501,10 @@ export default class Model {
 
             const wset = wrapWatchable(curSet);
             wset.swac_dataRequest = dataRequest;
-
-            transdata[curSet[idAttr]] = wset;
             store.addSet(wset);
         }
 
-        return transdata;
+        return store;
     }
 
     static convertDataOld(dataCapsule, dataRequest, comp) {
