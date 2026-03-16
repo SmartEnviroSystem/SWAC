@@ -429,6 +429,9 @@ export default class CommandRouter extends View {
         }
         });
 
+        // Translate table contents
+        window.swac.lang.translateAll(tbody);
+
         table.style.display = '';
         UIkit.modal(modal).show();
     }
