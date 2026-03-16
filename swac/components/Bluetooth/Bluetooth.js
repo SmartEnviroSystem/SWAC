@@ -67,7 +67,7 @@ export default class Bluetooth extends View {
 
         this.desc.opts[1] = {name: 'communicationTimeout', desc: 'Timeout in milliseconds to wait for a notification response from a Pi.'};
         if (!options.communicationTimeout)
-            this.options.communicationTimeout = 5000;
+            this.options.communicationTimeout = 30000;
 
         this.desc.opts[2] = {name: 'uartServiceUUID', desc: 'UUID of the Nordic UART BLE service on the Pi.'};
         if (!options.uartServiceUUID)
