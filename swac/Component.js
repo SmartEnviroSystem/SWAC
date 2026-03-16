@@ -682,6 +682,10 @@ DEFINTION of SET:\n\
             Msg.error('Component', 'Empty data given.', this.requestor);
             return;
         }
+        if (!data.getSets && typeof data[Symbol.iterator] !== "function") {
+            Msg.error('Component', 'Given value to addData() is nor a WatchableSource nor an iterable.', this.requestor);
+            return;
+        }
         Msg.flow('Component', 'addData(' + fromName + ',' + data.length + ')', this.requestor);
 
         // Use watchablesource so that component gets informed about new datasets
