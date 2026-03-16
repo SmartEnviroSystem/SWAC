@@ -268,6 +268,7 @@ export default class ComponentHandler {
             // Overwrite fromName when ViewRequestor has it's own
             if(requestor.fromName)
                 dataRequestor.fromName = requestor.fromName;
+            console.log('TEST loadData requestor:',requestor);
             
             // Overwrite fromName when fromName is given by url
             // Get fromName from URL if available
@@ -279,12 +280,17 @@ export default class ComponentHandler {
             if(fromNameURL)
                 dataRequestor.fromName = fromNameURL;
             
+            // Overwrite fromWheres when given by requestor
+            if(requestor.fromWheres)
+                dataRequestor.fromWheres = requestor.fromWheres
+            
             // Resolve if no data is requested
             if (!dataRequestor.fromName || dataRequestor.fromName === 'none') {
                 Msg.info('ComponentHandler', 'No data requested', requestor);
                 resolve(null);
                 return;
             }
+            
             // Set default mainSource
             //TODO unify this with other ways adding data
             requestor.swac_comp.options.mainSource = requestor.fromName;
