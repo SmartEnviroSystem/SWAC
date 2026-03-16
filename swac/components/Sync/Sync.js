@@ -365,7 +365,11 @@ export default class Sync extends View {
         let dataPromise = Model.request(this.options.syncModeRequestor);
         // Wait for data to be loaded
         dataPromise.then(function (data) {
-            // Get status dataset
+            // Get status dataset            
+            if(data.getSets) {
+                data = data.getSets();
+            }
+            
             for (let curSet of data) {
                 if (!curSet)
                     continue;
@@ -399,6 +403,10 @@ export default class Sync extends View {
         let dataPromise = Model.request(this.options.syncStartRequestor);
         // Wait for data to be loaded
         dataPromise.then(function (data) {
+            if(data.getSets) {
+                data = data.getSets();
+            }
+            
             let startBtn = thisRef.requestor.querySelector('.swac_sync_startbtn');
 
             let value = thisRef.getByPath(data,thisRef.options.syncStartResponseAttribute);
@@ -429,6 +437,10 @@ export default class Sync extends View {
         let dataPromise = Model.request(this.options.syncStopRequestor);
         // Wait for data to be loaded
         dataPromise.then(function (data) {
+            if(data.getSets) {
+                data = data.getSets();
+            }
+            
             let stopBtn = thisRef.requestor.querySelector('.swac_sync_stopbtn');
             // Check response value
             let value = thisRef.getByPath(data,thisRef.options.syncStopResponseAttribute);
