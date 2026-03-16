@@ -400,6 +400,7 @@ export default class CommandRouter extends View {
                 let tdVal = document.createElement('td');
 
                 tdKey.textContent = curAttr;
+                tdKey.setAttribute('swac_lang',curAttr);
                 tdKey.style.fontWeight = '600';
                 tdVal.textContent = row[curAttr];
 
