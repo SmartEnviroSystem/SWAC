@@ -268,7 +268,6 @@ export default class ComponentHandler {
             // Overwrite fromName when ViewRequestor has it's own
             if(requestor.fromName)
                 dataRequestor.fromName = requestor.fromName;
-            console.log('TEST loadData requestor:',requestor);
             
             // Overwrite fromName when fromName is given by url
             // Get fromName from URL if available
