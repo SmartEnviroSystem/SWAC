@@ -28,6 +28,10 @@ export default class Model {
             // Support filter from URL
             const urlParams = new URLSearchParams(window.location.search);
             const filter = urlParams.getAll('filter');
+            //TODO fix this workaround
+            if(!dataRequest.fromWheres) {
+                dataRequest.fromWheres = [];
+            }
 
             for (let curFilter of filter) {
                 // Check if filter is applicable for component
@@ -36,9 +40,9 @@ export default class Model {
                     // Remove comps entry from filter
                     parts.pop();
                     let filteradd = parts.join(',');
-                    if (dataRequest.fromWheres['filter'] && !dataRequest.fromWheres['filter'].includes(filteradd)) {
+                    if (dataRequest.fromWheres && dataRequest.fromWheres['filter'] && !dataRequest.fromWheres['filter'].includes(filteradd)) {
                         dataRequest.fromWheres['filter'] += '&filter=' + filteradd;
-                    } else if (!dataRequest.fromWheres['filter']) {
+                    } else if (dataRequest.fromWheres && !dataRequest.fromWheres['filter']) {
                         dataRequest.fromWheres['filter'] = filteradd;
                     }
                 }
