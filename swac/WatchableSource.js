@@ -175,7 +175,7 @@ export default class WatchableSource {
         return 'WatchableSource(' + this.swac_fromName + ')';
     }
 
-     /**
+    /**
      * Build watchableSource to objectList
      * 
      * @return (Array) dataList
@@ -188,5 +188,26 @@ export default class WatchableSource {
             dataList.push(curSet.toObject());
         }
         return dataList;
+    }
+
+    /**
+     * Make WatchableSource iterable over contained datasets
+     */
+    [Symbol.iterator] () {
+        // Wir iterieren über this.sets, ignorieren aber leere Stellen
+        let index = 0;
+        const sets = this.sets;
+
+        return {
+            next() {
+                while (index < sets.length) {
+                    const value = sets[index++];
+                    if (value !== undefined && value !== null) {
+                        return {value, done: false};
+                    }
+                }
+                return {done: true};
+            }
+        };
     }
 }
