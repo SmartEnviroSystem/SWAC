@@ -565,11 +565,20 @@ SWAC.replaceGlobalPlaceholders = function () {
 
 
     // Remove placeholders that can not be filled
-    let unreplaced = document.body.innerHTML.match(/\{\{(.+?)\}\}/g);
-    if (unreplaced) {
-        for (let curUnreplaced of unreplaced) {
-            SWAC.searchAndReplace(curUnreplaced, '', document);
-        }
+    let regex = /(\{\{+)\s*([^}]+?)\s*(\}\}+)/g;
+    let match;
+    let seen = new Set();
+
+    while ((match = regex.exec(document.body.innerHTML)) !== null) {
+        let full = match[0];   // komplette Klammerstruktur
+        let name = match[2];   // Platzhaltername
+
+        if (seen.has(name))
+            continue;
+        seen.add(name);
+
+        Msg.warn('swac.js', 'No value found for global placeholder >' + full + '<');
+        SWAC.searchAndReplace(full, '', document);
     }
 };
 
@@ -681,4 +690,19 @@ SWAC.convertSetToBestFitDatatypes = function (set) {
         }
     }
     return set;
+};
+
+/**
+ * Finds the next element upwards in hierarchy that was repeated for set.
+ * 
+ * @param {DOMElement} element Element where to start the search
+ * @returns {unresolved}
+ */
+SWAC.findRepeatedForSet = function (element) {
+    if (element.classList.contains("swac_repeatedForSet")) {
+        return element;
+    } else if (typeof element.parentElement !== 'undefined' && element.parentElement !== null) {
+        return this.findRepeatedForSet(element.parentElement);
+    }
+    return null;
 };
