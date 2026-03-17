@@ -89,7 +89,8 @@ export default class ComponentHandler {
                 resolve(true);
             } else {
                 Model.load(options.activeOn).then(function (res) {
-                    if (res.find(set => set)) {
+                    let datasets = res.getSets();
+                    if (datasets.find(set => set)) {
                         resolve(true);
                     } else {
                         resolve(false);
