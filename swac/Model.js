@@ -1039,7 +1039,7 @@ export default class Model {
      * @param {Map} attributeRenames Renameings for attributes
      * @param {int} reloadInterval Time in milliseconds after which data should no loger be used from local
      * @param {DataObserver[]} observers Objects that implement the DataObserver
-     * @return {Promise<DataCapsule>} Promise that resolves to the data if succsessfull
+     * @return {Promise<WatchableSource>} Promise that resolves to a WatchableSource containing the data if succsessfull
      */
     static getFromReference(reference, idAttr, attributeDefaults, attributeRenames, reloadInterval, observers, comp) {
         Msg.flow('Model', 'getFromReference(' + reference + ')', this.requestor);
@@ -1079,11 +1079,7 @@ export default class Model {
             }
 
             thisRef.load(dataRequest, comp).then(function (data) {
-                let dataCapsule = {
-                    fromName: dataRequest.fromName,
-                    data: data
-                };
-                resolve(dataCapsule);
+                resolve(data);
             }).catch(function (error) {
                 reject(error);
             });
