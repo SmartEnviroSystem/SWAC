@@ -182,9 +182,18 @@ export default class Navigation extends View {
                 // --- Platzhalter ersetzen ---
                 // Beispiel: href="details.html?id={id}&name={username}"
                 if (curHref.includes('{')) {
-                    curHref = curHref.replace(/\{([^}]+)\}/g, (match, p1) => {
-                        // p1 = Name des Parameters
-                        return urlParams.get(p1) ?? match; // falls nicht vorhanden, Platzhalter stehen lassen
+                    // Geplace placeholder from url params or global params
+                    curHref = curHref.replace(/\{\{([^}]+)\}\}/g, (match, p1) => {
+                        let value = urlParams.get(p1);
+                        if(typeof value === 'undefined') {
+                            value = SWAC_config.globalparams[p1];
+                        }
+                        return value ?? match; // falls nicht vorhanden, Platzhalter stehen lassen
+                    });
+                    
+                    curHref = curHref.replace(/{([^}]+)}/g, (match, p1) => {
+                        let attrElem = document.querySelector('[attrname="'+p1+'"]');
+                        return attrElem.innerHTML ?? match; // falls nicht vorhanden, Platzhalter stehen lassen
                     });
                 }
 
@@ -203,11 +212,12 @@ export default class Navigation extends View {
                         imgElem.remove();
                     }
                 }
-                
+                console.log('TEST final href', curHref);
                 // Open in frame
-                if(set.frame) {
+                if (set.frame) {
                     curA.setAttribute('href', '#');
-                    curA.addEventListener('click', function(evt) {
+                    curA.setAttribute('test', curHref);
+                    curA.addEventListener('click', function (evt) {
                         evt.preventDefault();
                         document.getElementById(set.frame).src = curHref;
                     });
