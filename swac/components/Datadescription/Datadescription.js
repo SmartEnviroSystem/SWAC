@@ -633,6 +633,16 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
             Msg.error('Datadescription', 'No legend code found.', this.requestor);
             return;
         }
+
+        if(!this.options.activeSource) {
+            Msg.error('Datadescription','No datadescription loaded.',this.requestor);
+            return;
+        }
+        if (!this.data[this.options.activeSource]) {
+            Msg.error('Datadescription', 'There is no datadescription with name >' + this.options.activeSource + '<', this.requestor);
+            return;
+        }
+
         let legenddata = this.data[this.options.activeSource].getSet(this.options.activeSet);
         for (const attribute in legenddata) {
             // Exclude functions
@@ -701,7 +711,7 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
         // Title Element
         const titleElem = attributeElem.querySelector('.swac_datadescription_datatitle');
         titleElem.value = desc.txt_title;
-        titleElem.setAttribute('swac_langattr','value:'+desc.txt_title);
+        titleElem.setAttribute('swac_langattr', 'value:' + desc.txt_title);
         titleElem.placeholder = 'Datadescription.txt_titlePlaceholder';
         titleElem.style.width = titleElem.value.length > 0 ? titleElem.value.length + 'ch' : titleElem.placeholder.length + 'ch';
         titleElem.addEventListener('input', () => {
@@ -759,7 +769,7 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
         // Description Element
         const descElem = attributeElem.querySelector('.swac_datadescription_datadesc');
         descElem.value = desc.txt_desc;
-        descElem.setAttribute('swac_langattr','value:'+desc.txt_desc);
+        descElem.setAttribute('swac_langattr', 'value:' + desc.txt_desc);
         descElem.placeholder = 'Datadescription.txt_descPlaceholder';
         descElem.style.width = descElem.value.length > 0 ? descElem.value.length + 'ch' : descElem.placeholder.length + 'ch';
         descElem.addEventListener('input', () => {
@@ -940,7 +950,7 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
         valueTxt.classList.add('input_nostyle')
         valueTxt.classList.add('swac_datadescription_value_txt')
         valueTxt.setAttribute('value', txt);
-        valueTxt.setAttribute('swac_langattr','value:'+txt);
+        valueTxt.setAttribute('swac_langattr', 'value:' + txt);
         valueTxt.style.marginLeft = '10px';
         valueTxt.placeholder = 'Datadescription.valueTxtPlaceholder';
         valueTxt.style.width = valueTxt.value.length > 0 ? valueTxt.value.length + 'ch' : valueTxt.placeholder.length + 'ch';
@@ -1080,11 +1090,20 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
                 elementInStorage = true;
                 break;
             }
-            ;
         }
         if (!elementInStorage) {
             this.formatedDataElements.push(element);
         }
+        
+        if(!this.options.activeSource) {
+            Msg.error('Datadescription','No datadescription loaded.',this.requestor);
+            return;
+        }
+        if (!this.data[this.options.activeSource]) {
+            Msg.error('Datadescription', 'There is no datadescription with name >' + this.options.activeSource + '<', this.requestor);
+            return;
+        }
+        
         let legenddata = this.data[this.options.activeSource].getSet(this.options.activeSet);
         for (var attribute in legenddata) {
             // Exclude swac internal attributes
