@@ -742,6 +742,10 @@ export default class Worldmap2d extends View {
                 return;
             }
         } else if (this.options.geoJSONAttr) {
+            if (!set[this.options.geoJSONAttr]) {
+                Msg.warn('Worldmap2d', 'Could not create marker for set >' + set.swac_fromName + '[' + set.id + ']<: Coordinate attribute >' + this.options.geoJSONAttr + '< is missing.', this.requestor);
+                return;
+            }
             geoJSON.geometry.coordinates = set[this.options.geoJSONAttr].coordinates;
         } else {
             if (!set[this.options.lonAttr] || !set[this.options.latAttr]) {
@@ -925,7 +929,6 @@ export default class Worldmap2d extends View {
         var polyline = L.polyline(points, {color: 'red'}).addTo(this.viewer);
     }
 
-
     /**
      * Removes given marker from the map.
      * @param {Object} marker The marker that will be removed
@@ -935,7 +938,8 @@ export default class Worldmap2d extends View {
         delete this.markers[marker.feature.set.swac_fromName][marker.feature.set.id];
         // Remove marker from sequential list
         let idx = this.markersArray.indexOf(marker);
-        if (idx !== -1) this.markersArray.splice(idx, 1);
+        if (idx !== -1)
+            this.markersArray.splice(idx, 1);
     }
     /**
      * Removes given markers and Area from the map.
