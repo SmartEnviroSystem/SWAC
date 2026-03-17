@@ -566,7 +566,12 @@ export default class Worldmap2d extends View {
                     this.loadDatasourcesFromOptions();
                 })
             }
-
+            
+            // Calculate height
+            let vh = Math.max(document.documentElement.clientHeight || 0, window.innerHeight || 0)
+            let startHeight = vh / 100 * 80;
+            this.requestor.style.height = startHeight + 'px';
+            
             resolve();
         });
     }
