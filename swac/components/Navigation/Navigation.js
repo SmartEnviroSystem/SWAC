@@ -185,15 +185,19 @@ export default class Navigation extends View {
                     // Geplace placeholder from url params or global params
                     curHref = curHref.replace(/\{\{([^}]+)\}\}/g, (match, p1) => {
                         let value = urlParams.get(p1);
-                        if(typeof value === 'undefined') {
+                        if (typeof value === 'undefined') {
                             value = SWAC_config.globalparams[p1];
                         }
                         return value ?? match; // falls nicht vorhanden, Platzhalter stehen lassen
                     });
-                    
+
                     curHref = curHref.replace(/{([^}]+)}/g, (match, p1) => {
-                        let attrElem = document.querySelector('[attrname="'+p1+'"]');
-                        return attrElem.innerHTML ?? match; // falls nicht vorhanden, Platzhalter stehen lassen
+                        let attrElem = document.querySelector('[attrname="' + p1 + '"]');
+                        if (attrElem) {
+                            return attrElem.innerHTML ?? match;
+                        } else {
+                            return match;
+                        }
                     });
                 }
 
