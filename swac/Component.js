@@ -68,7 +68,10 @@ export default class Component {
         this.desc.opts[1005] = {
             name: "attributeRenames",
             desc: "Renameing of attributes. Define incoming attribute name as key and target name as value",
-            example: new Map([['doubleval', 'float'], ['intval', 'long']])
+            example: new Map([["../../data/exampledata_list.json", {
+                        "x_other": "x",
+                        "y_other": "y"
+                    }]])
         };
         if (!this.options.attributeRenames)
             this.options.attributeRenames = new Map();
@@ -905,39 +908,51 @@ DEFINTION of SET:\n\
             for (let curAttr in defaults) {
                 if (typeof set[curAttr] === 'undefined') {
                     let curVal = defaults[curAttr];
+                    if (!curVal)
+                        continue;
+                    let defaultset = false;
                     // Calculate default value
-                    let placeholders = curVal.match(/%\w+%/g);
-                    if (placeholders && placeholders.length > 0) {
-                        let eq = curVal;
-                        let repall = true;
-                        for (let curPlaceh of placeholders) {
-                            let curName = curPlaceh.split('%').join('');
-                            if (typeof set[curName] !== 'undefined')
-                                eq = eq.replace(curPlaceh, set[curName]);
-                            else {
-                                Msg.error('Model', 'Variable >' + curName + '< for calculation >' + eq + '< not found in set >' + dataRequest.fromName + '[' + set.id + ']<');
-                                repall = false;
-                                break;
+                    if (typeof curVal.match == 'function') {
+                        let placeholders = curVal.match(/%\w+%/g);
+                        if (placeholders && placeholders.length > 0) {
+                            let eq = curVal;
+                            let repall = true;
+                            for (let curPlaceh of placeholders) {
+                                let curName = curPlaceh.split('%').join('');
+                                if (typeof set[curName] !== 'undefined')
+                                    eq = eq.replace(curPlaceh, set[curName]);
+                                else {
+                                    Msg.error('Model', 'Variable >' + curName + '< for calculation >' + eq + '< not found in set >' + dataRequest.fromName + '[' + set.id + ']<');
+                                    repall = false;
+                                    break;
+                                }
+                            }
+                            if (repall) {
+                                set[curAttr] = eval(eq);
+                                defaultset = true;
                             }
                         }
-                        if (repall) {
-                            set[curAttr] = eval(eq);
-                        }
-                    } else
+                    }
+                    if (!defaultset)
                         set[curAttr] = curVal;
                 }
             }
         }
 
         // Set attribute renameing
-        if (this.options?.attributeRenames.size > 0) {
-            set['swac_renamedAttrsByComp'] = {};
-            for (let [curAttr, curRename] of this.options.attributeRenames) {
-                if (typeof set[curAttr] !== 'undefined') {
-                    set[curRename] = set[curAttr];
-                    delete set[curAttr];
-                    set['swac_renamedAttrsByComp'][curAttr] = curRename;
+        let renames = this.options.attributeRenames.get(set.swac_fromName);
+        let grenames = this.options.attributeRenames.get('*');
+        if (renames && grenames)
+            renames = Object.assign(defaults, grenames);
+        else if (grenames)
+            renames = grenames;
+        if (renames) {
+            for (let curOldAttr in renames) {
+                if (typeof set[curOldAttr] === 'undefined') {
+                    continue;
                 }
+                set[renames[curOldAttr]] = set[curOldAttr];
+                delete set[curOldAttr];
             }
         }
 
