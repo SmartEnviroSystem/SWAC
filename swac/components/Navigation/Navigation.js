@@ -212,11 +212,9 @@ export default class Navigation extends View {
                         imgElem.remove();
                     }
                 }
-                console.log('TEST final href', curHref);
                 // Open in frame
                 if (set.frame) {
                     curA.setAttribute('href', '#');
-                    curA.setAttribute('test', curHref);
                     curA.addEventListener('click', function (evt) {
                         evt.preventDefault();
                         document.getElementById(set.frame).src = curHref;
