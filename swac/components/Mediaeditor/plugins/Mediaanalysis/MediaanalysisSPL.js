@@ -4,8 +4,8 @@ import Plugin from '../../../../Plugin.js'
 
 export default class MediaanalysisSPL extends Plugin {
 
-    constructor(pluginconf) {
-        super(pluginconf);
+    constructor(conf = {}) {
+        super(conf);
         this.name = 'Mediaeditor/plugins/Mediaanalysis';
         this.desc.templates[0] = {
             name: 'mediaanalysis',
