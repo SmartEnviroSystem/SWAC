@@ -13,11 +13,13 @@ export default class Bluetooth extends View {
 
         this.desc.templates[0] = {
             name: 'default',
+            style: 'default',
             desc: 'Default template with connect button, status bar and dynamic device cards.'
         };
 
         this.desc.templates[1] = {
             name: 'minimal',
+            style: 'default',
             desc: 'Minimal template with connect button'
         };
 

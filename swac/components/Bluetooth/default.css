@@ -1,0 +1,372 @@
+/* =============================================================================
+   Bluetooth Component Styles — Light Mode
+   Ablageort: swac/components/Bluetooth/Bluetooth.css
+   Wird von SWAC automatisch über desc.styles in Bluetooth.js eingebunden.
+   ============================================================================= */
+
+/* ── Root Variables ─────────────────────────────────────────────────────────── */
+.swac_bluetooth_panel {
+    --ble-bg:         #f8f9fc;
+    --ble-surface:    #ffffff;
+    --ble-border:     #dde1ec;
+    --ble-accent:     #2563eb;
+    --ble-accent-dim: #1d4ed8;
+    --ble-success:    #16a34a;
+    --ble-warn:       #d97706;
+    --ble-danger:     #dc2626;
+    --ble-text:       #1e293b;
+    --ble-muted:      #64748b;
+    --ble-radius:     10px;
+    --ble-font:       'Courier New', Courier, monospace;
+
+    font-family:   var(--ble-font);
+    background:    var(--ble-bg);
+    color:         var(--ble-text);
+    padding:       28px;
+    border-radius: var(--ble-radius);
+    border:        1px solid var(--ble-border);
+    max-width:     860px;
+    margin:        0 auto;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────────── */
+.ble-header {
+    display:       flex;
+    align-items:   center;
+    gap:           14px;
+    margin-bottom: 24px;
+}
+
+.ble-header-icon {
+    width:           38px;
+    height:          38px;
+    background:      linear-gradient(135deg, var(--ble-accent), #6366f1);
+    border-radius:   8px;
+    display:         flex;
+    align-items:     center;
+    justify-content: center;
+    flex-shrink:     0;
+}
+
+.ble-header h2 {
+    margin:         0;
+    font-size:      1.1rem;
+    font-weight:    600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color:          var(--ble-text);
+}
+
+.ble-header p {
+    margin:         2px 0 0;
+    font-size:      0.72rem;
+    color:          var(--ble-muted);
+    letter-spacing: 0.03em;
+}
+
+/* ── Status Bar ─────────────────────────────────────────────────────────────── */
+.swac_bluetooth_status {
+    display:        flex;
+    align-items:    center;
+    gap:            8px;
+    font-size:      0.75rem;
+    color:          var(--ble-muted);
+    margin-bottom:  20px;
+    padding:        8px 12px;
+    background:     var(--ble-surface);
+    border:         1px solid var(--ble-border);
+    border-radius:  6px;
+    min-height:     34px;
+    letter-spacing: 0.03em;
+}
+
+.swac_bluetooth_status::before {
+    content:    '●';
+    color:      #cbd5e1;
+    font-size:  0.6rem;
+    transition: color 0.3s;
+}
+
+.swac_bluetooth_status.ble-status-connected::before {
+    color: var(--ble-success);
+}
+.swac_bluetooth_status.ble-status-error::before     {
+    color: var(--ble-danger);
+}
+
+/* ── Connect Button ─────────────────────────────────────────────────────────── */
+.swac_bluetooth_connect_btn {
+    display:        inline-flex;
+    align-items:    center;
+    gap:            8px;
+    background:     var(--ble-accent);
+    color:          #fff;
+    border:         none;
+    border-radius:  var(--ble-radius);
+    padding:        10px 20px;
+    font-family:    var(--ble-font);
+    font-size:      0.8rem;
+    font-weight:    600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor:         pointer;
+    transition:     background 0.2s, transform 0.1s;
+    margin-bottom:  28px;
+}
+
+.swac_bluetooth_connect_btn:hover  {
+    background: var(--ble-accent-dim);
+}
+.swac_bluetooth_connect_btn:active {
+    transform:  scale(0.97);
+}
+
+/* ── Device List ────────────────────────────────────────────────────────────── */
+.swac_bluetooth_device_list {
+    list-style:     none;
+    padding:        0;
+    margin:         0;
+    display:        flex;
+    flex-direction: column;
+    gap:            16px;
+}
+
+/* ── Device Card ────────────────────────────────────────────────────────────── */
+.ble-device-card {
+    background:    var(--ble-surface);
+    border:        1px solid var(--ble-border);
+    border-radius: var(--ble-radius);
+    overflow:      hidden;
+    box-shadow:    0 1px 4px rgba(0, 0, 0, 0.06);
+    animation:     ble-card-in 0.25s ease;
+}
+
+@keyframes ble-card-in {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+    to   {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.ble-device-header {
+    display:         flex;
+    align-items:     center;
+    justify-content: space-between;
+    padding:         12px 16px;
+    border-bottom:   1px solid var(--ble-border);
+    background:      #eff6ff;
+}
+
+.ble-device-name-row {
+    display:     flex;
+    align-items: center;
+    gap:         10px;
+}
+
+.ble-toggle-btn {
+    background:  none;
+    border:      none;
+    cursor:      pointer;
+    font-size:   1rem;
+    color:       var(--ble-muted);
+    padding:     0 2px;
+    line-height: 1;
+    transition:  color 0.15s, transform 0.15s;
+    flex-shrink: 0;
+}
+
+.ble-toggle-btn:hover {
+    color: var(--ble-accent);
+}
+
+.ble-dot {
+    width:         8px;
+    height:        8px;
+    border-radius: 50%;
+    background:    var(--ble-success);
+    box-shadow:    0 0 5px rgba(22, 163, 74, 0.4);
+    flex-shrink:   0;
+}
+
+.ble-device-name {
+    font-size:      0.85rem;
+    font-weight:    700;
+    color:          var(--ble-text);
+    letter-spacing: 0.04em;
+}
+
+.ble-device-id {
+    font-size:      0.65rem;
+    color:          var(--ble-muted);
+    margin-top:     1px;
+    letter-spacing: 0.03em;
+}
+
+.ble-disconnect-btn {
+    background:     transparent;
+    border:         1px solid var(--ble-danger);
+    color:          var(--ble-danger);
+    border-radius:  6px;
+    padding:        4px 10px;
+    font-family:    var(--ble-font);
+    font-size:      0.68rem;
+    font-weight:    600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    cursor:         pointer;
+    transition:     background 0.15s, color 0.15s;
+}
+
+.ble-disconnect-btn:hover {
+    background: var(--ble-danger);
+    color:      #fff;
+}
+
+/* ── Command Area ───────────────────────────────────────────────────────────── */
+.ble-commands {
+    padding: 14px 16px;
+}
+
+.ble-commands-label {
+    font-size:      0.65rem;
+    color:          var(--ble-muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom:  10px;
+}
+
+.ble-cmd-grid {
+    display:               grid;
+    grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+    gap:                   8px;
+}
+
+/* ── Command Button ─────────────────────────────────────────────────────────── */
+.ble-cmd-btn {
+    display:        flex;
+    flex-direction: column;
+    align-items:    flex-start;
+    gap:            3px;
+    background:     #f8faff;
+    border:         1px solid var(--ble-border);
+    border-radius:  8px;
+    padding:        9px 11px;
+    font-family:    var(--ble-font);
+    cursor:         pointer;
+    transition:     border-color 0.15s, background 0.15s, box-shadow 0.15s;
+    text-align:     left;
+}
+
+.ble-cmd-btn:hover {
+    border-color: var(--ble-accent);
+    background:   #eff6ff;
+    box-shadow:   0 1px 4px rgba(37, 99, 235, 0.1);
+}
+
+.ble-cmd-btn:active {
+    transform: scale(0.97);
+}
+
+.ble-cmd-btn.ble-cmd-warn             {
+    border-color: #fde68a;
+    background: #fffbeb;
+}
+.ble-cmd-btn.ble-cmd-warn:hover       {
+    border-color: var(--ble-warn);
+    background: #fef3c7;
+}
+.ble-cmd-btn.ble-cmd-danger           {
+    border-color: #fecaca;
+    background: #fff5f5;
+}
+.ble-cmd-btn.ble-cmd-danger:hover     {
+    border-color: var(--ble-danger);
+    background: #fee2e2;
+}
+
+.ble-cmd-icon {
+    font-size: 1rem;
+    line-height: 1;
+}
+.ble-cmd-name {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--ble-text);
+    letter-spacing: 0.03em;
+    line-height: 1.2;
+}
+.ble-cmd-desc {
+    font-size: 0.62rem;
+    color:        var(--ble-muted);
+    line-height: 1.3;
+}
+
+/* ── Response Log ───────────────────────────────────────────────────────────── */
+.ble-response {
+    display:       none;
+    margin-top:    10px;
+    padding:       8px 11px;
+    background:    #f1f5f9;
+    border:        1px solid var(--ble-border);
+    border-radius: 6px;
+    font-size:     0.68rem;
+    color:         var(--ble-muted);
+    min-height:    28px;
+    word-break:    break-all;
+    white-space:   pre-wrap;
+    line-height:   1.5;
+}
+
+.ble-response.ble-response-visible {
+    display: block;
+}
+.ble-response.ble-response-ok      {
+    color: var(--ble-success);
+    background: #f0fdf4;
+    border-color: #bbf7d0;
+}
+.ble-response.ble-response-err     {
+    color: var(--ble-danger);
+    background: #fff5f5;
+    border-color: #fecaca;
+}
+
+/* ── Wlan form ───────────────────────────────────────────────────────────── */
+.ble-wlan-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 0;
+}
+
+.ble-wlan-input {
+    padding: 8px 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 14px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.ble-wlan-pw-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.ble-wlan-pw-row .ble-wlan-input {
+    flex: 1;
+}
+
+.ble-wlan-toggle {
+    background: none;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 16px;
+}
