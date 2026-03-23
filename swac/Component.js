@@ -603,15 +603,6 @@ DEFINTION of SET:\n\
             }
         }
 
-        this.desc.funcs[1027] = {
-            name: 'getMainSourceData',
-            desc: 'Get data from main data source.',
-            returns: {
-                desc: 'Object with watchable sources. With key is the name of the source. Containing WatchableSets accessable with .getSets()',
-                type: 'WatchableSource{}'
-            }
-        }
-
         // Documentation for events
         this.desc.events = [];
         this.desc.events[1000] = {
@@ -1934,6 +1925,8 @@ DEFINTION of SET:\n\
      * Get the name of the main source
      */
     getMainSourceName() {
+        Msg.error('Component','Useing deprecated method getMainSourceName(). Use swac_comp.options.fromName instead.',this.requestor);
+        
         if (this.options.mainSource)
             return this.options.mainSource;
         for (let curSource in this.data) {
@@ -1945,6 +1938,7 @@ DEFINTION of SET:\n\
      * Gets the data of the main source
      */
     getMainSourceData() {
+        Msg.error('Component','Useing deprecated method getMainSourceData(). Use getData()[swac_comp.options.fromName] instead.',this.requestor);
         return this.data[this.getMainSourceName()];
     }
 
