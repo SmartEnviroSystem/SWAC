@@ -736,6 +736,7 @@ export default class ExplainComponents extends View {
             let optDiv = optDivTpl.cloneNode(true);
             optDiv.classList.remove('swac_repeatForOption');
             optDiv.querySelector('.swac_explain_option_name').innerHTML = curOption;
+
             // Default value
             optDiv.querySelector('.swac_explain_option_default').innerHTML = this.convertToText(component.options[curOption]);
             // Type calculation
@@ -744,6 +745,12 @@ export default class ExplainComponents extends View {
 
             // Add description
             let desc = descmap.get(curOption);
+            // Deprecation notice
+            if (desc && desc.deprecated) {
+                optDiv.classList.add('swac_explain_deprecated');
+                optDiv.querySelector('.swac_explain_deprecation').classList.remove('swac_dontdisplay');
+                optDiv.querySelector('.swac_explain_option_deprecation').innerHTML = desc.deprecated;
+            }
             let deElem = this.requestor.querySelector('.swac_explain_forDocErr');
             if (typeof desc !== 'undefined') {
                 // Description text

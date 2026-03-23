@@ -39,6 +39,7 @@ var ExplainComponents_de = {
     optionsDefault : "Standardwert",
     optionsExample: "Beispiel",
     optionsNoExample: "Kein Beispiel vorhanden",
+    optionsDeprecation: "Diese Option ist veraltet. Nicht mehr verwenden.",
     plugins: "Plugins",
     pluginsNone: "Diese Komponente hat keine Plugins",
     params: "Parameter und Rückgabe",

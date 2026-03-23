@@ -12,3 +12,6 @@
 .swac_explain_forDocErr {
     display: none;
 }
+.swac_explain_deprecated {
+    border: 2px solid red;
+}

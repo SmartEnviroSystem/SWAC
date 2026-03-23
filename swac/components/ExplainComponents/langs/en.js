@@ -39,6 +39,7 @@ var ExplainComponents_en = {
     optionsDefault : "Default",
     optionsExample: "Example",
     optionsNoExample: "No example available",
+    optionsDeprecation: "This option is out of date. Don't use it.",
     plugins: "Plugins",
     pluginsNone: "This component has no plugins",
     params: "Parameters and return value",
