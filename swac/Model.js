@@ -414,23 +414,23 @@ export default class Model {
         // ------------------------------------------------------------
         // 7) ATTRIBUTE-RENAMING
         // ------------------------------------------------------------
-        const renames = dataRequest.attributeRenames || null;
-
-        function applyRenames(curSet) {
-            if (!renames)
-                return;
-
-            if (!curSet.swac_renamedAttrsByRequest)
-                curSet.swac_renamedAttrsByRequest = {};
-
-            for (const [oldAttr, newAttr] of renames) {
-                if (typeof curSet[oldAttr] !== "undefined") {
-                    curSet[newAttr] = curSet[oldAttr];
-                    curSet[oldAttr] = undefined; // statt delete
-                    curSet.swac_renamedAttrsByRequest[oldAttr] = newAttr;
-                }
-            }
-        }
+//        const renames = dataRequest.attributeRenames || null;
+//
+//        function applyRenames(curSet) {
+//            if (!renames)
+//                return;
+//
+//            if (!curSet.swac_renamedAttrsByRequest)
+//                curSet.swac_renamedAttrsByRequest = {};
+//
+//            for (const [oldAttr, newAttr] of renames) {
+//                if (typeof curSet[oldAttr] !== "undefined") {
+//                    curSet[newAttr] = curSet[oldAttr];
+//                    curSet[oldAttr] = undefined; // statt delete
+//                    curSet.swac_renamedAttrsByRequest[oldAttr] = newAttr;
+//                }
+//            }
+//        }
 
         // ------------------------------------------------------------
         // 8) WATCHABLESET ERZEUGEN
@@ -497,7 +497,7 @@ export default class Model {
 
             applyDefaults(curSet);
             applyJoinInfo(curSet);
-            applyRenames(curSet);
+//            applyRenames(curSet);
 
             const wset = wrapWatchable(curSet);
             wset.swac_dataRequest = dataRequest;
@@ -628,16 +628,16 @@ export default class Model {
             }
 
             // Renaming
-            if (dataRequest.attributeRenames) {
-                curSet.swac_renamedAttrsByRequest = {};
-                for (const [oldAttr, newAttr] of dataRequest.attributeRenames) {
-                    if (curSet[oldAttr] !== undefined) {
-                        curSet[newAttr] = curSet[oldAttr];
-                        curSet[oldAttr] = undefined;
-                        curSet.swac_renamedAttrsByRequest[oldAttr] = newAttr;
-                    }
-                }
-            }
+//            if (dataRequest.attributeRenames) {
+//                curSet.swac_renamedAttrsByRequest = {};
+//                for (const [oldAttr, newAttr] of dataRequest.attributeRenames) {
+//                    if (curSet[oldAttr] !== undefined) {
+//                        curSet[newAttr] = curSet[oldAttr];
+//                        curSet[oldAttr] = undefined;
+//                        curSet.swac_renamedAttrsByRequest[oldAttr] = newAttr;
+//                    }
+//                }
+//            }
 
             // WatchableSet
             let wset = curSet;
