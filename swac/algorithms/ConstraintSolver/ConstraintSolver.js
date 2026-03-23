@@ -476,7 +476,7 @@ export default class ConstraintSolver extends Algorithm {
             changedAttr = 'child.' + attr;
         } else {
             Msg.warn('ConstraintSolver', 'The domain collection is not of a '
-                    + 'mainSource nor has the attribute >' + this.options.parentAttr
+                    + 'mainSource nor has the attribute >' + 'parent'
                     + '< to get identified as child. So there couldnt checked on connection constraints.',
                     this.requestor);
         }

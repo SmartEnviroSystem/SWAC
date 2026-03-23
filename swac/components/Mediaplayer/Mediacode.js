@@ -128,7 +128,6 @@ export default class Mediacode {
         if (this.set.image) {
             let coverElem = document.createElement('img');
             coverElem.classList.add('swac_media_cover');
-            coverElem.setAttribute("uk-img", "");
             coverElem.setAttribute("data-src", this.basepath + this.set.image);
             coverElem.height = '100px';
             divElem.appendChild(coverElem);
