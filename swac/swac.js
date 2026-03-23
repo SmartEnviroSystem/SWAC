@@ -12,7 +12,7 @@ import Model from './Model.js';
 var SWAC = {
     desc: {
         name: 'core',
-        version: '12.06.2025'
+        version: '23.03.2026'
     },
     config: {},
     msgs: new Map(),
@@ -107,7 +107,9 @@ SWAC.init = function () {
         }
         SWAC.replaceGlobalPlaceholders();
         SWAC.loadGlobalComponents();
+        //TODO remove deprecated swac_ready
         document.dispatchEvent(new CustomEvent('swac_ready'));
+        document.dispatchEvent(new CustomEvent('swac_core_loaded'));
     });
     scriptElem.addEventListener('error', function () {
         console.error('Could not load >' + scriptElem.src + '<');
@@ -163,7 +165,7 @@ SWAC.loadGlobalComponents = function () {
                         thisRef.serviceWorker = registration.waiting;
                         Msg.flow('SWACProgressive', 'ServiceWorker is now waiting');
                         // Wait for language lodade
-                        document.addEventListener('uiComplete', function (evt) {
+                        document.addEventListener('swac_core_loaded', function (evt) {
                             UIkit.notification({
                                 message: '<span uk-icon=\'icon: info\'></span> ' + SWAC.lang.dict.core.updateavail,
                                 status: 'primary',
@@ -221,9 +223,6 @@ SWAC.loadGlobalComponents = function () {
             function () {
                 // Load core language
                 SWAC.lang.loadTranslationFile('./langs/', 'core').then(function () {
-                    // Inform about finished loading
-                    let completeEvent = new CustomEvent('uiComplete', {});
-                    document.dispatchEvent(completeEvent);
                     // Start onlineReactions
                     SWAC.onlineReactions = new OnlineReactions(thisRef.config);
                     // Check if datasources are available

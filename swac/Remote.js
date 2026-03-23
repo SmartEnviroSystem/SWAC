@@ -12,7 +12,7 @@ remoteHandler.datasourceTries = {};
 remoteHandler.waitlist = [];
 remoteHandler.running = 0;
 
-document.addEventListener('uiComplete', function () {
+document.addEventListener('swac_core_loaded', function () {
     // Clear syncstates
     if (window.location.search.indexOf('clearstates=true') > 0) {
         localStorage.removeItem('swac_datasourceStates');
