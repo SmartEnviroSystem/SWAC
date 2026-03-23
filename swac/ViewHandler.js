@@ -31,22 +31,22 @@ export default class ViewHandler extends ComponentHandler {
             Msg.createStore(domrequestor);
             let thisRef = this;
             // Parse the declaration and make attributes on the element out of it
-            let domrequestor_swac = this.parseDeclaration(domrequestor);
+            let viewRequestor = this.parseDeclaration(domrequestor);
 
             // Create component path
-            domrequestor_swac.componentPath = './components/' + domrequestor_swac.componentname + '/' + domrequestor_swac.componentname + '.js'
-            super.load(domrequestor_swac, false).then(function (requestor) {
-                if(domrequestor_swac.state === 'inactive') {
+            viewRequestor.componentPath = './components/' + viewRequestor.componentname + '/' + viewRequestor.componentname + '.js'
+            super.load(viewRequestor, false).then(function (requestor) {
+                if (viewRequestor.state === 'inactive') {
                     resolve(requestor);
                     return;
                 }
-                domrequestor_swac.swac_comp.loadTemplate().then(function () {
+                viewRequestor.swac_comp.loadTemplate().then(function () {
                     // Register observer for detecting when element comes in view
                     requestor.swac_comp.inViOb.observe(requestor);
-                    thisRef.init(domrequestor_swac, false).then(function () {
+                    thisRef.init(viewRequestor, false).then(function () {
                         thisRef.loadData(requestor, requestor.swac_comp).then(function (dataCapsule) {
                             SWAC.lang.translateAll();
-                            thisRef.afterLoad(domrequestor_swac).then(function () {
+                            thisRef.afterLoad(viewRequestor).then(function () {
                                 // Call customAfterLoad function
                                 if (requestor.swac_comp.options.customAfterLoad) {
                                     requestor.swac_comp.options.customAfterLoad(requestor);
@@ -59,11 +59,11 @@ export default class ViewHandler extends ComponentHandler {
                     });
                 });
             }).catch(function (err) {
-                if (domrequestor_swac.swac_comp && domrequestor_swac.swac_comp.loadTemplate) {
-                    domrequestor_swac.swac_comp.loadTemplate().then(function () {
-                        SWAC.lang.translateAll(domrequestor_swac);
-                        thisRef.init(domrequestor_swac, false).then(function () {
-                            thisRef.afterLoad(domrequestor_swac).then(function () {
+                if (viewRequestor.swac_comp && viewRequestor.swac_comp.loadTemplate) {
+                    viewRequestor.swac_comp.loadTemplate().then(function () {
+                        SWAC.lang.translateAll(viewRequestor);
+                        thisRef.init(viewRequestor, false).then(function () {
+                            thisRef.afterLoad(viewRequestor).then(function () {
                                 resolve();
                             });
                         });
@@ -81,6 +81,7 @@ export default class ViewHandler extends ComponentHandler {
     afterLoad(domrequestor) {
         return new Promise((resolve, reject) => {
             SWAC.loadedComponents.set(domrequestor.id, domrequestor);
+            // DEPRECATED use swac_REQUESTOR.ID_loaded instead. 
             // Build complete event
             let completeEvent = new CustomEvent('swac_' + domrequestor.id + '_complete', {
                 detail: {
@@ -209,7 +210,7 @@ export default class ViewHandler extends ComponentHandler {
             super.loadData(requestor).then(function (dataCapsule) {
                 // Check if should not be shown when empty
                 if (requestor.swac_comp.countSets() < 1
-                        && requestor.getAttribute('swa').includes('FROM')) {                    
+                        && requestor.getAttribute('swa').includes('FROM')) {
                     if (!requestor.swac_comp.options.showWhenNoData) {
                         // Hide component if there is no data
                         requestor.classList.add('swac_dontdisplay');
