@@ -18,16 +18,21 @@ export default class Component {
         this.name;
         // Reference to requesting object
         this.requestor;
-        // Component description
-        this.desc = {};
-        this.desc.text = 'A Component';
-        this.desc.depends = [];
-        this.desc.reqPerSet = [];
-        this.desc.optPerSet = [];
-        this.desc.opts = [];
+        // Init Component description when not available from enhancing class
+        if (!this.desc) {
+            this.desc = {};
+            this.desc.text = 'A Component';
+            this.desc.depends = [];
+            this.desc.reqPerSet = [];
+            this.desc.optPerSet = [];
+            this.desc.opts = [];
+            this.desc.events = [];
+            this.desc.funcs = [];
+        }
 
         // Set options
-        this.options = options;
+        if (!this.options)
+            this.options = options;
         this.desc.opts[1000] = {
             name: 'fromName',
             desc: 'Main datasources name or URL.',
@@ -291,7 +296,6 @@ export default class Component {
 
 
 
-        this.desc.funcs = [];
         this.desc.funcs[1000] = {
             name: 'addData',
             desc: 'Adds an array with datasets (dataobjects) to the given resource. If the resource does not exists, if will be created',
@@ -604,7 +608,6 @@ DEFINTION of SET:\n\
         }
 
         // Documentation for events
-        this.desc.events = [];
         this.desc.events[1000] = {
             name: 'swac_Component_REQUESTOR.ID_lastSetFromRequestAdded',
             desc: 'Event is fired, when the last dataset from a request was added to the component. The event is fired on the document.',
@@ -1925,8 +1928,8 @@ DEFINTION of SET:\n\
      * Get the name of the main source
      */
     getMainSourceName() {
-        Msg.error('Component','Useing deprecated method getMainSourceName(). Use swac_comp.options.fromName instead.',this.requestor);
-        
+        Msg.error('Component', 'Useing deprecated method getMainSourceName(). Use swac_comp.options.fromName instead.', this.requestor);
+
         if (this.options.mainSource)
             return this.options.mainSource;
         for (let curSource in this.data) {
@@ -1938,7 +1941,7 @@ DEFINTION of SET:\n\
      * Gets the data of the main source
      */
     getMainSourceData() {
-        Msg.error('Component','Useing deprecated method getMainSourceData(). Use getData()[swac_comp.options.fromName] instead.',this.requestor);
+        Msg.error('Component', 'Useing deprecated method getMainSourceData(). Use getData()[swac_comp.options.fromName] instead.', this.requestor);
         return this.data[this.getMainSourceName()];
     }
 
