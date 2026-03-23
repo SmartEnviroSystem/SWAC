@@ -40,13 +40,6 @@ export default class AlgorithmHandler extends ComponentHandler {
     afterLoad(requestor) {
         return new Promise((resolve, reject) => {
             SWAC.loadedComponents.set(requestor.id, requestor);
-            // Build complete event
-            let completeEvent = new CustomEvent('swac_' + requestor.id + '_complete', {
-                detail: {
-                    requestor_id: requestor.id
-                }
-            });
-            document.dispatchEvent(completeEvent);
             SWAC.reactions.performReactions();
             resolve();
         });
