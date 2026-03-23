@@ -39,7 +39,7 @@ export default class ComponentHandler {
                             }
                         })
                         document.dispatchEvent(inactiveEvent);
-                        Msg.info('ComponentHandler','Requestor >' + requestor.id + '< is not active. Check your application configuration to activate it',requestor);
+                        Msg.info('ComponentHandler', 'Requestor >' + requestor.id + '< is not active. Check your application configuration to activate it', requestor);
                         requestor.state = 'inactive';
                         resolve();
                         return;
@@ -65,13 +65,6 @@ export default class ComponentHandler {
                 if (err)
                     Msg.error('ComponentHandler', 'Could not load options for >' + requestor.id + '<: ' + err);
                 reject(err);
-            }).finally(function () {
-//                let completeEvent = new CustomEvent('swac_component_loaded', {
-//                    detail: {
-//                        requestor: requestor
-//                    }
-//                });
-//                document.dispatchEvent(completeEvent);
             });
         });
     }
@@ -193,8 +186,8 @@ export default class ComponentHandler {
                     .then(module => {
                         // Check if object is available
                         if (module.default) {
-                            if(module.default.name && module.default.name === 'OfflineComponent') {
-                                Msg.error('ComponentHandler','Component >' + requestor.componentPath + '< is offline not available.');
+                            if (module.default.name && module.default.name === 'OfflineComponent') {
+                                Msg.error('ComponentHandler', 'Component >' + requestor.componentPath + '< is offline not available.');
                             }
                             // Create component to load dependencies
                             let comp = Reflect.construct(module.default, [options]);
@@ -237,7 +230,7 @@ export default class ComponentHandler {
             // put all dependency on the stack
             let dependencyStack = [];
             for (let depNo in comp.desc.depends) {
-                if(typeof comp.desc.depends[depNo].loadon === 'undefined' || comp.desc.depends[depNo].loadon)
+                if (typeof comp.desc.depends[depNo].loadon === 'undefined' || comp.desc.depends[depNo].loadon)
                     dependencyStack.push(comp.desc.depends[depNo]);
             }
             SWAC.loadDependenciesStack(dependencyStack, comp).then(function () {
@@ -265,32 +258,32 @@ export default class ComponentHandler {
             let dataRequestor = {};
             // Set dataRequestor options (equal the ViewRequestor options)
             dataRequestor = requestor.swac_comp.options;
-            
+
             // Overwrite fromName when ViewRequestor has it's own
-            if(requestor.fromName)
+            if (requestor.fromName)
                 dataRequestor.fromName = requestor.fromName;
-            
+
             // Overwrite fromName when fromName is given by url
             // Get fromName from URL if available
             let dataurlParam = requestor.swac_comp.options.dataurlparam;
-            if(!dataurlParam) {
-                dataurlParam = requestor.id+'_data';
+            if (!dataurlParam) {
+                dataurlParam = requestor.id + '_data';
             }
             let fromNameURL = SWAC.getParameterFromURL(dataurlParam);
-            if(fromNameURL)
+            if (fromNameURL)
                 dataRequestor.fromName = fromNameURL;
-            
+
             // Overwrite fromWheres when given by requestor
-            if(requestor.fromWheres)
+            if (requestor.fromWheres)
                 dataRequestor.fromWheres = requestor.fromWheres
-            
+
             // Resolve if no data is requested
             if (!dataRequestor.fromName || dataRequestor.fromName === 'none') {
                 Msg.info('ComponentHandler', 'No data requested', requestor);
                 resolve(null);
                 return;
             }
-            
+
             // Set default mainSource
             //TODO unify this with other ways adding data
             requestor.swac_comp.options.mainSource = requestor.fromName;
@@ -324,7 +317,7 @@ export default class ComponentHandler {
                         reject(err);
                     });
                 }).finally(function () {
-                    let completeEvent = new CustomEvent('swac_component_loaded', {
+                    let completeEvent = new CustomEvent('swac_' + requestor.id + '_loaded', {
                         detail: {
                             requestor: requestor
                         }
