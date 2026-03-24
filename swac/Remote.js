@@ -669,7 +669,7 @@ remoteHandler.determineMatchingResource = function (fromName, mode) {
             Msg.warn('Remote', 'URL >' + sourceRef.url
                     + '< is known as not applicable for operation >' + mode + '<. Last test on: '
                     + remoteHandler.datasourceStates[sourceRef.url + '_' + mode].date
-                    + 'to retry without waiting klick here: ' + link);
+                    + 'to retry without waiting click here: ' + link);
         }
     }
     return null;
