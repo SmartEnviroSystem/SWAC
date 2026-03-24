@@ -94,33 +94,6 @@
     color: var(--ble-danger);
 }
 
-/* ── Connect Button ─────────────────────────────────────────────────────────── */
-.swac_bluetooth_connect_btn {
-    display:        inline-flex;
-    align-items:    center;
-    gap:            8px;
-    background:     var(--ble-accent);
-    color:          #fff;
-    border:         none;
-    border-radius:  var(--ble-radius);
-    padding:        10px 20px;
-    font-family:    var(--ble-font);
-    font-size:      0.8rem;
-    font-weight:    600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    cursor:         pointer;
-    transition:     background 0.2s, transform 0.1s;
-    margin-bottom:  28px;
-}
-
-.swac_bluetooth_connect_btn:hover  {
-    background: var(--ble-accent-dim);
-}
-.swac_bluetooth_connect_btn:active {
-    transform:  scale(0.97);
-}
-
 /* ── Device List ────────────────────────────────────────────────────────────── */
 .swac_bluetooth_device_list {
     list-style:     none;
