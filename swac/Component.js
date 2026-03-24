@@ -303,7 +303,7 @@ export default class Component {
                 {
                     name: 'fromName',
                     desc: 'Name of the datasource',
-                    type: 'SourceName'
+                    type: 'String'
                 },
                 {
                     name: 'data',
