@@ -85,7 +85,8 @@ export default class Sample extends View {
             params: [
                 {
                     name: 'name of the parameter',
-                    desc: 'Description of the parameter'
+                    desc: 'Description of the parameter',
+                    type: 'Datatypename'
                 }
             ],
             returns: {
