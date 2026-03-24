@@ -254,7 +254,6 @@ export default class Bluetooth extends View {
 
         } catch (err) {
             if (minimal_Btn) {
-                console.log('TEST here');
                 minimal_Btn.setAttribute('swac_lang_id','Bluetooth.state_error');
                 minimal_Btn.classList.remove("uk-button-primary");
                 minimal_Btn.classList.remove("uk-label-success");
