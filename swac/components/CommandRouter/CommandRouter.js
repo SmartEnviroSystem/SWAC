@@ -213,13 +213,19 @@ export default class CommandRouter extends View {
                 }
 
                 Msg.info('CommandRouter', 'Command >' + cmd + '< on component >' + curComp.id + '< executed.');
-
+                console.log('TEST here');
                 if (processResult) {
                     thisRef.processResult(res, curComp, generateView);
                 }
                 if (generateView) {
                     this.generateView(res);
                 }
+                console.log('TEST here 2');
+
+                document.dispatchEvent(new CustomEvent(
+                        'swac_' + this.requestor.id + '_commandrouter_executed',
+                        {detail: {comp: curComp, result: res}}
+                ));
 
                 return res;
 
@@ -253,6 +259,11 @@ export default class CommandRouter extends View {
                 }
                 if (generateView)
                     this.generateView(data);
+
+                document.dispatchEvent(new CustomEvent(
+                        'swac_' + this.requestor.id + '_commandrouter_executed',
+                        {detail: {comp: this.requestor, result: data}}
+                ));
 
                 return data;
 
@@ -359,8 +370,11 @@ export default class CommandRouter extends View {
      */
     processResult(result, comp) {
         Msg.flow('CommandRouter', 'processResult()', this.requestor);
+        
+        // TODO support processing nodes
+        
         document.dispatchEvent(new CustomEvent(
-                'swac_' + this.requestor.id + '_commandrouter_executed',
+                'swac_' + this.requestor.id + '_commandrouter_processed',
                 {detail: {comp, result}}
         ));
     }
