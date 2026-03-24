@@ -213,14 +213,12 @@ export default class CommandRouter extends View {
                 }
 
                 Msg.info('CommandRouter', 'Command >' + cmd + '< on component >' + curComp.id + '< executed.');
-                console.log('TEST here');
                 if (processResult) {
                     thisRef.processResult(res, curComp, generateView);
                 }
                 if (generateView) {
                     this.generateView(res);
                 }
-                console.log('TEST here 2');
 
                 document.dispatchEvent(new CustomEvent(
                         'swac_' + this.requestor.id + '_commandrouter_executed',
