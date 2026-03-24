@@ -65,25 +65,8 @@ export default class Select extends View {
             name: "parent",
             desc: "ID or reference to the parent dataset. Used to order selectable entries in trees (only in supporting select elements like select box)"
         };
+
         this.desc.opts[0] = {
-            name: "onChangeSelections",
-            desc: "A function that is executed when an selection is changed"
-        };
-        if (!options.onChangeSelections)
-            this.options.onChangeSelections = function () {};
-        this.desc.opts[1] = {
-            name: "onSelect",
-            desc: "A function that is executed when selection was changed. Executed in the component context. Gets the event and the selected value."
-        };
-        if (!options.onSelect)
-            this.options.onSelect = function () {};
-        this.desc.opts[2] = {
-            name: "onUnselect",
-            desc: "A function that is executed when an element is unselected"
-        };
-        if (!options.onUnselect)
-            this.options.onUnselect = function () {};
-        this.desc.opts[3] = {
             name: "selectedsSource",
             desc: "Requestor where to get the selected elements",
             example: {
@@ -92,20 +75,14 @@ export default class Select extends View {
         };
         if (!options.selectedsSource)
             this.options.selectedsSource = null;
-        this.desc.opts[4] = {
+        this.desc.opts[1] = {
             name: "expandSources",
             desc: "Map of key (= name of the source where a click on should request for sub selections), value = (DataRequestor where subentries can get)"
         };
         if (!options.expandSources)
             this.options.expandSources = new Map();
-        this.desc.opts[5] = {
-            name: "onClickEntry",
-            desc: "Function to be executed when clicking an select entry that is marked with class swac_select_clickentry."
-        };
-        if (!options.onClickEntry)
-            this.options.onClickEntry = function () {};
 
-        this.desc.opts[6] = {
+        this.desc.opts[2] = {
             name: "rememberSelection",
             desc: "Remember selection and save to local storage"
         };
@@ -164,9 +141,14 @@ Example parameter:\n\
 
         //Documentation for events the component can fire
         this.desc.events[0] = {
-            name: 'swac_REQUESTOR_ID_select',
+            name: 'swac_REQUESTOR_ID_selection_changed',
             desc: 'Fired when user selects an (additional) value.',
             data: 'Delivers the selected value (in value) and the original event.'
+        }
+        this.desc.events[1] = {
+            name: 'swac_REQUESTOR_ID_option_clicked',
+            desc: 'Fired when user clicks an option.',
+            data: 'Delivers the original event.'
         }
 
         this.options.plugins = new Map();
@@ -195,11 +177,10 @@ Example parameter:\n\
                     // get selectets from local storage
                     let localStorageValue = localStorage.getItem(thisRef.requestor.id + "_Selected");
                     if (localStorageValue) {
-                        thisRef.setInputs(JSON.parse(localStorageValue));
-                        if (thisRef.options.onChangeSelections) {
-                            let boundOnChange = thisRef.options.onChangeSelections.bind(thisRef);
-                            boundOnChange();
-                        }
+                        thisRef.requestor.value = "";
+                        let value = JSON.parse(localStorageValue);
+                        thisRef.setInputs(value);
+                        thisRef.onChange({target: thisRef}, value);
                     }
                     resolve();
                 }
@@ -244,7 +225,15 @@ Example parameter:\n\
         // Register onClickEntry
         let markedElems = elem.querySelectorAll('.swac_select_clickentry');
         for (let curMarkedElem of markedElems) {
-            curMarkedElem.addEventListener('click', this.options.onClickEntry.bind(this));
+            curMarkedElem.addEventListener('click', function (evt) {
+                const event = new CustomEvent("swac_" + this.requestor.id + '_option_clicked', {
+                    detail: {
+                        originalEvent: evt
+                    },
+                    bubbles: true
+                });
+                document.dispatchEvent(event);
+            });
         }
 
         // Get input elements from requestor
@@ -286,8 +275,7 @@ Example parameter:\n\
     }
 
     /**
-     * Function executed onChange event if there are an onSelect and / or an
-     * onUnselect function in options.
+     * Function executed onChange event for select boxes.
      * 
      * @param {type} evt
      * @returns {undefined}
@@ -306,60 +294,51 @@ Example parameter:\n\
             localStorage.setItem(this.requestor.id + "_Selected", JSON.stringify(selectet));
         }
 
-        // Call onChangeSelections function
-        this.onChangeSelections = this.options.onChangeSelections;
-        this.onChangeSelections(evt, elem.value);
-        console.log('TEST ');
         this.onChange(evt, elem.value);
     }
 
     /**
-     * Function executed onChange event if there are an onSelect and / or an
-     * onUnselect function in options.
+     * Function executed onChange event for checkboxes.
      * 
      * @param {type} evt
      * @returns {undefined}
      */
     onChangeCheckbox(evt) {
         Msg.flow('Select', 'onChange occured at checkbox', this.requestor);
-        // Get effected element
         let elem = evt.target;
 
-        // get target from local storage
-        if (this.options(rememberSelection)) {
+        // LocalStorage aktualisieren
+        if (this.options.rememberSelection) {
             let localStorageValue = localStorage.getItem(this.requestor.id + "_Selected");
-            if (!localStorageValue) {
-                localStorageValue = {}
+
+            if (localStorageValue) {
+                localStorageValue = JSON.parse(localStorageValue);
+            } else {
+                localStorageValue = {};
             }
 
-            localStorageValue[elem.value] = true;
-            localStorage.setItem(this.requestor.id + "_Selected", JSON.stringify(localStorageValue));
+            if (elem.checked) {
+                localStorageValue[elem.value] = true;
+            } else {
+                delete localStorageValue[elem.value];
+            }
+
+            localStorage.setItem(
+                    this.requestor.id + "_Selected",
+                    JSON.stringify(localStorageValue)
+                    );
         }
 
-        // Get checkbox state
-        if (elem.checked === true) {
-            // @deprecated Now element is checked
-            if (this.options.onSelect !== null) {
-                this.options.onSelect(evt, elem.value);
+        // Wert aus allen Checkboxen der Gruppe neu berechnen
+        let checkboxes = this.requestor.querySelectorAll(`input[type="checkbox"]`);
+        let selectedValues = [];
+        checkboxes.forEach(cb => {
+            if (cb.checked) {
+                selectedValues.push(cb.value);
             }
+        });
+        this.requestor.value = selectedValues.join(',');
 
-            // Set selection for direct access
-            if (this.requestor.value.length < 1)
-                this.requestor.value = elem.value;
-            else
-                this.requestor.value += ',' + elem.value;
-        } else {
-            // Now element is not longer checked
-            if (this.options.onUnselect !== null) {
-                this.options.onUnselect(evt, elem.value);
-                // Set selection for direct access
-                this.requestor.value = this.requestor.value.replace(',' + elem.value, '').replace(elem.value);
-            }
-        }
-        // Call onChangeSelections function
-        this.onChangeSelections = this.options.onChangeSelections;
-        this.onChangeSelections(evt, elem.value);
-        
         this.onChange(evt, elem.value);
     }
 
@@ -390,16 +369,11 @@ Example parameter:\n\
         // Set selection for direct access
         this.requestor.value = elem.value;
 
-        // Call option onChangeSelections
-        this.onChangeSelections = this.options.onChangeSelections;
-        this.onChangeSelections(evt, elem.value);
-        
         this.onChange(evt, elem.value);
     }
 
     /**
-     * Function executed onChange event if there are an onSelect and / or an
-     * onUnselect function in options.
+     * Function executed onChange event at a input element.
      * 
      * @param {type} evt
      * @returns {undefined}
@@ -415,18 +389,18 @@ Example parameter:\n\
     }
 
     onChange(evt, value) {
+        Msg.flow('Select', 'onChange()', this.requestor);
+        let thisRef = this;
         // Fire select event
-        const event = new CustomEvent("swac_" + this.requestor.id + '_select', {
+        const event = new CustomEvent("swac_" + this.requestor.id + '_selection_changed', {
             detail: {
+                requestor: thisRef,
                 originalEvent: evt,
                 value: value
             },
             bubbles: true
         });
         document.dispatchEvent(event);
-        
-        //@deprecated Call onChangeSelections option
-        this.options.onChangeSelections(evt, value);
     }
 
     /**
