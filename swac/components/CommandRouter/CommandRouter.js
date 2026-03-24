@@ -86,6 +86,37 @@ export default class CommandRouter extends View {
         if (!options.showWhenNoData)
             this.options.showWhenNoData = true;
 
+        this.desc.funcs[0] = {
+            name: 'executeCommand',
+            desc: 'This method executes a command on all commandable components, that acceppt the command.',
+            params: [
+                {
+                    name: 'command',
+                    desc: 'Command to execute',
+                    type: 'String'
+                },
+                {
+                    name: 'params',
+                    desc: 'An object containging command parameters. Delivered to the executing component as it is.',
+                    type: 'Object'
+                },
+                {
+                    name: 'processResult',
+                    desc: 'If the result should be processed.',
+                    type: 'boolean'
+                },
+                {
+                    name: 'generateView',
+                    desc: 'If a generic view of the result should be generated.',
+                    type: 'boolean'
+                }
+            ],
+            returns: {
+                desc: 'Result provided by the command executing component.',
+                type: 'Object'
+            }
+        };
+
         this.desc.events[0] = {
             name: 'swac_REQUESTOR_ID_commandrouter_executed',
             desc: 'Fired when a command was successfully executed.',
@@ -152,10 +183,11 @@ export default class CommandRouter extends View {
      *
      * @param {string}  cmd     - Command name (e.g. 'last_measuring', 'POST').
      * @param {*}       params  - Optional parameter forwarded with the command.
-     * @param {boolean} process - If false, the caller handles processResult itself (used by executeRequest).
+     * @param {boolean} processResult - If false, the caller handles processResult itself (used by executeRequest).
+     * @param {boolean} generateView - Whether to generate a generic response view or not.
      * @returns {Promise<*>} The result returned by the component or the datacapsule.
      */
-    async executeCommand(cmd, params, process = true) {
+    async executeCommand(cmd, params, processResult = true, generateView = true) {
         Msg.flow('CommandRouter', 'executeCommand()', this.requestor);
         const thisRef = this;
         let executed = false;
@@ -182,8 +214,11 @@ export default class CommandRouter extends View {
 
                 Msg.info('CommandRouter', 'Command >' + cmd + '< on component >' + curComp.id + '< executed.');
 
-                if (process) {
-                    thisRef.processResult(res, curComp);
+                if (processResult) {
+                    thisRef.processResult(res, curComp, generateView);
+                }
+                if (generateView) {
+                    this.generateView(res);
                 }
 
                 return res;
@@ -213,9 +248,11 @@ export default class CommandRouter extends View {
                 const result = await Model.save(curCapsule, true);
                 const data = result[0].data;
 
-                if (process) {
+                if (processResult) {
                     thisRef.processResult(data, null);
                 }
+                if (generateView)
+                    this.generateView(data);
 
                 return data;
 
@@ -233,26 +270,27 @@ export default class CommandRouter extends View {
      *
      * @param {Object}  dataRequest   - Datacapsule with fromName and optional data array.
      * @param {boolean} processResult - Whether to call processResult() on the response.
+     * @param {boolean} generateView - Whether to generate a generic response view or not.
      * @returns {Promise<*>} The result of the executed command.
      */
-    async executeRequest(dataRequest, processResult) {
+    async executeRequest(dataRequest, processResult = true, generateView = true) {
         let result;
         if (dataRequest.data) {
             const hasValidId = dataRequest.data.some(obj => obj.id != null);
             if (hasValidId) {
                 Msg.flow('CommandRouter', 'executeRequest with action PUT');
-                result = await this.executeCommand('PUT', dataRequest, processResult);
+                result = await this.executeCommand('PUT', dataRequest, processResult, generateView);
             } else {
                 Msg.flow('CommandRouter', 'executeRequest with action POST');
-                result = await this.executeCommand('POST', dataRequest, processResult);
+                result = await this.executeCommand('POST', dataRequest, processResult, generateView);
             }
         } else if (dataRequest.fromName.startsWith('action=')) {
             let action = dataRequest.fromName.replace('action=', '');
             Msg.flow('CommandRouter', 'executeRequest with action ' + action);
-            result = await this.executeCommand(action, dataRequest, processResult);
+            result = await this.executeCommand(action, dataRequest, processResult, generateView);
         } else {
             Msg.flow('CommandRouter', 'executeRequest with action GET');
-            result = await this.executeCommand('GET', dataRequest, processResult);
+            result = await this.executeCommand('GET', dataRequest, processResult, generateView);
         }
         return result;
     }
@@ -321,7 +359,6 @@ export default class CommandRouter extends View {
      */
     processResult(result, comp) {
         Msg.flow('CommandRouter', 'processResult()', this.requestor);
-        this.generateView(result);
         document.dispatchEvent(new CustomEvent(
                 'swac_' + this.requestor.id + '_commandrouter_executed',
                 {detail: {comp, result}}
@@ -338,7 +375,7 @@ export default class CommandRouter extends View {
         if (!dataset)
             return;
 
-        let modal = this.requestor.querySelector('.swac_commandrouter_resultdisplay_modal');
+        let modal = document.querySelector('.swac_commandrouter_resultdisplay_modal');
         if (!modal) {
             Msg.warn('CommandRouter', 'Modal .swac_commandrouter_resultdisplay_modal not found.', this.requestor);
             return;
