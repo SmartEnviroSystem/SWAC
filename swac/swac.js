@@ -581,6 +581,25 @@ SWAC.replaceGlobalPlaceholders = function () {
     }
 };
 
+SWAC.replacePlaceholders = function (str) {
+    const urlParams = new URLSearchParams(window.location.search);
+    return str.replace(/{{(.*?)}}/g, (match, key) => {
+        key = key.trim();
+        // 1. URL-Parameter?
+        if (urlParams.has(key)) {
+            return urlParams.get(key);
+        }
+
+        // 2. SWAC_config.globalparams?
+        if (SWAC_config?.globalparams?.[key] !== undefined) {
+            return SWAC_config.globalparams[key];
+        }
+
+        // 3. Nichts gefunden → Platzhalter stehen lassen oder '' zurückgeben
+        return match; // oder: return '';
+    });
+};
+
 /**
  * Searches and replaces an expression inside an element and it's hierarchy.
  * Respects the DOM hierarhy and does not midify it. There is no support for bind mechanism or

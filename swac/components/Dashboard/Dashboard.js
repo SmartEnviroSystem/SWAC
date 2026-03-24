@@ -240,7 +240,7 @@ export default class Dashboard extends View {
                     let reqState = set.data_comp;
                     // Load date if a source is given
                     if (set.data_source) {
-                        reqState += ' FROM ' + set.data_source;
+                        reqState += ' FROM ' + SWAC.replacePlaceholders(set.data_source);
                         if (set.data_from_selectable || set.data_until_selectable) {
                             reqState += ' WHERE ';
                         }
