@@ -239,60 +239,63 @@ export default class View extends Component {
             for (let curRepeatableForSet of repeatableForSets) {
                 let repeated = this.createRepeatedForSet(set, curRepeatableForSet);
                 repeateds.push(repeated);
-                // Load elements that contain a data-src
-                const dataSrcElems = repeated.querySelectorAll("[data-src]");
-                dataSrcElems.forEach(elem => {
-                    // Prevents inserting path into src of imgs when uikit icons are used (name only)
-                    if(elem.nodeName === 'IMG' && !elem.getAttribute("data-src").includes('.')) {
-                        return;
-                    }
-                    
-                    let src = elem.getAttribute("data-src");
-                    // Finde alle Platzhalter im Format {key} oder {key.subkey}
-                    const matches = src.match(/{([^}]+)}/g);
+                // Load elements that contain a data-src, data-href or data-srcset
+                const dataAttributes = ["data-src", "data-href", "data-srcset"];
+                dataAttributes.forEach(attr => {
+                    const elems = repeated.querySelectorAll("[" + attr + "]");
+                    elems.forEach(elem => {
+                        let value = elem.getAttribute(attr);
 
-                    if (matches) {
-                        matches.forEach(placeholder => {
-                            const path = placeholder.slice(1, -1); // Entferne die geschweiften Klammern
-                            const keys = path.split('.'); // Zerlege verschachtelte Schlüssel
+                        // Platzhalter ersetzen
+                        const matches = value.match(/{([^}]+)}/g);
+                        if (matches) {
+                            matches.forEach(placeholder => {
+                                const path = placeholder.slice(1, -1);
+                                const keys = path.split('.');
+                                let val = set;
 
-                            // Navigiere durch das Objekt 'set'
-                            let value = set;
-                            for (let key of keys) {
-                                if (value && typeof value === 'object' && key in value) {
-                                    value = value[key];
-                                } else {
-                                    value = ''; // Fallback bei fehlendem Wert
-                                    break;
+                                for (let key of keys) {
+                                    if (val && typeof val === 'object' && key in val) {
+                                        val = val[key];
+                                    } else {
+                                        val = '';
+                                        break;
+                                    }
                                 }
-                            }
-
-                            // Ersetze den Platzhalter im src
-                            src = src.replace(placeholder, value);
-                        });
-                    }
-
-                    // Typabhängige Initialisierung
-                    const tag = elem.tagName.toLowerCase();
-                    if (tag === "img" || tag === "iframe" || tag === "script") {
-                        elem.src = src;
-                    } else if (tag === "a" || tag === "link") {
-                        elem.href = src;
-                    } else if (tag === "source") {
-                        elem.src = src;
-                        const parent = elem.closest("audio, video");
-                        if (parent) {
-                            parent.load(); // wichtig!
+                                value = value.replace(placeholder, val);
+                            });
                         }
-                    } else if (tag === "audio" || tag === "video") {
-                        elem.src = src;
-                        elem.load(); // wichtig!
-                    } else {
-                        // Fallback: versuche src zu setzen
-                        elem.src = src;
-                    }
-                });
 
+                        // Typabhängige Zuweisung
+                        const tag = elem.tagName.toLowerCase();
+
+                        if (attr === "data-src") {
+                            if (tag === "img" || tag === "iframe" || tag === "script") {
+                                elem.src = value;
+                            } else if (tag === "a" || tag === "link") {
+                                elem.href = value;
+                            } else if (tag === "source") {
+                                elem.src = value;
+                                const parent = elem.closest("audio, video");
+                                if (parent)
+                                    parent.load();
+                            } else if (tag === "audio" || tag === "video") {
+                                elem.src = value;
+                                elem.load();
+                            } else {
+                                elem.src = value;
+                            }
+                        }
+
+                        if (attr === "data-href") {
+                            elem.href = value;
+                        }
+
+                        if (attr === "data-srcset") {
+                            elem.srcset = value;
+                        }
+                    });
+                });
 
                 // Load sub requestors
                 this.findSubRequestors(repeated);
