@@ -2,6 +2,6 @@ var Visualise_de = {
   ts: "State: ",
   clock: "Clock",
   thermometer: "Thermometer",
-  hygrometer: ""
+  hygrometer: "Hygrometer"
 };
 export default Visualise_de;

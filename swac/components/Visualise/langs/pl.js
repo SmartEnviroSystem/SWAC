@@ -1,4 +1,7 @@
-var Screenboard_en = {
-  nofunction: 'This button has no function assigned.'
+var Visualise_pl = {
+  ts: "Stan na: ",
+  clock: "Zegar",
+  thermometer: "Temperatura",
+  hygrometer: "Wilgotność powietrza"
 };
-export default Screenboard_en;
+export default Visualise_pl;
