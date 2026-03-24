@@ -284,7 +284,7 @@ export default class Dashboard extends View {
                         await viewHandler.load(reqElem);
                         // Workaround for not working decimal formating
                         //TODO Fix also translation in this area
-                        window.swac.lang.translate(reqElem);
+                        window.swac.lang.translateAll(reqElem);
                     })();
                 }
             }
