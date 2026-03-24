@@ -389,6 +389,7 @@ export default class Language {
     translateFormatLocale(elem = document) {
         let decimalElems = [];
         decimalElems.push(...elem.querySelectorAll('[swac_lang_format="decimal"]').values());
+        decimalElems.push(...elem.querySelectorAll('[swac_round]').values());
         decimalElems.push(...elem.querySelectorAll('[itemprop="price"]').values());
         for (let curElem of decimalElems) {
             if (curElem.innerHTML.startsWith('{'))
