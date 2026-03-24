@@ -274,10 +274,18 @@ export default class Dashboard extends View {
                     reqElem.setAttribute('id', 'set' + set.id + 'dash');
                     reqElem.setAttribute('swa', reqState);
                     contElem.appendChild(reqElem);
+                    if (set.content) {
+                        reqElem.innerHTML = set.content;
+                    }
 
                     // Build component
-                    let viewHandler = new ViewHandler();
-                    viewHandler.load(reqElem);
+                    (async () => {
+                        let viewHandler = new ViewHandler();
+                        await viewHandler.load(reqElem);
+                        // Workaround for not working decimal formating
+                        //TODO Fix also translation in this area
+                        window.swac.lang.translate(reqElem);
+                    })();
                 }
             }
 
