@@ -78,12 +78,6 @@ Can be used as texteditor with formating and lots of other enhanced functions.';
         };
         if (!options.tinymceContent_css)
             this.options.tinymceContent_css = null;
-        this.desc.opts[6] = {
-            name: 'sendAlongData',
-            desc: 'DataCapsle with data that should be send with every save. This is an object of form {attr1: val1, ...}.'
-        };
-        if (!options.sendAlongData)
-            this.options.sendAlongData = null;
 
         if (!options.plugins) {
             this.options.plugins = new Map();
@@ -173,8 +167,8 @@ Can be used as texteditor with formating and lots of other enhanced functions.';
             data: [],
             fromName: this.requestor.fromName
         };
-        if (this.options.sendAlongData !== null) {
-            dataCapsle.data[0] = Object.assign({}, this.options.sendAlongData);
+        if (this.options.saveAlongData !== null) {
+            dataCapsle.data[0] = Object.assign({}, this.options.saveAlongData);
         } else {
             dataCapsle.data[0] = {};
         }

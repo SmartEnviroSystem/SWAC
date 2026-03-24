@@ -109,7 +109,7 @@ export default class FileUploader {
 
             // Exculde file content
             const jsonData = (({dataURL, ...file}) => file)(file);
-            // Include sendAlongData
+            // Include saveAlongData
             if(thisRef.component.options.saveAlongData) {
                 for(let curAttr in thisRef.component.options.saveAlongData) {
                     jsonData[curAttr] = thisRef.component.options.saveAlongData[curAttr];

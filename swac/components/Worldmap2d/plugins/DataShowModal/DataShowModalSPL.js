@@ -123,7 +123,7 @@ export default class DataShowModalSPL extends Plugin {
                             filter: 'isavailfordatasets,eq,true'
                         }
                     },
-                    sendAlongData: {collection: window.swac.getParameterFromURL('collection')},
+                    saveAlongData: {collection: window.swac.getParameterFromURL('collection')},
                 };
             }
             // render labeling component

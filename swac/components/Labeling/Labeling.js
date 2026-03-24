@@ -64,21 +64,12 @@ export default class Labeling extends View {
         };
         if (!options.labelidAttr)
             this.options.labelidAttr = 'label_id';
-
         this.desc.opts[2] = {
             name: "labeledidAttr",
             desc: "Name of the attributes that holds the id of the dataset that is labeld."
         };
         if (!options.labeledidAttr)
             this.options.labeledidAttr = 'labeled_id';
-
-        this.desc.opts[3] = {
-            name: 'sendAlongData',
-            type: 'function',
-            desc: 'Object with attributes that should be send everytime when saveing a label'
-        };
-        if (!options.sendAlongData)
-            this.options.sendAlongData = null;
 
         if (typeof options.showWhenNoData === 'undefined')
             this.options.showWhenNoData = true;
@@ -249,8 +240,8 @@ export default class Labeling extends View {
         let newset = {};
 
         // Add saveAlongData
-        if (this.options.sendAlongData) {
-            newset = Object.assign({}, this.options.sendAlongData);
+        if (this.options.saveAlongData) {
+            newset = Object.assign({}, this.options.saveAlongData);
         }
         newset[this.options.labelidAttr] = labelid;
         newset[this.options.labeledidAttr] = labelid;

@@ -327,38 +327,31 @@ The function gets the droped dataset and the dropzone element.'
         if (!options.customAfterInputChanged)
             this.options.customAfterInputChanged = null;
         this.desc.opts[24] = {
-            name: 'sendAlongData',
-            desc: 'Object with attributes that should be send everytime when saveing a dataset',
-            example: {attr1: 'A dataset with attributes to send'}
-        };
-        if (!options.sendAlongData)
-            this.options.sendAlongData = null;
-        this.desc.opts[25] = {
             name: 'newdatasetname',
             desc: 'Language entry that is used for the name of a new dataset'
         };
         if (!options.newdatasetname)
             this.options.newdatasetname = 'Edit.newdataset';
-        this.desc.opts[26] = {
+        this.desc.opts[25] = {
             name: 'newdatasetbtn',
             desc: 'Language entry that is used on the add new button',
             example: 'edit_newcar'
         };
         if (!options.newdatasetbtn)
             this.options.newdatasetbtn = null;
-        this.desc.opts[27] = {
+        this.desc.opts[26] = {
             name: 'singleInputChange',
             desc: 'If true input is only computed when input in field is completed by user and not on every keypress.'
         };
         if (!options.singleInputChange)
             this.options.singleInputChange = false;
-        this.desc.opts[28] = {
+        this.desc.opts[27] = {
             name: 'completeDefinitionsFromHTML',
             desc: 'If true the component searches for input fields in template code and creates (additional) definitions from them.'
         };
         if (!options.completeDefinitionsFromHTML)
             this.options.completeDefinitionsFromHTML = false;
-        this.desc.opts[29] = {
+        this.desc.opts[28] = {
             name: 'customOnStartAutoData',
             desc: 'Function to be executed, right before startAutoData is executed.'
         };
@@ -1311,8 +1304,8 @@ The function gets the droped dataset and the dropzone element.'
             data: [],
             fromName: this.requestor.fromName
         };
-        if (this.options.sendAlongData !== null) {
-            dataCapsle.data[0] = Object.assign({}, this.options.sendAlongData);
+        if (this.options.saveAlongData !== null) {
+            dataCapsle.data[0] = Object.assign({}, this.options.saveAlongData);
         } else {
             dataCapsle.data[0] = {};
         }
@@ -1479,8 +1472,8 @@ The function gets the droped dataset and the dropzone element.'
             data: [],
             fromName: fromName
         };
-        if (this.options.sendAlongData !== null) {
-            dataCapsle.data[0] = Object.assign({}, this.options.sendAlongData);
+        if (this.options.saveAlongData !== null) {
+            dataCapsle.data[0] = Object.assign({}, this.options.saveAlongData);
         } else {
             dataCapsle.data[0] = {};
         }
