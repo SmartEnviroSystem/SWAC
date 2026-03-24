@@ -284,7 +284,7 @@ export default class CommandRouter extends View {
      * @param {boolean} generateView - Whether to generate a generic response view or not.
      * @returns {Promise<*>} The result of the executed command.
      */
-    async executeRequest(dataRequest, processResult = true, generateView = true) {
+    async executeRequest(dataRequest, processResult = true, generateView = false) {
         let result;
         if (dataRequest.data) {
             const hasValidId = dataRequest.data.some(obj => obj.id != null);
