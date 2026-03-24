@@ -17,12 +17,17 @@ export default class CommandRouter extends View {
             desc: 'Default template.'
         };
 
+        this.desc.optPerTpl[0] = {
+            selc: '.swac_commandrouter_resultdisplay_modal',
+            desc: 'An element to display as modal for showing results from commands.'
+        };
+
         this.desc.optPerPage[0] = {
-            selc: '.commandrouter_countdown_cur',
+            selc: '.swac_commandrouter_countdown_cur',
             desc: 'Element where to show current left time until next command exec.'
         };
         this.desc.optPerPage[1] = {
-            selc: '.commandrouter_countdown_max',
+            selc: '.swac_commandrouter_countdown_max',
             desc: 'Element where to show maximum time until next command execution.'
         };
 
@@ -279,9 +284,9 @@ export default class CommandRouter extends View {
                 })(curCommandTimer);
             }
 
-            let countDownElemCur = document.querySelector('.commandrouter_countdown_cur');
+            let countDownElemCur = document.querySelector('.swac_commandrouter_countdown_cur');
             if (countDownElemCur) {
-                let countDownElemMax = document.querySelector('.commandrouter_countdown_max');
+                let countDownElemMax = document.querySelector('.swac_commandrouter_countdown_max');
                 if (countDownElemMax) {
                     countDownElemMax.innerHTML = minimumTimer / 1000;
                 }
@@ -304,11 +309,11 @@ export default class CommandRouter extends View {
             clearInterval(curCmdInterval);
         }
         clearInterval(this.countdownInterval);
-        let countDownElemCur = document.querySelector('.commandrouter_countdown_cur');
+        let countDownElemCur = document.querySelector('.swac_commandrouter_countdown_cur');
         if (countDownElemCur) {
             countDownElemCur.innerHTML = '';
         }
-        let countDownElemMax = document.querySelector('.commandrouter_countdown_max');
+        let countDownElemMax = document.querySelector('.swac_commandrouter_countdown_max');
         if (countDownElemMax) {
             countDownElemMax.innerHTML = '';
         }
@@ -344,22 +349,20 @@ export default class CommandRouter extends View {
         if (!dataset)
             return;
 
-        let modal = document.getElementById('last-measuring-modal');
-        let loading = document.getElementById('last-measuring-loading');
-        let error = document.getElementById('last-measuring-error');
-        let table = document.getElementById('last-measuring-table');
-        let tbody = document.getElementById('last-measuring-tbody');
-
+        let modal = this.requestor.querySelector('.swac_commandrouter_resultdisplay_modal');
         if (!modal) {
-            Msg.warn('CommandRouter', 'Modal #last-measuring-modal not found.', this.requestor);
+            Msg.warn('CommandRouter', 'Modal .swac_commandrouter_resultdisplay_modal not found.', this.requestor);
             return;
         }
+
+        let error = modal.querySelector('.swac_commandrouter_resultdisplay_error');
+        let table = modal.querySelector('.swac_commandrouter_resultdisplay_table');
+        let tbody = modal.querySelector('.swac_commandrouter_resultdisplay_tbody');
 
         document.querySelectorAll('[uk-dropdown]').forEach(function (el) {
             UIkit.dropdown(el).hide(false);
         });
 
-        loading.style.display = 'none';
         error.style.display = 'none';
         tbody.innerHTML = '';
         table.style.display = 'none';
@@ -400,7 +403,7 @@ export default class CommandRouter extends View {
                 let tdVal = document.createElement('td');
 
                 tdKey.textContent = curAttr;
-                tdKey.setAttribute('swac_lang',curAttr);
+                tdKey.setAttribute('swac_lang', curAttr);
                 tdKey.style.fontWeight = '600';
                 tdVal.textContent = row[curAttr];
 
