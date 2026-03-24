@@ -160,11 +160,6 @@ export default class CommandRouter extends View {
         const thisRef = this;
         let executed = false;
 
-        // POST commands (e.g. label saves) should never open the result modal
-        if (cmd === 'POST') {
-            this.suppressModal = true;
-        }
-
         // 1) Try to send the command to a commandable component (e.g. Bluetooth)
         for (let curComp of this.comps) {
             if (typeof curComp.swac_comp?.isCommandable !== 'function') {
@@ -273,7 +268,6 @@ export default class CommandRouter extends View {
             for (let curCommandTimer of this.options.commandTimer) {
                 (function (timerDef) {
                     let curInterval = setInterval(function () {
-                        thisRef.suppressModal = true;
                         thisRef.executeCommand(timerDef.cmd, timerDef.param);
                     }, timerDef.interval);
 
@@ -327,12 +321,7 @@ export default class CommandRouter extends View {
      */
     processResult(result, comp) {
         Msg.flow('CommandRouter', 'processResult()', this.requestor);
-
-        if (!this.suppressModal) {
-            this.generateView(result);
-        }
-        this.suppressModal = false;
-
+        this.generateView(result);
         document.dispatchEvent(new CustomEvent(
                 'swac_' + this.requestor.id + '_commandrouter_executed',
                 {detail: {comp, result}}
