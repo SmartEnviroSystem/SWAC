@@ -149,7 +149,7 @@ export default class Bluetooth extends View {
 
         if (!navigator.bluetooth) {
             if (minimal_Btn) {
-                minimal_Btn.innerText = 'No Bluetooth support';
+                minimal_Btn.setAttribute('swac_lang','Bluetooth.state_nosupport');
                 minimal_Btn.classList.remove("uk-button-primary");
                 minimal_Btn.classList.add("uk-button-danger");
             }
@@ -243,20 +243,23 @@ export default class Bluetooth extends View {
             this.options.onConnected.call(this, device.id, device);
 
             if (minimal_Btn) {
-                minimal_Btn.innerText = "verbunden";
+                minimal_Btn.setAttribute('swac_lang_id','Bluetooth.state_connected');
                 minimal_Btn.classList.remove("uk-button-primary");
                 minimal_Btn.classList.remove("uk-button-danger");
                 minimal_Btn.classList.add("uk-label-success");
+                window.swac.lang.translateAll(this.requestor);
             }
 
             return device.id;
 
         } catch (err) {
             if (minimal_Btn) {
-                minimal_Btn.innerText = 'Fehler';
+                console.log('TEST here');
+                minimal_Btn.setAttribute('swac_lang_id','Bluetooth.state_error');
                 minimal_Btn.classList.remove("uk-button-primary");
                 minimal_Btn.classList.remove("uk-label-success");
                 minimal_Btn.classList.add("uk-button-danger");
+                window.swac.lang.translateAll(this.requestor);
             }
             this._setStatus('Connection failed: ' + err.message, 'error');
             Msg.error('Bluetooth', 'Connection failed: ' + err.message, this.requestor);
