@@ -9,7 +9,7 @@ export default class DataShowModalSPL extends Plugin {
         super(options);
         this.name = 'Worldmap2d/plugins/DataShowModal';
         this.desc.text = 'Plugin to show datasets data at the points where the datasets create markers.';
-        
+
         this.desc.templates[0] = {
             name: 'datashowmodal',
             style: 'datashowmodal',
@@ -61,7 +61,7 @@ export default class DataShowModalSPL extends Plugin {
         // Get dataset from marker
         let set = e.detail.target.feature.set;
         this.modalset = set;
-
+        console.log('TEST set in modal: ' + set);
 
         // Remove old data
         let olddata = this.modal.querySelectorAll('.worldmap2d_repeatedForValue');
@@ -84,17 +84,22 @@ export default class DataShowModalSPL extends Plugin {
         }
         // Add new data
         let contElem = this.modal.querySelector('.worldmap2d_repeatForValue');
-        if (this.options.attributeOrder) {
-            for (let curAttr of this.options.attributeOrder) {
+        let displayedAttrs = [];
+        // Display attributes in configured order
+        for (let curAttr of this.options.attributeOrder) {
+            if (set[curAttr]) {
                 this.modifyModalContent(contElem, set, curAttr);
+                displayedAttrs.push(curAttr);
             }
-        } else {
-            for (let curAttr in set) {
-                // Exclude swac_ attributes
-                if (curAttr.startsWith('swac_'))
-                    continue;
-                this.modifyModalContent(contElem, set, curAttr);
-            }
+        }
+        // Display all other attributes
+        for (let curAttr in set) {
+            // Exclude swac_ attributes
+            if (curAttr.startsWith('swac_'))
+                continue;
+            if(displayedAttrs.includes(curAttr))
+                continue;
+            this.modifyModalContent(contElem, set, curAttr);
         }
 
         if (this.requestor.parent.swac_comp.plugins.get('Labels')) {
