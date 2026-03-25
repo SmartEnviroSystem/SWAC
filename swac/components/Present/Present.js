@@ -67,6 +67,10 @@ export default class Present extends View {
           style: 'present_webPush_PWA',
           desc: 'Creates a presentation of instruction data.'
         };
+        this.desc.templates[12] = {
+          name: 'flipdesktop_mobile',
+          desc: 'View for data that automatically flips to a better view on desktop or mobile device size.'
+        };
             
 
         this.desc.reqPerSet[0] = {
