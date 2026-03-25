@@ -1241,10 +1241,15 @@ DEFINTION of SET:\n\
                 Msg.error('Component', 'Error while executeing >.customAfterAddSet(' + set.swac_fromName + '[' + set.id + ']: ' + e, this.requestor);
             }
         }
+        let thisRef = this;
+        // Fire set added event
+        document.dispatchEvent(new CustomEvent('swac_Component_' + this.requestor.id + '_setAdded', {
+            detail: {set: set, requestor: thisRef.requestor}
+        }));
         // Fire last set added event
         if (set.swac_dataRequest && set.id === set.swac_dataRequest.highestId) {
             document.dispatchEvent(new CustomEvent('swac_Component_' + this.requestor.id + '_lastSetFromRequestAdded', {
-                detail: {set: set}
+                detail: {set: set, requestor: thisRef.requestor}
             }));
         }
 
