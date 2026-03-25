@@ -49,7 +49,6 @@ export default class Language {
             let loadProms = [];
             let forRequestors = [];
             for (let curRequestor of window.top.swac.translatedComps) {
-                console.log('TEST loadTranslation for ', curRequestor);
                 loadProms.push(thisRef.loadComponentTranslation(curRequestor));
                 forRequestors.push(curRequestor);
             }
@@ -179,7 +178,6 @@ export default class Language {
      * @returns {undefined}
      */
     translateAll(elem = document) {
-        console.log('TEST translateAll()',elem);
         // If translation called from frame do translation from top
         if (elem == document && window !== window.top) {
             window.top.swac.lang.translateAll();
@@ -255,7 +253,6 @@ export default class Language {
      * @param {DOMElement} elem elem where to translate
      */
     translateInElements(elem = document) {
-        console.log('TEST translateInElements()');
         let elems = [];
         elems.push(...elem.querySelectorAll('button').values());
         elems.push(...elem.querySelectorAll('label').values());
@@ -267,7 +264,6 @@ export default class Language {
         elems.push(...elem.querySelectorAll('th').values());
 
         for (let curElem of elems) {
-            console.log('TEST translateInElements for ', curElem);
             //Do not translate elements with html content
             if (curElem.firstElementChild)
                 continue;
@@ -281,7 +277,6 @@ export default class Language {
                 curElem.setAttribute('swac_lang_id', langWordId);
             }
             let translation = this.getTranslationForId(langWordId);
-            console.log('TEST translation',translation);
             if (translation) {
                 curElem.innerHTML = translation;
             }
