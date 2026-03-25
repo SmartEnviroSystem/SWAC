@@ -112,7 +112,7 @@ input[type=range]::-moz-range-track {
         display: block;
     }
     
-    .swac_format_mediaplayer_table .swac_ondesktop {
+    .swac_format_mediaplayer_table .swac_onDesktop {
         display: none;
     }
 

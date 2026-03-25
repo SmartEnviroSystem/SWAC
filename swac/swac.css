@@ -115,7 +115,13 @@
 }
 
 @media (max-width: 760px) {
-    .swac_ondesktop {
-        display: none;
+    .swac_onDesktop {
+        display: none !important;
+    }
+}
+
+@media (min-width: 761px) {
+    .swac_onMobile {
+        display: none !important;
     }
 }
