@@ -23,8 +23,11 @@ export default class Selectdatetime extends View {
         };
         this.desc.templates[0] = {
             name: 'selectdatetime',
-            style: false,
             desc: 'Shows a select element for date and time.'
+        };
+        this.desc.templates[1] = {
+            name: 'labeldselection',
+            desc: 'Shows an label near the date and time input fields.'
         };
         this.desc.reqPerTpl[0] = {
             selc: '.swac_selectdatetime_date',
@@ -34,11 +37,7 @@ export default class Selectdatetime extends View {
             selc: '.swac_selectdatetime_time',
             desc: 'Input element for display and input the time'
         };
-        this.desc.reqPerSet[0] = {
-            name: 'id',
-            desc: 'The attribute id is required for the component to work properly.'
-        };
-        this.desc.reqPerSet[1] = {
+        this.desc.optPerSet[0] = {
             name: 'datetime',
             desc: 'Date and / or time value in format dd.MM.yyyy[ hh:mm]'
         };
@@ -105,7 +104,7 @@ export default class Selectdatetime extends View {
         if (!set.datetime && this.options.actualTimeForEmpty) {
             set.datetime = new Date().toISOString();
             set.is_autoactual = true;
-        } else if(set.is_autoactual) {
+        } else if (set.is_autoactual) {
             // Update object value when automatic
             set.datetime = new Date().toISOString();
         }
@@ -114,27 +113,25 @@ export default class Selectdatetime extends View {
 
     afterAddSet(set, repeateds) {
         Msg.flow('Selectdatetime', 'afterAddSet(' + set.swac_fromName + '[' + set.id + ']', this.requestor);
-        let dtr = SWAC.loadedAlgorithms['DatatypeReflection'];
-        let dateObj = dtr.getDateOrDateTime(set.datetime);
-        console.log('TEST afterAddSet',dateObj,set);
 
-console.log('[swac_fromname="' + set.swac_fromName + '"][swac_setid="' + set.id + '"]');
-        let repForSetElem = this.requestor.querySelector('[swac_fromname="' + set.swac_fromName + '"][swac_setid="' + set.id + '"]');
-        if(!repForSetElem) {
-            this.stopReloadInterval();
-            console.log('TEST no repeatedForSEt found stopping reloadInterval');
-            return;
-        }
-        let dateElem = repForSetElem.querySelector('.swac_selectdatetime_date');
-        dateElem.setAttribute('value', dateObj.toISODate());
+        // Set event listener on inputs
+        let repElem = repeateds[0];
+        let dateElem = repElem.querySelector('.swac_selectdatetime_date');
         dateElem.addEventListener('change', this.onChangeDate.bind(this));
-
-        let time = dateObj.toISOTime();
-        // Remove fractions of seconds because they are not supported by browsers
-        time = time.split('.')[0];
-        let timeElem = repForSetElem.querySelector('.swac_selectdatetime_time');
-        timeElem.setAttribute('value', time);
+        let timeElem = repElem.querySelector('.swac_selectdatetime_time');
         timeElem.addEventListener('change', this.onChangeTime.bind(this));
+
+        if (set.datetime) {
+            let dtr = SWAC.loadedAlgorithms['DatatypeReflection'];
+            // Transform dataset string into datetime object
+            let dateObj = dtr.getDateOrDateTime(set.datetime);
+            // Set date and time to input elements
+            dateElem.setAttribute('value', dateObj.toISODate());
+            let time = dateObj.toISOTime();
+            // Remove fractions of seconds because they are not supported by browsers
+            time = time.split('.')[0];
+            timeElem.setAttribute('value', time);
+        }
     }
 
     /*
