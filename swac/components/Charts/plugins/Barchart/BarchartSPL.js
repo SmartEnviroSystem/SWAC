@@ -78,7 +78,7 @@ export default class BarchartSPL extends Plugin {
         for (let curYAttr of comp.options.yAxisAttrNames) {
             // Check if yattr is available in dataset
             if (typeof set[curYAttr] === 'undefined') {
-                Msg.error('LinechartSPL', 'Dataset >' + set.swac_fromName + '[' + set.id + ']< does not contain the y attribute >' + curYAttr + '<. This will be missing at x >' + set[comp.options.xAxisAttrName] + '<', comp.requestor);
+                Msg.warn('LinechartSPL', 'Dataset >' + set.swac_fromName + '[' + set.id + ']< does not contain the y attribute >' + curYAttr + '<. This will be missing at x >' + set[comp.options.xAxisAttrName] + '<', comp.requestor);
                 continue;
             }
 
