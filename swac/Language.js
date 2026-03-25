@@ -11,7 +11,7 @@ export default class Language {
         this.availLangs = {};
         this.activeLang = 'en';
         this.dict = {};
-        this.translatedComps = [];
+        window.top.swac.translatedComps = []; // Make global available for use with frames
         this.translateAttrnames = true;
         this.formatLocale = true;
 
@@ -48,7 +48,8 @@ export default class Language {
             // Load translations for components if not loaded yet
             let loadProms = [];
             let forRequestors = [];
-            for (let curRequestor of thisRef.translatedComps) {
+            for (let curRequestor of window.top.swac.translatedComps) {
+                console.log('TEST loadTranslation for ', curRequestor);
                 loadProms.push(thisRef.loadComponentTranslation(curRequestor));
                 forRequestors.push(curRequestor);
             }
@@ -89,8 +90,8 @@ export default class Language {
             }
 
             thisRef.loadTranslationFile(langfile_url, objectname, lang).then(function () {
-                if (!thisRef.translatedComps.includes(requestor)) {
-                    thisRef.translatedComps.push(requestor);
+                if (!window.top.swac.translatedComps.includes(requestor)) {
+                    window.top.swac.translatedComps.push(requestor);
                 }
                 resolve();
             }).catch(function (err) {
@@ -178,9 +179,10 @@ export default class Language {
      * @returns {undefined}
      */
     translateAll(elem = document) {
+        console.log('TEST translateAll()',elem);
         // If translation called from frame do translation from top
-        if (window !== window.top) {
-            return window.top.swac.lang.translateAll();
+        if (elem == document && window !== window.top) {
+            window.top.swac.lang.translateAll();
         }
 
         Msg.flow('Language', 'translateAll()');
@@ -253,6 +255,7 @@ export default class Language {
      * @param {DOMElement} elem elem where to translate
      */
     translateInElements(elem = document) {
+        console.log('TEST translateInElements()');
         let elems = [];
         elems.push(...elem.querySelectorAll('button').values());
         elems.push(...elem.querySelectorAll('label').values());
@@ -264,6 +267,7 @@ export default class Language {
         elems.push(...elem.querySelectorAll('th').values());
 
         for (let curElem of elems) {
+            console.log('TEST translateInElements for ', curElem);
             //Do not translate elements with html content
             if (curElem.firstElementChild)
                 continue;
@@ -277,6 +281,7 @@ export default class Language {
                 curElem.setAttribute('swac_lang_id', langWordId);
             }
             let translation = this.getTranslationForId(langWordId);
+            console.log('TEST translation',translation);
             if (translation) {
                 curElem.innerHTML = translation;
             }
