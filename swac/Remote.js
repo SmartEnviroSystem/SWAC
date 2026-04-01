@@ -235,18 +235,59 @@ remoteHandler.fetch = function (fromName, fromWheres, fromHeaders, mode, supress
                             }).catch(function (err) {
                                 reject(err);
                             });
-                        } else if (ctype.startsWith('application/csv')) {
+                        } else if (ctype.startsWith('application/csv') || ctype.startsWith('text/csv')) {
                             response.text().then(function (txt) {
-                                const lines = txt.trim().split('\n');
-                                const headers = lines[0].split(',');
 
-                                const result = lines.slice(1).map(line => {
-                                    const values = line.split(',');
-                                    return headers.reduce((object, header, index) => {
-                                        object[header.trim()] = values[index].trim();
-                                        return object;
-                                    }, {});
+                                function parseCSV(text) {
+                                    const rows = [];
+                                    let current = '';
+                                    let row = [];
+                                    let insideQuotes = false;
+
+                                    for (let i = 0; i < text.length; i++) {
+                                        const char = text[i];
+                                        const next = text[i + 1];
+
+                                        if (char === '"' && insideQuotes && next === '"') {
+                                            // escaped quote ""
+                                            current += '"';
+                                            i++;
+                                        } else if (char === '"') {
+                                            insideQuotes = !insideQuotes;
+                                        } else if (char === ',' && !insideQuotes) {
+                                            row.push(current);
+                                            current = '';
+                                        } else if ((char === '\n' || char === '\r') && !insideQuotes) {
+                                            if (current.length > 0 || row.length > 0) {
+                                                row.push(current);
+                                                rows.push(row);
+                                                row = [];
+                                                current = '';
+                                            }
+                                        } else {
+                                            current += char;
+                                        }
+                                    }
+
+                                    if (current.length > 0 || row.length > 0) {
+                                        row.push(current);
+                                        rows.push(row);
+                                    }
+
+                                    return rows;
+                                }
+
+                                const lines = parseCSV(txt.trim());
+                                const headers = lines.shift().map(h => h.trim());
+
+                                const result = lines.map(cols => {
+                                    const obj = {};
+                                    headers.forEach((h, i) => {
+                                        obj[h] = (cols[i] || '').trim();
+                                    });
+                                    return obj;
                                 });
+
                                 resolve({
                                     data: result,
                                     fromName: fromName,
