@@ -27,55 +27,14 @@ export default class Present extends View {
             name: 'table_for_all_datasets',
             desc: 'Creates a table which displays all datasets.'
         };
-        this.desc.templates[3] = {
-            name: 'present_webPush_notifications',
-            style: 'present_webPush',
-            desc: 'Display for notifications in webPush application.'
-        };
-        this.desc.templates[4] = {
-            name: 'present_webPush_history',
-            style: 'present_webPush',
-            desc: 'Display for history in webPush application.'
-        };
-        this.desc.templates[5] = {
-            name: 'present_webPush_triggers',
-            style: 'present_webPush',
-            desc: 'Display for triggers in webPush application.'
-        };
-        this.desc.templates[6] = {
-            name: 'present_leaderboard',
-            style: 'present_webPush_PWA',
-            desc: 'Display for triggers in webPush application.'
-        };
-        this.desc.templates[7] = {
-            name: 'present_webPush_images',
-            style: 'present_webPush_PWA',
-            desc: 'Display for possible profile pictures in webPush PWA.'
-        };
-        this.desc.templates[8] = {
-            name: 'present_webPush_achievements',
-            style: 'present_webPush_PWA',
-            desc: 'Display for achievements in webPush PWA.'
-        };
-        this.desc.templates[9] = {
-            name: 'present_webPush_admin_achievements',
-            style: 'present_webPush',
-            desc: 'Display for achievements in webPush PWA.'
-        };
-       this.desc.templates[10] = {
+       this.desc.templates[3] = {
           name: 'hierarchical',
             desc: 'Creates a presentation of hierarchical data.'
         };
-        this.desc.templates[11] = {
-          name: 'present_instruction',
-          style: 'present_webPush_PWA',
-          desc: 'Creates a presentation of instruction data.'
-        };
-        this.desc.templates[12] = {
+        this.desc.templates[4] = {
           name: 'flipdesktop_mobile',
           desc: 'View for data that automatically flips to a better view on desktop or mobile device size.'
         };
-            
 
         this.desc.reqPerSet[0] = {
             name: '*',
