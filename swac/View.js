@@ -345,6 +345,11 @@ export default class View extends Component {
                 // Load sub requestors
                 this.findSubRequestors(repeated);
 
+                // Support parent_id
+                if(set.parent_id) {
+                    set.parent = set.parent_id;
+                }
+
                 // Move if child element
                 if (set.parent) {
                     // Find child representation
@@ -363,6 +368,7 @@ export default class View extends Component {
                     if (parentElem) {
                         // Find place for child
                         let childsElem = parentElem.querySelector('.swac_forChilds');
+                        console.log("TEST childsElem: ", childsElem);
                         if (childsElem) {
                             childRep.classList.remove('swac_child');
                             childRep.setAttribute('swac_fromname', set.swac_fromName);
