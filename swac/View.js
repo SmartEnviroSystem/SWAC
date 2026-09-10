@@ -159,8 +159,8 @@ export default class View extends Component {
         this.desc.guifuncs = guiFunctions.filter(function (func) {
             return !supportedFunctions || supportedFunctions.includes(func.name);
         }).map(func => Object.assign({}, func, {
-            sections: func.sections.slice()
-        }));
+                sections: func.sections.slice()
+            }));
     }
 
     /**
@@ -346,7 +346,7 @@ export default class View extends Component {
                 this.findSubRequestors(repeated);
 
                 // Support parent_id
-                if(set.parent_id) {
+                if (set.parent_id) {
                     set.parent = set.parent_id;
                 }
 
@@ -604,7 +604,10 @@ export default class View extends Component {
                     }
                 }
                 if (!template) {
-                    Msg.error('View', 'Could not find template >' + this.requestor.templateName + '< for >' + this.requestor.id + '<');
+                    template = {
+                        name: this.requestor.templateName,
+                        url: this.requestor.templateName   // mark as external
+                    };
                 }
             } else if (typeof this.desc.templates[0] !== 'undefined') {
                 template = this.desc.templates[0];
@@ -644,11 +647,23 @@ export default class View extends Component {
                 this.showCoverMsg('loadingtemplate');
 
                 let prom = null;
-                if (SWAC.loadTemplates.has(basePath + template.name + ".html?vers=" + SWAC.desc.version)) {
-                    prom = SWAC.loadTemplates.get(basePath + template.name + ".html?vers=" + SWAC.desc.version);
+
+                // detect external template URL
+                let tplUrl = null;
+                if (template.url) {
+                    // absolute or relative URL
+                    tplUrl = template.url;
                 } else {
-                    prom = fetch(basePath + template.name + ".html?vers=" + SWAC.desc.version);
-                    SWAC.loadTemplates.set(basePath + template.name + ".html?vers=" + SWAC.desc.version, prom);
+                    // internal SWAC template
+                    tplUrl = basePath + template.name + ".html?vers=" + SWAC.desc.version;
+                }
+
+                // Use caching
+                if (SWAC.loadTemplates.has(tplUrl)) {
+                    prom = SWAC.loadTemplates.get(tplUrl);
+                } else {
+                    prom = fetch(tplUrl);
+                    SWAC.loadTemplates.set(tplUrl, prom);
                 }
 
                 // Load template code
