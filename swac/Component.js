@@ -1,7 +1,7 @@
 import SWAC from './swac.js';
 import Msg from './Msg.js';
 import Model from './Model.js';
-import View from './View.js';
+//import View from './View.js';
 import WatchableSource from './WatchableSource.js';
 import WatchableSet from './WatchableSet.js';
 
