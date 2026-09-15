@@ -97,6 +97,15 @@ export default class View extends Component {
         if (!options.attrVisibility)
             this.options.attrVisibility = [];
 
+        this.desc.opts[1108] = {
+            name: "showSidebar",
+            desc: "Shows the sidebar menu icon in the upper right corner.",
+            example: true
+        };
+        if (typeof options.showSidebar === 'undefined')
+            this.options.showSidebar = true;
+
+
         this.desc.funcs[2001] = {
             name: 'copy',
             desc: 'Copies the component next to the original.',
@@ -108,6 +117,21 @@ export default class View extends Component {
                 }
             ]
         };
+
+        this.desc.sidebar = [];
+        this.desc.sidebar[1000] = {
+            name: "reload",
+            desc: "Reloads the component",
+            icon: "refresh",
+            render: (view, container) => {
+                let btn = document.createElement('button');
+                btn.classList.add('uk-button', 'uk-button-default');
+                btn.textContent = "Reload";
+                btn.onclick = () => view.reload();
+                container.appendChild(btn);
+            }
+        };
+
 
         this.desc.styles = [];
 
@@ -122,6 +146,7 @@ export default class View extends Component {
         // Internal attributes
         this.repAttrs = [];
         this.subRequestors = new Map();
+        this.sidebarInitialized = false;
         // inViObserver
         this.inViOb = new IntersectionObserver(this.onInVi.bind(this), this.options.inViOpts);
         // endViObserver
@@ -241,6 +266,13 @@ export default class View extends Component {
                     curPlugin.swac_comp.afterAddSet(set, repeateds);
                 }
             }
+        }
+
+        // Sidebar erst initialisieren, wenn die erste Zeile gerendert wurde
+
+        if (!this.sidebarInitialized) {
+            this.initSidebar();
+            this.sidebarInitialized = true;
         }
     }
 
@@ -553,21 +585,63 @@ export default class View extends Component {
     }
 
     createRepeatedsForAttributes() {
-        // Get repeatableForAttributes
+        // Elemente, die als Attribut-Template dienen (Header, Label, etc.)
         let repForAttrs = this.findRepeatableForAttribute(this.requestor);
-        if (repForAttrs.length > 0) {
-            // Get attributes
-            let attrSourceMap = this.getAvailableAttributes();
-            for (let [curAttrFromName, curAttrs] of attrSourceMap.entries()) {
-                for (let curAttr of curAttrs) {
-                    if (curAttr.startsWith('swac_'))
+        if (repForAttrs.length === 0) {
+            return;
+        }
+
+        // Alle verfügbaren Attribute je Datenquelle
+        let attrSourceMap = this.getAvailableAttributes();
+
+        for (let [curAttrFromName, curAttrs] of attrSourceMap.entries()) {
+            for (let curAttr of curAttrs) {
+
+                // SWAC-interne Attribute überspringen
+                if (curAttr.startsWith('swac_'))
+                    continue;
+                // Attribut schon verarbeitet? → weiter
+                if (this.repAttrs.includes(curAttr))
+                    continue;
+
+                // Attribut als "bekannt" markieren
+                this.repAttrs.push(curAttr);
+
+                // 1. Header/Template für dieses Attribut erzeugen
+                for (let curRepForAttrs of repForAttrs) {
+                    this.createRepeatedForAttribute(curAttrFromName, curAttr, curRepForAttrs);
+                }
+
+                // 2. Alle bestehenden Zeilen dieser Datenquelle nachziehen:
+                //    Für jede Zeile eine Value-Wiederholung für curAttr erzeugen
+                let rows = this.requestor.querySelectorAll(
+                        '.swac_repeatedForSet[swac_fromname="' + curAttrFromName + '"]'
+                        );
+
+                for (let row of rows) {
+                    // Datensatz, der diese Zeile füllt
+                    let set = row.swac_dataset;
+                    if (!set)
                         continue;
-                    if (this.repAttrs.includes(curAttr))
+
+                    // Gibt es in dieser Zeile schon eine Zelle für dieses Attribut?
+                    let existingCell = row.querySelector(
+                            '.swac_repeatedForValue[swac_attrname="' + curAttr + '"]'
+                            );
+                    if (existingCell) {
                         continue;
-                    this.repAttrs.push(curAttr);
-                    for (let curRepForAttrs of repForAttrs) {
-                        this.createRepeatedForAttribute(curAttrFromName, curAttr, curRepForAttrs);
                     }
+
+                    // passendes repeatForValue-Template in dieser Zeile finden
+                    let template = row.querySelector('.swac_repeatForValue');
+                    if (!template) {
+                        continue;
+                    }
+
+                    // neue Value-Zelle für das Attribut erzeugen
+                    // (wenn set[curAttr] undefined ist, bleibt die Zelle leer,
+                    //  aber die Spaltenstruktur ist konsistent)
+                    this.createRepeatedForValue(curAttr, set, template);
                 }
             }
         }
@@ -947,6 +1021,7 @@ export default class View extends Component {
             Msg.error('view', 'No template given.');
             return;
         }
+
         let mode;
         if (template.classList.contains('swac_repeatForSet')) {
             mode = 'set';
@@ -956,7 +1031,8 @@ export default class View extends Component {
             Msg.error('view', 'Given element is no template');
             return;
         }
-        // Create clone for insertion of set
+
+        // Clone erzeugen
         let clone = null;
         if (template.nodeName === 'TEMPLATE') {
             const fragment = template.content.cloneNode(true);
@@ -964,14 +1040,19 @@ export default class View extends Component {
         } else {
             clone = template.cloneNode(true);
         }
-        // Workaround for uikit bug when dynamically adding tabs
+
+        // UIKit Fix
         if (clone.classList.contains('uk-active')) {
             clone.classList.remove('uk-active');
             clone.removeAttribute('aria-expanded');
         }
 
-        clone.setAttribute('swac_fromname', set.swac_fromName);
-        clone.setAttribute('swac_setid', set.id);
+        // Set-Infos
+        clone.setAttribute('swac_fromname', set?.swac_fromName ?? '');
+        clone.setAttribute('swac_setid', set?.id ?? '');
+        clone.swac_dataset = set;
+
+        // Einfügen der Zeile
         if (mode === 'set') {
             clone.classList.remove("swac_repeatForSet");
             clone.classList.add("swac_repeatedForSet");
@@ -985,7 +1066,6 @@ export default class View extends Component {
             clone.classList.remove("swac_repeatForChild");
             clone.classList.add("swac_repeatedForChild");
             let insertBeforeElem = null;
-            // Search insertion point
             let insertCandidate = template.parentNode.firstElementChild;
             while (insertCandidate) {
                 if (insertCandidate.classList.contains('swac_childInsertPoint')) {
@@ -999,34 +1079,55 @@ export default class View extends Component {
             }
             template.parentNode.insertBefore(clone, insertBeforeElem);
         }
-        clone.swac_dataset = set;
 
+        // BindPoints der Zeile
         let stopAtClasses = ['swac_repeatForValue'];
-        if (this.options.mainSource && set.swac_fromName === this.options.mainSource) {
+        if (this.options.mainSource && set?.swac_fromName === this.options.mainSource) {
             stopAtClasses = ['swac_repeatForValue', 'swac_repeatForChild'];
         }
-        // Find all bindPoints in cloned node
         clone.swac_bindPoints = this.findBindPoints(clone, stopAtClasses);
-        // Bind points and data
+
         for (let pbname in clone.swac_bindPoints) {
             for (let curBindPoint of clone.swac_bindPoints[pbname]) {
                 curBindPoint.dataset = set;
             }
         }
 
-        // Find all repeatableForValues in cloned node
-        let repeatablesForValue = this.findChildsRepeatableForValue(clone, set.setNo);
+        // repeatForValue-Templates in der Zeile finden
+        let repeatablesForValue = this.findChildsRepeatableForValue(clone, set?.setNo);
+
+        // ⭐ ERKENNUNG: Tabellenmodus oder Property–Value-Modus?
+        let headerCells = this.requestor.querySelectorAll(
+                '.swac_repeatedForAttribute[swac_fromname="' + (set?.swac_fromName ?? '') + '"]'
+                );
+
+        let isTableMode = headerCells.length > 0;
+
+        let attrOrder;
+
+        if (isTableMode) {
+            // ⭐ Tabellenmodus → Reihenfolge aus Header
+            attrOrder = Array.from(headerCells).map(
+                    cell => cell.getAttribute('swac_attrname')
+            );
+        } else {
+            // ⭐ Property–Value-Modus → Reihenfolge aus getAvailableAttributes()
+            attrOrder = this.getAvailableAttributes().get(set?.swac_fromName) || [];
+        }
+
+        // Für jedes repeatForValue-Template
         for (let curRepeatableForValue of repeatablesForValue) {
-            for (let attrs of this.getAvailableAttributes().values()) {
-                // Create for every value
-                for (let attrid in attrs) {
-                    if (typeof set[attrs[attrid]] !== 'function'
-                            && typeof set[attrs[attrid]] !== 'undefined') {
-                        this.createRepeatedForValue(attrs[attrid], set, curRepeatableForValue);
-                    }
-                }
+
+            for (let attrName of attrOrder) {
+
+                // SWAC interne Attribute überspringen
+                if (attrName.startsWith('swac_'))
+                    continue;
+                // Immer eine Zelle erzeugen – Inhalt wird in createRepeatedForValue geregelt
+                this.createRepeatedForValue(attrName, set, curRepeatableForValue);
             }
         }
+
         return clone;
     }
 
@@ -1121,34 +1222,42 @@ export default class View extends Component {
      * @returns {undefined}
      */
     createRepeatedForValue(attr, set, template) {
-        Msg.flow('View', 'Create repeatForValue >' + attr + '< of set.id = >' + set.id + '<', this.requestor);
+        Msg.flow('View', 'Create repeatForValue >' + attr + '< of set.id = >' + (set ? set.id : 'null') + '<', this.requestor);
+
         let clone = template.cloneNode(true);
         clone.classList.remove('swac_repeatForValue');
         clone.classList.add('swac_repeatedForValue');
-        clone.setAttribute('swac_fromname', set.swac_fromName);
-        clone.setAttribute('swac_setid', set.id);
         clone.setAttribute('swac_attrname', attr);
 
+        if (set) {
+            clone.setAttribute('swac_fromname', set.swac_fromName);
+            clone.setAttribute('swac_setid', set.id);
+        }
+
         let stopAtClasses = [];
-        if (this.options.mainSource && set.swac_fromName === this.options.mainSource) {
+        if (this.options.mainSource && set && set.swac_fromName === this.options.mainSource) {
             stopAtClasses = ['swac_repeatForChild'];
         }
-        // Find all bindPoints in cloned node
+
+        // BindPoints finden
         clone.swac_bindPoints = this.findBindPoints(clone, stopAtClasses);
+
         // Do not create askerik bindpoints for metadata
         if (clone.swac_bindPoints.hasOwnProperty('*') && attr.startsWith('swac_')) {
             return;
         }
 
-        // Bind points and data
+        // Bind points und Daten
         for (let bpname in clone.swac_bindPoints) {
             let curBindPoints = clone.swac_bindPoints[bpname];
             for (let curBindPoint of curBindPoints) {
-                // Special handling for askerik placeholder
+
+                // Platzhalter-AttrName
                 if (curBindPoint.getAttribute('attrName') === '*') {
                     curBindPoint.setAttribute('attrName', attr);
                 }
-                // Special handling for attrName metadata value
+
+                // Sonderfall: attrName selbst anzeigen
                 if (curBindPoint.getAttribute('attrName') === 'attrName') {
                     curBindPoint.dataset = {
                         notify: function () {},
@@ -1158,9 +1267,26 @@ export default class View extends Component {
                     continue;
                 }
 
-                curBindPoint.dataset = set;
+                // Wenn kein Set oder kein Wert → leere Anzeige
+                if (!set || typeof set[attr] === 'undefined') {
+                    // Dataset trotzdem setzen, aber ohne Inhalt
+                    curBindPoint.dataset = {
+                        notify: function () {},
+                        addObserver: function () {}
+                    };
+
+                    if ('value' in curBindPoint) {
+                        curBindPoint.value = '';
+                    } else {
+                        curBindPoint.textContent = '';
+                    }
+                } else {
+                    // Normaler Fall: Wert existiert
+                    curBindPoint.dataset = set;
+                }
             }
         }
+
         template.parentElement.appendChild(clone);
     }
 
@@ -1512,4 +1638,82 @@ export default class View extends Component {
         });
         document.dispatchEvent(myEvent);
     }
+
+    initSidebar() {
+        if (!this.options.showSidebar)
+            return;
+
+        this.requestor.style.position = 'relative';
+
+        // Menü-Icon
+        let menuIcon = document.createElement('a');
+        menuIcon.classList.add('uk-icon-button');
+        menuIcon.setAttribute('uk-icon', 'cog');
+        menuIcon.classList.add('swac_sidebar_icon');
+        menuIcon.addEventListener('click', this.openSidebar.bind(this));
+
+        this.requestor.appendChild(menuIcon);
+
+        // Sidebar-Container
+        let sidebar = document.createElement('div');
+        sidebar.id = this.requestor.id + "_sidebar";
+        sidebar.setAttribute('uk-offcanvas', 'flip: true; overlay: true');
+
+        sidebar.innerHTML = `
+        <div class="uk-offcanvas-bar">
+            <h3>${this.requestor.id} – Einstellungen</h3>
+            <div class="swac_sidebar_content"></div>
+        </div>
+    `;
+
+        document.body.appendChild(sidebar);
+
+        this.sidebarElem = sidebar;
+    }
+
+    openSidebar() {
+        let entries = this.getSidebarEntries();
+        let content = this.sidebarElem.querySelector('.swac_sidebar_content');
+        content.innerHTML = '';
+
+        for (let entry of entries) {
+            if (!entry)
+                continue;
+            let section = document.createElement('div');
+            section.classList.add('swac_sidebar_section');
+
+            let title = document.createElement('h4');
+            title.textContent = entry.desc;
+            section.appendChild(title);
+
+            entry.render(this, section);
+
+            content.appendChild(section);
+        }
+
+        UIkit.offcanvas(this.sidebarElem).show();
+    }
+
+    getSidebarEntries() {
+        let entries = [];
+
+        // View.js eigene Einträge
+        if (this.desc.sidebar)
+            entries.push(...this.desc.sidebar);
+
+        // Einträge der konkreten Komponente
+        if (this.sidebar)
+            entries.push(...this.sidebar);
+
+        // Einträge aus Plugins
+        if (this.pluginsystem) {
+            for (let curPlugin of this.getLoadedPlugins().values()) {
+                if (curPlugin.swac_comp.desc.sidebar) {
+                    entries.push(...curPlugin.swac_comp.desc.sidebar);
+                }
+            }
+        }
+        return entries;
+    }
+
 }
