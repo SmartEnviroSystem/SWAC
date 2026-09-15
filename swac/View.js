@@ -368,7 +368,6 @@ export default class View extends Component {
                     if (parentElem) {
                         // Find place for child
                         let childsElem = parentElem.querySelector('.swac_forChilds');
-                        console.log("TEST childsElem: ", childsElem);
                         if (childsElem) {
                             childRep.classList.remove('swac_child');
                             childRep.setAttribute('swac_fromname', set.swac_fromName);
