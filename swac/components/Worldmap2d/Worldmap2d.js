@@ -492,7 +492,6 @@ export default class Worldmap2d extends View {
             this.options.plugins.set('RouteAnalytics', {id: 'RouteAnalytics', active: false});
             this.options.plugins.set('SearchPlaces', {id: 'SearchPlaces', active: false});
             this.options.plugins.set('Timeline', {id: 'Timeline', active: false});
-            this.options.plugins.set('ToggleClickInteractionButton', {id: 'ToggleClickInteractionButton', active: false});
         }
         this.enableGuiFunctions('RouteAnalytics');
 
