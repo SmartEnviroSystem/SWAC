@@ -103,7 +103,7 @@ export default class View extends Component {
             example: true
         };
         if (typeof options.showSidebar === 'undefined')
-            this.options.showSidebar = true;
+            this.options.showSidebar = false;
 
 
         this.desc.funcs[2001] = {

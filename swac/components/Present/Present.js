@@ -27,13 +27,13 @@ export default class Present extends View {
             name: 'table_for_all_datasets',
             desc: 'Creates a table which displays all datasets.'
         };
-       this.desc.templates[3] = {
-          name: 'hierarchical',
+        this.desc.templates[3] = {
+            name: 'hierarchical',
             desc: 'Creates a presentation of hierarchical data.'
         };
         this.desc.templates[4] = {
-          name: 'flipdesktop_mobile',
-          desc: 'View for data that automatically flips to a better view on desktop or mobile device size.'
+            name: 'flipdesktop_mobile',
+            desc: 'View for data that automatically flips to a better view on desktop or mobile device size.'
         };
 
         this.desc.reqPerSet[0] = {
@@ -84,6 +84,10 @@ export default class Present extends View {
                 id: 'Datafilterbar',
                 active: false
             });
+            this.options.plugins.set('DatasetAnalysis', {
+                id: 'DatasetAnalysis',
+                active: true
+            });
         }
         this.enableGuiFunctions('Datafilterbar');
     }
@@ -97,9 +101,9 @@ export default class Present extends View {
                     gridelem.setAttribute('uk-sortable', "handle: .uk-card");
                 } else {
                     Msg.warn('present', 'Option >arangeable> for >'
-                        + this.requestor.id + '< was set to true, but there is no '
-                        + 'element in the template that is able to build '
-                        + 'arangeable elements.', this.requestor);
+                            + this.requestor.id + '< was set to true, but there is no '
+                            + 'element in the template that is able to build '
+                            + 'arangeable elements.', this.requestor);
                 }
             }
             resolve();
@@ -113,34 +117,5 @@ export default class Present extends View {
         }
 
         super.afterAddSet(set, repeateds);
-        // Check for missing table cells on table template
-        if (this.requestor.templateName.includes('table') && repeateds) {
-            for (let curRepeated of repeateds) {
-                let repForVal = curRepeated.querySelector('.swac_repeatForValue');
-                if (repForVal) {
-                    for (let [curSource, attrs] of this.getAvailableAttributes()) {
-                        let lastAttrElem = null;
-                        for (let curAttr of attrs) {
-                            let repAttrElem = curRepeated.querySelector('.swac_repeatedForValue[swac_attrname="' + curAttr + '"]');
-                            if (!repAttrElem) {
-                                // Create missing cell
-                                repAttrElem = repForVal.cloneNode(true);
-                                repAttrElem.classList.remove('swac_repeatForValue');
-                                repAttrElem.classList.add('swac_repeatedForValue');
-                                repAttrElem.innerHTML = '';
-                                if (repAttrElem) {
-                                    // Add cell behind last cell
-                                    lastAttrElem.after(repAttrElem);
-                                } else {
-                                    // Add at the begining
-                                    lastAttrElem.after(repForVal);
-                                }
-                            }
-                            lastAttrElem = repAttrElem;
-                        }
-                    }
-                }
-            }
-        }
     }
 }

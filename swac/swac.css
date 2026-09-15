@@ -83,6 +83,19 @@
     height: 250px;
 }
 
+.swac_sidebar_icon {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    opacity: 0;
+    transition: opacity 0.2s;
+    cursor: pointer;
+    font-size: 20px;
+}
+
+[swa]:hover .swac_sidebar_icon {
+    opacity: 1;
+}
 
 .swac_onHover {
   position: relative;
