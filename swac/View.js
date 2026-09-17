@@ -119,18 +119,18 @@ export default class View extends Component {
         };
 
         this.desc.sidebar = [];
-        this.desc.sidebar[1000] = {
-            name: "reload",
-            desc: "Reloads the component",
-            icon: "refresh",
-            render: (view, container) => {
-                let btn = document.createElement('button');
-                btn.classList.add('uk-button', 'uk-button-default');
-                btn.textContent = "Reload";
-                btn.onclick = () => view.reload();
-                container.appendChild(btn);
-            }
-        };
+//        this.desc.sidebar[1000] = {
+//            name: "reload",
+//            desc: "Reloads the component",
+//            icon: "refresh",
+//            render: (view, container) => {
+//                let btn = document.createElement('button');
+//                btn.classList.add('uk-button', 'uk-button-default');
+//                btn.textContent = "Reload";
+//                btn.onclick = () => view.reload();
+//                container.appendChild(btn);
+//            }
+//        };
 
 
         this.desc.styles = [];
@@ -1683,7 +1683,12 @@ export default class View extends Component {
             section.classList.add('swac_sidebar_section');
 
             let title = document.createElement('h4');
-            title.textContent = entry.desc;
+            let translation = window.swac.lang.getTranslationForId(entry.name);
+            if(translation !== null)
+                title.textContent = translation;
+            else 
+                title.textContent = entry.name;
+            title.setAttribute('swac_lang',entry.name);
             section.appendChild(title);
 
             entry.render(this, section);
@@ -1694,6 +1699,7 @@ export default class View extends Component {
         UIkit.offcanvas(this.sidebarElem).show();
     }
 
+    /** Collect all sidebar entries from component and plugins **/
     getSidebarEntries() {
         let entries = [];
 
