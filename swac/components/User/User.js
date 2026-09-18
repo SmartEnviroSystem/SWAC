@@ -626,6 +626,17 @@ export default class User extends View {
      */
     showUser() {
         Msg.flow('User', 'showUser() called', this.requestor);
+        // Make all elements visible that should be shown for logged-in users
+        let loggedinElems = document.querySelectorAll('.swac_user_show_loggedin');
+        for (let elem of loggedinElems) {
+            elem.classList.remove('swac_dontdisplay');
+        }
+        // Hide loggedout elems
+        let loggedoutElems = document.querySelectorAll('.swac_user_show_loggedout');
+        for (let elem of loggedoutElems) {
+            elem.classList.add('swac_dontdisplay');
+        }
+
         // Make userarea visible
         let userarea = document.querySelector('.swac_user_userarea');
         userarea.classList.remove('swac_dontdisplay');
@@ -755,6 +766,18 @@ export default class User extends View {
         document.cookie = "authtoken=" + user.authtoken + "; path=/; SameSite=None; Secure; max-age=0";
         // When useing SmartUser
         document.cookie = "authtoken=loggedout; path=/SmartUser/smartuser/user; SameSite=None; Secure; max-age=0";
+
+        // Hide all elements that should only be visible for logged-in users
+        let loggedinElems = document.querySelectorAll('.swac_user_show_loggedin');
+        for (let elem of loggedinElems) {
+            elem.classList.add('swac_dontdisplay');
+        }
+        // Show all elements that should only be visible if user is not logged in
+        let loggedoutElems = document.querySelectorAll('.swac_user_show_loggedout');
+        for (let elem of loggedoutElems) {
+            elem.classList.remove('swac_dontdisplay');
+        }
+
         if (this.options.afterLogoutLoc)
             window.location.href = SWAC_config.app_root + this.options.afterLogoutLoc;
         else {
