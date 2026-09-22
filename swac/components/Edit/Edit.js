@@ -883,9 +883,10 @@ The function gets the droped dataset and the dropzone element.'
                 let optName = attrDef.possibleValueName ? attrDef.possibleValueName : 'name';
                 // Try load options from database
                 Model.getFromReference(options).then(function (source) {
-                    for (let curOption of source.data) {
+                    for (let curOption of source.sets) {
                         if (!curOption)
                             continue;
+                        
                         let optNode = document.createElement('option');
                         optNode.value = curOption[optValue];
                         optNode.setAttribute('swac_lang', curOption[optName]);
