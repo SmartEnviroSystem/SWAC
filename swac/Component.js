@@ -1255,7 +1255,7 @@ DEFINTION of SET:\n\
         }
 
         // Inform plugins about added sets / Plugins from views are informed by view
-        if (this.pluginsystem && !this.constructor.prototype instanceof View) {
+        if (this.pluginsystem && !this.isView) {
             for (let curPlugin of this.getLoadedPlugins().values()) {
                 if (curPlugin.swac_comp.afterAddSet) {
                     curPlugin.swac_comp.afterAddSet(set, repeateds);
@@ -1426,13 +1426,18 @@ DEFINTION of SET:\n\
             for (let set of this.data[fromName].getSets()) {
                 if (!set)
                     continue;
-                // Look at each attribute
                 for (let attr in set) {
-                    if (!attrs.includes(attr) && !attr.startsWith('swac_')) {
+                    if (!attr.startsWith('swac_')) {
                         attrs.push(attr);
                     }
                 }
             }
+
+// Duplikate entfernen
+            attrs = [...new Set(attrs)];
+
+// Alphabetisch sortieren
+            attrs.sort();
         }
         // Reorder attributes with fixed position
         let newAttrStart = [];

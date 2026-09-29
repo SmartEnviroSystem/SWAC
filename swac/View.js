@@ -18,6 +18,7 @@ export default class View extends Component {
      */
     constructor(options = {}) {
         super(options);
+        this.isView = true;
         // Component description
         this.desc.text = 'View';
         this.desc.templates = [];

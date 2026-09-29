@@ -4,6 +4,7 @@ import OnlineReactions from './OnlineReactions.js';
 import ViewHandler from './ViewHandler.js';
 import Reactions from './Reactions.js';
 import Model from './Model.js';
+import Component from './Component.js';
 
 /* 
  * This is the SmartWebApp entry points. It automatically detects, what 
