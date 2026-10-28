@@ -1,0 +1,59 @@
+.swac_collage_viewer {
+    text-align: center;
+}
+
+.swac_collage_mainimg {
+    max-width: 100%;
+    max-height: 60vh;
+}
+
+.swac_collage_nav {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.swac_collage_nav button {
+    flex: 0 0 auto;
+    text-transform: none;
+}
+
+.swac_collage_strip {
+    position: relative;
+    display: flex;
+    flex: 1 1 auto;
+    gap: 4px;
+    min-width: 0;
+    overflow-x: auto;
+    padding: 4px 0;
+}
+
+.swac_collage_thumb {
+    flex: 0 0 auto;
+    width: 96px;
+    margin: 0;
+    border: 2px solid transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    text-align: center;
+}
+
+.swac_collage_thumb img {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+}
+
+.swac_collage_thumb figcaption {
+    font-size: 0.75rem;
+}
+
+.swac_collage_selected {
+    border-color: #1e87f0;
+}
+
+.swac_collage_loading .swac_collage_strip {
+    opacity: 0.5;
+}
