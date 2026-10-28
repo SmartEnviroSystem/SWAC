@@ -1,6 +1,7 @@
 var Collage_en = {
     prev: 'Load previous images',
     next: 'Load next images',
+    play: 'Play / pause (space)',
     image: 'Image',
     images: 'images',
     of: 'of',

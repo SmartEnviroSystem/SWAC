@@ -54,6 +54,10 @@ export default class Collage extends View {
             selc: '.swac_collage_msg',
             desc: 'Element where hints like "no older images" are shown.'
         };
+        this.desc.optPerTpl[7] = {
+            selc: '.swac_collage_play',
+            desc: 'Button that plays the images like a video and pauses the playback.'
+        };
         this.desc.reqPerSet[0] = {
             name: 'id',
             desc: 'The attribute id is required for the component to work properly.'
@@ -124,6 +128,13 @@ export default class Collage extends View {
         };
         if (!options.keogramMaxSize)
             this.options.keogramMaxSize = 10;
+        this.desc.opts[8] = {
+            name: "playInterval",
+            desc: "Milliseconds each image is shown while playing. Longer if the next image needs more time to load.",
+            example: 500
+        };
+        if (!options.playInterval)
+            this.options.playInterval = 500;
 
         this.desc.funcs[0] = {
             name: 'select',
@@ -155,17 +166,25 @@ export default class Collage extends View {
             name: 'loadPrevious',
             desc: 'Loads the images before the first shown image.',
             returns: {
-                desc: 'Promise that resolves when the images are loaded.',
-                type: 'Promise'
+                desc: 'Promise that resolves with true if images were loaded, false if there are no older images.',
+                type: 'Promise<Boolean>'
             }
         };
         this.desc.funcs[3] = {
             name: 'loadNext',
             desc: 'Loads the images after the last shown image.',
             returns: {
-                desc: 'Promise that resolves when the images are loaded.',
-                type: 'Promise'
+                desc: 'Promise that resolves with true if images were loaded, false if there are no newer images.',
+                type: 'Promise<Boolean>'
             }
+        };
+        this.desc.funcs[4] = {
+            name: 'play',
+            desc: 'Plays the images like a video. Loads the next images when reaching the end of the timeline.'
+        };
+        this.desc.funcs[5] = {
+            name: 'pause',
+            desc: 'Pauses the playback.'
         };
 
         this.desc.events[0] = {
@@ -178,6 +197,11 @@ export default class Collage extends View {
             desc: 'Fired when the display mode is determined.',
             data: 'Delivers {requestor, mode} with the used mode.'
         };
+        this.desc.events[2] = {
+            name: 'swac_REQUESTOR_ID_collage_play',
+            desc: 'Fired when the playback starts or stops.',
+            data: 'Delivers {requestor, playing} with true if the playback started.'
+        };
 
         // internal values
         this.images = [];       // Sets shown in the timeline, ordered by time
@@ -187,6 +211,9 @@ export default class Collage extends View {
         this.loading = false;
         this.renderTimeout = null;
         this.ownRequestIds = new Set();  // Requests made by loadImages()
+        this.playing = false;
+        this.playTimeout = null;
+        this.playRun = 0;       // Number of the current playback
     }
 
     init() {
@@ -203,6 +230,11 @@ export default class Collage extends View {
             let jumpFwdBtn = this.requestor.querySelector('.swac_collage_jumpfwd');
             if (jumpFwdBtn)
                 jumpFwdBtn.addEventListener('click', this.jump.bind(this, 1));
+            let playBtn = this.requestor.querySelector('.swac_collage_play');
+            if (playBtn) {
+                playBtn.addEventListener('click', this.togglePlay.bind(this));
+                this.updatePlayButton();
+            }
             let strip = this.requestor.querySelector('.swac_collage_strip');
             if (strip) {
                 strip.addEventListener('keydown', this.onKeyDown.bind(this));
@@ -406,39 +438,154 @@ export default class Collage extends View {
                 this.select(this.selected + 1);
             else
                 this.loadNext();
+        } else if (evt.key === ' ') {
+            evt.preventDefault();
+            this.togglePlay();
         }
+    }
+
+    /**
+     * Starts or pauses the playback
+     *
+     * @returns {undefined}
+     */
+    togglePlay() {
+        if (this.playing)
+            this.pause();
+        else
+            this.play();
+    }
+
+    /**
+     * Plays the images like a video
+     *
+     * @returns {undefined}
+     */
+    play() {
+        if (this.playing || this.images.length === 0)
+            return;
+        this.playing = true;
+        this.showMsg('');
+        this.updatePlayButton();
+        document.dispatchEvent(new CustomEvent('swac_' + this.requestor.id + '_collage_play', {
+            detail: {requestor: this.requestor, playing: true}
+        }));
+        // New run number stops steps of an earlier playback that are still waiting for images
+        this.playRun++;
+        this.playStep(this.playRun);
+    }
+
+    /**
+     * Pauses the playback
+     *
+     * @returns {undefined}
+     */
+    pause() {
+        if (!this.playing)
+            return;
+        this.playing = false;
+        clearTimeout(this.playTimeout);
+        this.updatePlayButton();
+        document.dispatchEvent(new CustomEvent('swac_' + this.requestor.id + '_collage_play', {
+            detail: {requestor: this.requestor, playing: false}
+        }));
+    }
+
+    /**
+     * Shows the next image and plans the following step.
+     * Waits until the next image is loaded, so that the playback does not flicker.
+     *
+     * @param {Number} run Number of the playback this step belongs to
+     * @returns {Promise} Resolves when the step is done
+     */
+    async playStep(run) {
+        if (!this.playing || run !== this.playRun)
+            return;
+        let start = Date.now();
+        if (this.selected >= this.images.length - 1) {
+            // End of timeline reached, continue with the next images
+            let loaded = await this.loadNext();
+            if (run !== this.playRun)
+                return;
+            if (!loaded) {
+                this.pause();
+                return;
+            }
+        } else {
+            let next = this.images[this.selected + 1];
+            await this.preloadImage(this.getImageSrc(next));
+            if (!this.playing || run !== this.playRun)
+                return;
+            this.select(this.selected + 1);
+        }
+        let wait = Math.max(0, this.options.playInterval - (Date.now() - start));
+        this.playTimeout = setTimeout(this.playStep.bind(this, run), wait);
+    }
+
+    /**
+     * Loads an image into the browser cache
+     *
+     * @param {String} src Source of the image
+     * @returns {Promise} Resolves when the image is loaded or could not be loaded
+     */
+    preloadImage(src) {
+        return new Promise((resolve) => {
+            let img = new Image();
+            img.onload = resolve;
+            img.onerror = resolve;
+            img.src = src;
+        });
+    }
+
+    /**
+     * Shows play or pause symbol on the play button
+     *
+     * @returns {undefined}
+     */
+    updatePlayButton() {
+        let playBtn = this.requestor.querySelector('.swac_collage_play');
+        if (!playBtn)
+            return;
+        // &#xFE0E; shows the play symbol as text instead of an emoji
+        playBtn.innerHTML = this.playing ? '&#10074;&#10074;' : '&#9654;&#xFE0E;';
+        if (this.playing)
+            playBtn.classList.add('swac_collage_playing');
+        else
+            playBtn.classList.remove('swac_collage_playing');
     }
 
     /**
      * Loads the images before the first shown image
      *
-     * @returns {Promise} Resolves when the images are loaded
+     * @returns {Promise<Boolean>} Resolves with true if images were loaded
      */
     async loadPrevious() {
         if (this.images.length === 0)
-            return;
+            return false;
         let sets = await this.loadNeighbours(this.images[0], -1);
         if (sets.length === 0) {
             this.showMsg(SWAC.lang.dict.Collage.noolder);
-            return;
+            return false;
         }
         this.showImages(sets, -1);
+        return true;
     }
 
     /**
      * Loads the images after the last shown image
      *
-     * @returns {Promise} Resolves when the images are loaded
+     * @returns {Promise<Boolean>} Resolves with true if images were loaded
      */
     async loadNext() {
         if (this.images.length === 0)
-            return;
+            return false;
         let sets = await this.loadNeighbours(this.images[this.images.length - 1], 1);
         if (sets.length === 0) {
             this.showMsg(SWAC.lang.dict.Collage.nonewer);
-            return;
+            return false;
         }
         this.showImages(sets, 0);
+        return true;
     }
 
     /**

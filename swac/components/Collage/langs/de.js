@@ -1,6 +1,7 @@
 var Collage_de = {
     prev: 'Vorherige Bilder laden',
     next: 'Nächste Bilder laden',
+    play: 'Abspielen / Anhalten (Leertaste)',
     image: 'Bild',
     images: 'Bilder',
     of: 'von',
