@@ -10,7 +10,7 @@ export default class TableActionsSPL extends Plugin {
         this.desc.text = 'Adds configurable icon buttons to each table row.';
         this.desc.opts.push({
             name: 'actions',
-            desc: 'Array of {id, icon, title, onClick}. onClick receives the dataset id.'
+            desc: 'Array of {id, icon, title, onClick}. onClick receives the complete dataset object.'
         });
         this.rowIds = new WeakMap();
         this.nextRowId = 0;
@@ -75,7 +75,7 @@ export default class TableActionsSPL extends Plugin {
                 icon.setAttribute('uk-icon', 'icon: ' + action.icon);
                 icon.setAttribute('aria-hidden', 'true');
                 button.appendChild(icon);
-                button.addEventListener('click', () => action.onClick(set.id ?? this.rowIds.get(row)));
+                button.addEventListener('click', () => action.onClick(set));
                 cell.appendChild(button);
                 // Attach immediately so duplicate prefixes also get unique IDs.
                 row.appendChild(cell);
