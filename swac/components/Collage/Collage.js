@@ -58,6 +58,18 @@ export default class Collage extends View {
             selc: '.swac_collage_play',
             desc: 'Button that plays the images like a video and pauses the playback.'
         };
+        this.desc.optPerTpl[8] = {
+            selc: '.swac_collage',
+            desc: 'Container of the whole collage.'
+        };
+        this.desc.optPerTpl[9] = {
+            selc: '.swac_collage_viewer',
+            desc: 'Area with the large image and its caption.'
+        };
+        this.desc.optPerTpl[10] = {
+            selc: '.swac_collage_nav',
+            desc: 'Area with the navigation buttons and the timeline. Its buttons are disabled while images are loading.'
+        };
         this.desc.reqPerSet[0] = {
             name: 'id',
             desc: 'The attribute id is required for the component to work properly.'
@@ -86,6 +98,8 @@ export default class Collage extends View {
         };
         if (!options.pathAttr)
             this.options.pathAttr = 'path';
+        // Required attribute is the configured one, otherwise SWAC reports path as missing
+        this.desc.reqPerSet[1].name = this.options.pathAttr;
         this.desc.opts[2] = {
             name: "tsAttr",
             desc: "Name of the attribute that contains the timestamp of the image.",
