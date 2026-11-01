@@ -231,7 +231,7 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
                 },
                 {
                     name: 'combination',
-                    desc: 'Object describing the combination: {attrs: [String], mode: max|min|avg|weighted, weights: {ATTRIBUTENAME: Number}, targetAttr: String}'
+                    desc: 'Object describing the combination: {attrs: [String], mode: max|min|avg|weighted|custom, weights: {ATTRIBUTENAME: Number}, invert: [String], targetAttr: String, func: Function(values, set, datadescription)}'
                 }
             ]
         };
@@ -762,11 +762,14 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
      * - min: Color of the attribute with the lowest level
      * - avg: Average level of all attributes
      * - weighted: Weighted average level (weights given in combination.weights)
-     * For avg and weighted the color is taken from the description of
-     * combination.targetAttr (level is given as 0 - 100).
+     * - custom: combination.func(values, set, datadescription) returns a color or a level (0 - 1)
+     * For avg, weighted and custom (when returning a level) the color is taken from
+     * the description of combination.targetAttr (level is given as 0 - 100).
+     * If there is no targetAttr the colors of the attributes are mixed.
+     * Attributes listed in combination.invert are used with inverted level (1 - level).
      *
      * @param {Object} set Dataset with the values
-     * @param {Object} combination Description of the combination {attrs, mode, weights, targetAttr}
+     * @param {Object} combination Description of the combination {attrs, mode, weights, invert, targetAttr, func}
      * @returns {String} Color or null if no color could be calculated
      */
     getCombinedValueColor(set, combination) {
@@ -778,15 +781,31 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
 
         // Collect values and levels of all attributes
         let entries = [];
+        let values = {};
         for (let curAttr of combination.attrs) {
             let value = this.getDescribedValue(set, curAttr);
+            values[curAttr] = value;
             let level = this.getValueLevel(curAttr, value);
             if (level === null)
                 continue;
+            // For attributes where a high value means a low level (e.g. cloud cover)
+            if (Array.isArray(combination.invert) && combination.invert.includes(curAttr))
+                level = 1 - level;
             let weight = 1;
             if (mode === 'weighted' && combination.weights && typeof combination.weights[curAttr] !== 'undefined')
                 weight = Number(combination.weights[curAttr]);
             entries.push({attr: curAttr, value: value, level: level, weight: weight});
+        }
+
+        if (mode === 'custom') {
+            if (typeof combination.func !== 'function') {
+                Msg.error('Datadescription', 'Combination mode >custom< needs a function in >func<.', this.requestor);
+                return null;
+            }
+            let res = combination.func(values, set, this);
+            if (typeof res === 'number' && combination.targetAttr)
+                return this.getValuesVisdata(combination.targetAttr, res * 100, 'col');
+            return typeof res === 'string' ? res : null;
         }
 
         if (entries.length === 0)
@@ -804,12 +823,26 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
             let weightSum = entries.reduce((sum, e) => sum + e.weight, 0);
             if (weightSum <= 0)
                 return null;
-            if (!combination.targetAttr) {
-                Msg.error('Datadescription', 'Combination mode >' + mode + '< needs a >targetAttr< describing the colors.', this.requestor);
-                return null;
+            if (combination.targetAttr) {
+                let level = entries.reduce((sum, e) => sum + e.level * e.weight, 0) / weightSum;
+                return this.getValuesVisdata(combination.targetAttr, level * 100, 'col');
             }
-            let level = entries.reduce((sum, e) => sum + e.level * e.weight, 0) / weightSum;
-            return this.getValuesVisdata(combination.targetAttr, level * 100, 'col');
+            // Mix the colors of the single attributes
+            let mixed = {r: 0, g: 0, b: 0};
+            let mixedWeight = 0;
+            for (let curEntry of entries) {
+                let col = this.getValuesVisdata(curEntry.attr, curEntry.value, 'col');
+                let rgb = col ? this.hexToRgb(Colorcalculations.stringToHex(col)) : null;
+                if (!rgb)
+                    continue;
+                mixed.r += rgb.r * curEntry.weight;
+                mixed.g += rgb.g * curEntry.weight;
+                mixed.b += rgb.b * curEntry.weight;
+                mixedWeight += curEntry.weight;
+            }
+            if (mixedWeight === 0)
+                return null;
+            return Colorcalculations.rgbToHex({r: mixed.r / mixedWeight, g: mixed.g / mixedWeight, b: mixed.b / mixedWeight});
         }
         Msg.warn('Datadescription', 'Combination mode >' + mode + '< is not supported.', this.requestor);
         return null;

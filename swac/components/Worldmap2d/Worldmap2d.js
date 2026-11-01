@@ -478,7 +478,7 @@ export default class Worldmap2d extends View {
 
         this.desc.opts[32] = {
             name: 'colorAttr',
-            desc: 'Name of the attribute whose value determines the color of markers. \n\
+            desc: 'Name of the attribute whose value determines the color of markers and areas. \n\
 The colors are taken from the datadescription component (option datadescription). \n\
 Can be overwritten per datasource with datasources.get(NAME).colorAttr. If not set, the \n\
 visuAttribute of the datadescription component is used.',
@@ -489,11 +489,13 @@ visuAttribute of the datadescription component is used.',
 
         this.desc.opts[33] = {
             name: 'colorCombination',
-            desc: 'Calculates the color of markers from multiple attribute values. \n\
+            desc: 'Calculates the color of markers and areas from multiple attribute values. \n\
 Has priority over colorAttr. Can be overwritten per datasource with datasources.get(NAME).colorCombination. \n\
-Object with: attrs (names of the attributes), mode (max, min, avg, weighted), \n\
-weights (object with weight per attribute for mode weighted) and targetAttr (attribute of the \n\
-datadescription that describes the colors for the combined level 0 - 100, needed for avg and weighted).',
+Object with: attrs (names of the attributes), mode (max, min, avg, weighted, custom), \n\
+weights (object with weight per attribute for mode weighted), invert (names of attributes \n\
+where a high value means a low level), targetAttr (attribute of the \n\
+datadescription that describes the colors for the combined level 0 - 100) and func \n\
+(function(values, set, datadescription) for mode custom, returns a color or a level 0 - 1).',
             example: {
                 attrs: ['pm2_5', 'pm10_0'],
                 mode: 'max'
@@ -560,7 +562,7 @@ datadescription that describes the colors for the combined level 0 - 100, needed
 
         this.desc.funcs[3] = {
             name: 'setColorAttr',
-            desc: 'Sets the attribute used for coloring (user selection) and recolors all markers. Use null to return to the configured coloring.',
+            desc: 'Sets the attribute used for coloring (user selection) and recolors all markers and areas. Use null to return to the configured coloring.',
             params: [
                 {
                     name: 'attr',
@@ -604,7 +606,10 @@ datadescription that describes the colors for the combined level 0 - 100, needed
         this.overlayLayers = {};
         this.markers = {}; // this is a sparse array
         this.markersArray = []; // this is a normal array
+        this.areas = {}; // Areas per datasource, used by addArea()
         this.userColorAttr = null; // Attribute for coloring choosen by the user
+        // Colors where marker icons exist in Icon/imgs/map
+        this.markerIconColors = ['2A81CB', '2AAD27', '3D3D3D', '7B7B7B', '9C2BCB', 'CAC428', 'CB2B3E', 'CB8427', 'FFD326'];
 
         this.view = {};
         this.tile = null;
@@ -991,7 +996,11 @@ datadescription that describes the colors for the combined level 0 - 100, needed
         }
         if (this.options.customCircleMarkerOptions) {
             //TODO unify with marker creation below, create option for circle marker
-            marker = L.circleMarker(latlng, this.options.geojsonCircleMarkerOptions);
+            let circleopts = Object.assign({}, this.options.geojsonCircleMarkerOptions);
+            // Use fill color from datadescription
+            if (this.datadescription && geoJSON.set)
+                circleopts.fillColor = this.getColorForSet(geoJSON.set);
+            marker = L.circleMarker(latlng, circleopts);
         } else {
             // Create markeropts
             let markeropts = {};
@@ -1054,11 +1063,20 @@ datadescription that describes the colors for the combined level 0 - 100, needed
      * Creates a Area from the given geoJSON feature.
      * 
      * @param {geoJSON} geoJSON Object in geoJSON style
-     * @param {String} color String for the color of the displayed area
+     * @param {String} color String for the color of the displayed area. If not
+     * given the color is calculated from the datadescription (red without datadescription).
      *
      * @returns {Object} The Area that was added to the map.
      */
-    addArea(geoJSON, color = "red") {
+    addArea(geoJSON, color = null) {
+        // Color is calculated, so it can be updated when coloring changes
+        let autoColor = false;
+        if (!color && this.datadescription && geoJSON.set) {
+            color = this.getColorForSet(geoJSON.set);
+            autoColor = true;
+        } else if (!color) {
+            color = "red";
+        }
         if (!geoJSON.geometry) {
             Msg.error(
                     'Worldmap2d',
@@ -1086,6 +1104,7 @@ datadescription that describes the colors for the combined level 0 - 100, needed
         })
         let lines = L.polygon(lines_arr, {color: color})
         lines.feature = geoJSON
+        lines.swac_autoColor = autoColor
         if (!this.areas[geoJSON.set.swac_fromName])
             this.areas[geoJSON.set.swac_fromName] = []
         this.areas[geoJSON.set.swac_fromName][geoJSON.set.id] = lines
@@ -1514,10 +1533,10 @@ datadescription that describes the colors for the combined level 0 - 100, needed
 
                     // register event listener for datadescription
                     document.addEventListener('swac_Datadescription_' + this.datadescription.requestor.id + '_changed', () => {
-                        this.rerenderIcons();
+                        this.rerenderColors();
                     });
                     // Color markers that were added before the datadescription was available
-                    this.rerenderIcons();
+                    this.rerenderColors();
                 }, dd.getAttribute("id"));
         }
     }
@@ -1557,13 +1576,13 @@ datadescription that describes the colors for the combined level 0 - 100, needed
     }
 
     /**
-     * Sets the attribute used for coloring and recolors all markers.
+     * Sets the attribute used for coloring and recolors all markers and areas.
      *
      * @param {String} attr Name of the attribute, null to use the configured coloring
      */
     setColorAttr(attr = null) {
         this.userColorAttr = attr ? attr : null;
-        this.rerenderIcons();
+        this.rerenderColors();
         document.dispatchEvent(new CustomEvent('swac_' + this.requestor.id + '_colorattr_changed', {detail: {attr: this.userColorAttr}}));
     }
 
@@ -1585,7 +1604,8 @@ datadescription that describes the colors for the combined level 0 - 100, needed
     }
 
     /**
-     * Creates a marker icon in the given color.
+     * Creates a marker icon in the given color. Uses the png icons if available
+     * for the color, otherwise a svg icon.
      *
      * @param {String} col Color (hex, rgb or colorname)
      * @param {String} title Title of the marker
@@ -1605,16 +1625,38 @@ datadescription that describes the colors for the combined level 0 - 100, needed
         if (hex === '808080')
             hex = '7B7B7B'; // replace grey hex with existing grey icon
 
-        return new L.Icon({
-            iconUrl: '/SWAC/swac/components/Icon/imgs/map/marker-icon-' + hex + '.png',
-            shadowUrl: '/SWAC/swac/components/Icon/imgs/map/marker-shadow.png',
+        if (this.markerIconColors.includes(hex)) {
+            return new L.Icon({
+                iconUrl: '/SWAC/swac/components/Icon/imgs/map/marker-icon-' + hex + '.png',
+                shadowUrl: '/SWAC/swac/components/Icon/imgs/map/marker-shadow.png',
+                iconSize: [25, 41],
+                iconAnchor: [12, 41],
+                popupAnchor: [1, -34],
+                shadowSize: [41, 41],
+                color: hex,
+                title: title
+            });
+        }
+        // No png available for that color (e.g. gradient colors)
+        let svg = '<svg xmlns="http://www.w3.org/2000/svg" width="25" height="41" viewBox="0 0 25 41">'
+                + '<path d="M12.5 0.5C5.9 0.5 0.5 5.9 0.5 12.5c0 9.1 12 27.8 12 27.8s12-18.7 12-27.8C24.5 5.9 19.1 0.5 12.5 0.5z" fill="#' + hex + '" stroke="rgba(0,0,0,0.35)"/>'
+                + '<circle cx="12.5" cy="12.5" r="4.5" fill="#ffffff"/></svg>';
+        return L.divIcon({
+            html: svg,
+            className: 'swac_worldmap2d_colormarker',
             iconSize: [25, 41],
             iconAnchor: [12, 41],
             popupAnchor: [1, -34],
-            shadowSize: [41, 41],
-            color: hex,
-            title: title
+            color: hex
         });
+    }
+
+    /**
+     * Recolors markers and areas based on the datadescription.
+     */
+    rerenderColors() {
+        this.rerenderIcons();
+        this.rerenderAreas();
     }
 
     /**
@@ -1627,12 +1669,34 @@ datadescription that describes the colors for the combined level 0 - 100, needed
             for (let marker of this.markers[key]) {
                 if (typeof marker === 'undefined')
                     continue;
-                const icon = this.getColoredMarkerIcon(this.getColorForSet(marker.feature.set), marker.feature.set?.name);
+                let col = this.getColorForSet(marker.feature.set);
+                // Circle markers are colored by style
+                if (marker instanceof L.CircleMarker) {
+                    marker.setStyle({fillColor: col});
+                    continue;
+                }
+                const icon = this.getColoredMarkerIcon(col, marker.feature.set?.name);
                 if (marker.options.icon?.options?.color === icon.options.color) {
                     // do not rerender if color is the same
                     continue;
                 }
                 marker.setIcon(icon);
+            }
+        }
+    }
+
+    /**
+     * Recolors the areas that were colored by the datadescription.
+     */
+    rerenderAreas() {
+        if (!this.datadescription)
+            return;
+        for (let key in this.areas) {
+            // Object.values because area ids may be negative
+            for (let area of Object.values(this.areas[key])) {
+                if (typeof area === 'undefined' || !area.swac_autoColor)
+                    continue;
+                area.setStyle({color: this.getColorForSet(area.feature.set)});
             }
         }
     }
