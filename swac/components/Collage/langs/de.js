@@ -8,7 +8,6 @@ var Collage_de = {
     noolder: 'Keine älteren Bilder vorhanden.',
     nonewer: 'Keine neueren Bilder vorhanden.',
     notimepoint: 'Ab diesem Zeitpunkt sind keine Bilder vorhanden.',
-    loaderror: 'Die Bilder konnten nicht geladen werden.',
-    keogramtodo: 'Die Keogramm-Darstellung ist noch nicht umgesetzt. Die Streifen werden als Zeitleiste angezeigt.'
+    loaderror: 'Die Bilder konnten nicht geladen werden.'
 };
 export default Collage_de;

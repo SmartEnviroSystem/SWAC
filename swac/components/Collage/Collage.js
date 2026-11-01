@@ -5,15 +5,15 @@ import Model from '../../Model.js';
 
 /**
  * Component for showing multiple images as one collage.
- * Currently supports a timeline with navigation (e.g. for all sky images).
- * Keogram modes are detected, but not rendered yet.
+ * Supports a timeline with navigation (e.g. for all sky images) and keograms,
+ * where stripes of the images are drawn side by side by their timestamp.
  */
 export default class Collage extends View {
 
     constructor(options = {}) {
         super(options);
         this.name = 'Collage';
-        this.desc.text = 'Shows multiple images as collage. Supports a navigable timeline of images and detects keogram stripes.';
+        this.desc.text = 'Shows multiple images as collage. Supports a navigable timeline of images and keograms from image stripes.';
         this.desc.developers = 'HELIOS Gruppe 1, WebEngineering WS26/27 (HSBI)';
         this.desc.license = 'GNU Lesser General Public License';
 
@@ -24,7 +24,7 @@ export default class Collage extends View {
         };
         this.desc.reqPerTpl[0] = {
             selc: '.swac_collage_strip',
-            desc: 'Area where the timeline thumbnails are placed.'
+            desc: 'Area where the timeline thumbnails or the keogram are placed.'
         };
         this.desc.optPerTpl[0] = {
             selc: '.swac_collage_mainimg',
@@ -81,6 +81,10 @@ export default class Collage extends View {
         this.desc.optPerSet[0] = {
             name: 'ts',
             desc: 'Timestamp of the image. Used for ordering, time jumps and loading previous / next images. Name can be changed with option tsAttr.'
+        };
+        this.desc.optPerSet[1] = {
+            name: 'keogram_column_png',
+            desc: 'Keogram stripe of the image as base64 PNG, URL or path. Name is set with option keogramAttr.'
         };
 
         this.options.showWhenNoData = true;
@@ -149,6 +153,20 @@ export default class Collage extends View {
         };
         if (!options.playInterval)
             this.options.playInterval = 500;
+        this.desc.opts[9] = {
+            name: "keogramAttr",
+            desc: "Name of the attribute that contains the keogram stripe of the image (e.g. keogram_column_png from SmartDataPorter). The image from pathAttr is then shown in large. If not set, the image from pathAttr is used as stripe.",
+            example: 'keogram_column_png'
+        };
+        if (!options.keogramAttr)
+            this.options.keogramAttr = null;
+        this.desc.opts[10] = {
+            name: "keogramGapFactor",
+            desc: "A gap in the keogram is shown if the time between two images is more than this factor times the usual time between images. Smaller gaps are filled with the previous stripe. Example: 3 shows gaps from about 3 missing images on.",
+            example: 3
+        };
+        if (!options.keogramGapFactor)
+            this.options.keogramGapFactor = 3;
 
         this.desc.funcs[0] = {
             name: 'select',
@@ -228,6 +246,8 @@ export default class Collage extends View {
         this.playing = false;
         this.playTimeout = null;
         this.playRun = 0;       // Number of the current playback
+        this.keogramRun = 0;    // Number of the current keogram drawing
+        this.keogramLayout = null;  // Position of the stripes in the shown keogram
     }
 
     init() {
@@ -338,23 +358,273 @@ export default class Collage extends View {
                 Msg.warn('Collage', 'Could not load image of set >' + set.id + '< for mode detection. Useing timeline.', this.requestor);
                 resolve('timeline');
             };
-            img.src = this.getImageSrc(set);
+            img.src = this.getStripeSrc(set);
         });
     }
 
     /**
-     * Renders keogram stripes as one image.
+     * Draws the keogram stripes side by side on a canvas.
+     * Columns are placed from left to right, rows from top to bottom.
+     * Each stripe is placed by its timestamp, so gaps in the data stay visible.
      *
-     * DEVNOTE: Not implemented yet, see js/media/image_cloudview.js in
-     * SmartMonitoringFrontend for the drawing of keograms on a canvas.
-     * Until then the stripes are shown in the timeline.
+     * @returns {Promise} Resolves when the keogram is drawn
+     */
+    async renderKeogram() {
+        let strip = this.requestor.querySelector('.swac_collage_strip');
+        if (!strip)
+            return;
+        // New run number stops an earlier drawing that is still loading stripes
+        let run = ++this.keogramRun;
+        let sets = this.images.slice();
+        let stripes = await Promise.all(sets.map(curSet => this.preloadImage(this.getStripeSrc(curSet))));
+        if (run !== this.keogramRun)
+            return;
+        let first = stripes.find(curStripe => curStripe);
+        if (!first) {
+            Msg.error('Collage', 'Could not load any keogram stripe.', this.requestor);
+            this.showMsg(SWAC.lang.dict.Collage.loaderror);
+            return;
+        }
+        let columns = this.mode === 'keogram_columns';
+        // Size of one stripe along the time axis and across it
+        let thickness = columns ? first.naturalWidth : first.naturalHeight;
+        let length = columns ? first.naturalHeight : first.naturalWidth;
+        let keys = sets.map((curSet, i) => this.hasTs ? this.getKey(curSet) : i);
+        let scale = this.calcKeogramScale(keys, thickness);
+        let slots = keys.map(curKey => Math.round((curKey - scale.start) / scale.step));
+
+        let canvas = document.createElement('canvas');
+        canvas.classList.add('swac_collage_keogram', columns ? 'swac_collage_keogram_columns' : 'swac_collage_keogram_rows');
+        canvas.width = columns ? scale.count * thickness : length;
+        canvas.height = columns ? length : scale.count * thickness;
+        let ctx = canvas.getContext('2d');
+        // Drawn slots of each stripe, used to find the clicked stripe
+        let spans = [];
+        for (let i = 0; i < sets.length; i++) {
+            spans[i] = null;
+            if (!stripes[i] || isNaN(slots[i]))
+                continue;
+            // Stretch the stripe to the next one, unless there is a gap in the data
+            let width = 1;
+            if (i + 1 < sets.length && !isNaN(slots[i + 1]) && keys[i + 1] - keys[i] <= scale.step * this.options.keogramGapFactor)
+                width = Math.max(slots[i + 1] - slots[i], 1);
+            spans[i] = {start: slots[i], end: slots[i] + width};
+            let pos = slots[i] * thickness;
+            if (columns)
+                ctx.drawImage(stripes[i], pos, 0, width * thickness, length);
+            else
+                ctx.drawImage(stripes[i], 0, pos, length, width * thickness);
+        }
+        this.keogramLayout = {columns: columns, count: scale.count, start: scale.start, step: scale.step, spans: spans};
+        canvas.addEventListener('click', this.onKeogramClick.bind(this));
+        canvas.addEventListener('mousemove', this.onKeogramHover.bind(this));
+
+        let box = document.createElement('div');
+        box.classList.add('swac_collage_keogram_box', columns ? 'swac_collage_keogram_box_columns' : 'swac_collage_keogram_box_rows');
+        box.appendChild(canvas);
+        let cursor = document.createElement('div');
+        cursor.classList.add('swac_collage_keogram_cursor');
+        box.appendChild(cursor);
+        let hover = document.createElement('div');
+        hover.classList.add('swac_collage_keogram_hover');
+        hover.style.display = 'none';
+        box.appendChild(hover);
+        canvas.addEventListener('mouseleave', () => hover.style.display = 'none');
+        strip.innerHTML = '';
+        strip.appendChild(box);
+        // Show stripes sharp instead of blurred when the canvas is enlarged
+        if (columns ? canvas.width < canvas.clientWidth : canvas.height < canvas.clientHeight)
+            canvas.classList.add('swac_collage_pixelated');
+        if (this.hasTs)
+            box.appendChild(this.createKeogramAxis(columns ? canvas.clientWidth : canvas.clientHeight));
+
+        this.updateJumpButtons();
+        if (this.selected < 0 || this.selected >= this.images.length)
+            this.selected = 0;
+        this.select(this.selected);
+    }
+
+    /**
+     * Creates the time axis of the keogram with labels at full local times
+     *
+     * @param {Number} length Shown length of the keogram along the time axis in pixel
+     * @returns {HTMLElement} Element with the labels
+     */
+    createKeogramAxis(length) {
+        let layout = this.keogramLayout;
+        let axis = document.createElement('div');
+        axis.classList.add('swac_collage_keogram_axis');
+        let duration = layout.count * layout.step;
+        // Smallest interval that leaves enough space for each label
+        let maxLabels = Math.max(Math.floor(length / (layout.columns ? 70 : 30)), 1);
+        let minutes = [1, 2, 5, 10, 15, 30, 60, 120, 180, 360, 720, 1440];
+        let interval = minutes.map(curMin => curMin * 60000).find(curInterval => duration / curInterval <= maxLabels);
+        if (!interval)
+            interval = Math.ceil(duration / maxLabels / 86400000) * 86400000;
+        // Start at a full interval of the local time, e.g. a full hour
+        let offset = new Date(layout.start).getTimezoneOffset() * 60000;
+        let first = Math.ceil((layout.start - offset) / interval) * interval + offset;
+        for (let time = first; time <= layout.start + duration; time += interval) {
+            let percent = (time - layout.start) / duration * 100;
+            // Labels at the edges would be cut off
+            if (percent < 2 || percent > 98)
+                continue;
+            let date = new Date(time);
+            let label = document.createElement('span');
+            label.classList.add('swac_collage_keogram_tick');
+            label.innerHTML = interval >= 86400000 ? date.toLocaleDateString() : date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+            if (layout.columns)
+                label.style.left = percent + '%';
+            else
+                label.style.top = percent + '%';
+            axis.appendChild(label);
+        }
+        return axis;
+    }
+
+    /**
+     * Moves the cursor of the keogram to the selected image
      *
      * @returns {undefined}
      */
-    renderKeogram() {
-        Msg.warn('Collage', 'Display mode >' + this.mode + '< is not implemented yet. Showing images as timeline.', this.requestor);
-        this.showMsg(SWAC.lang.dict.Collage.keogramtodo);
-        this.renderTimeline();
+    updateKeogramCursor() {
+        let cursor = this.requestor.querySelector('.swac_collage_keogram_cursor');
+        if (!cursor)
+            return;
+        let layout = this.keogramLayout;
+        let span = layout ? layout.spans[this.selected] : null;
+        if (!span) {
+            cursor.style.display = 'none';
+            return;
+        }
+        let percent = (span.start + span.end) / 2 / layout.count * 100;
+        cursor.style.display = '';
+        if (layout.columns)
+            cursor.style.left = percent + '%';
+        else
+            cursor.style.top = percent + '%';
+    }
+
+    /**
+     * Selects the image of the clicked keogram stripe.
+     * A click into a gap selects the nearest stripe.
+     *
+     * @param {MouseEvent} evt Click on the keogram
+     * @returns {undefined}
+     */
+    onKeogramClick(evt) {
+        let index = this.findKeogramStripe(this.getKeogramRatio(evt));
+        if (index >= 0)
+            this.select(index);
+    }
+
+    /**
+     * Shows the time of the stripe under the mouse
+     *
+     * @param {MouseEvent} evt Mouse movement over the keogram
+     * @returns {undefined}
+     */
+    onKeogramHover(evt) {
+        let hover = this.requestor.querySelector('.swac_collage_keogram_hover');
+        if (!hover)
+            return;
+        let ratio = this.getKeogramRatio(evt);
+        let index = this.findKeogramStripe(ratio);
+        if (index < 0) {
+            hover.style.display = 'none';
+            return;
+        }
+        let date = this.getDate(this.images[index]);
+        hover.innerHTML = date ? date.toLocaleTimeString() : SWAC.lang.dict.Collage.image + ' ' + (index + 1);
+        // Shift the label with the position, so that it stays inside the keogram
+        let percent = Math.min(Math.max(ratio, 0), 1) * 100;
+        if (this.keogramLayout.columns) {
+            hover.style.left = percent + '%';
+            hover.style.transform = 'translateX(-' + percent + '%)';
+        } else {
+            hover.style.top = percent + '%';
+            hover.style.transform = 'translateY(-' + percent + '%)';
+        }
+        hover.style.display = '';
+    }
+
+    /**
+     * Gets the position of the mouse along the time axis of the keogram
+     *
+     * @param {MouseEvent} evt Mouse event on the keogram
+     * @returns {Number} Position from 0 (start) to 1 (end)
+     */
+    getKeogramRatio(evt) {
+        // The canvas is stretched to its element, so use the shown size
+        let rect = evt.currentTarget.getBoundingClientRect();
+        if (this.keogramLayout && this.keogramLayout.columns)
+            return (evt.clientX - rect.left) / rect.width;
+        return (evt.clientY - rect.top) / rect.height;
+    }
+
+    /**
+     * Finds the stripe at the given position of the keogram.
+     * In a gap the nearest stripe is found.
+     *
+     * @param {Number} ratio Position from 0 (start) to 1 (end) of the keogram
+     * @returns {Number} Position of the image in the timeline or -1 if there is none
+     */
+    findKeogramStripe(ratio) {
+        let layout = this.keogramLayout;
+        if (!layout)
+            return -1;
+        let slot = ratio * layout.count;
+        let nearest = -1;
+        let nearestDist = Infinity;
+        for (let i = 0; i < layout.spans.length; i++) {
+            let span = layout.spans[i];
+            if (!span)
+                continue;
+            let dist = 0;
+            if (slot < span.start)
+                dist = span.start - slot;
+            else if (slot >= span.end)
+                dist = slot - span.end;
+            if (dist < nearestDist) {
+                nearest = i;
+                nearestDist = dist;
+            }
+        }
+        return nearest;
+    }
+
+    /**
+     * Calculates the time axis of the keogram.
+     * One slot is as long as the usual interval between two images.
+     *
+     * @param {Number[]} keys Sorted positions of the stripes (time in ms or index)
+     * @param {Number} thickness Size of one stripe along the time axis in pixel
+     * @returns {Object} {start, step, count} with the first key, the keys per slot and the number of slots
+     */
+    calcKeogramScale(keys, thickness) {
+        let valid = keys.filter(curKey => !isNaN(curKey));
+        let intervals = [];
+        for (let i = 1; i < valid.length; i++) {
+            if (valid[i] > valid[i - 1])
+                intervals.push(valid[i] - valid[i - 1]);
+        }
+        let step = 1;
+        if (intervals.length > 0) {
+            intervals.sort((a, b) => a - b);
+            let median = intervals[Math.floor(intervals.length / 2)];
+            // Mean of the usual intervals, because gaps would make the slots too long
+            let usual = intervals.filter(curInterval => curInterval <= median * 1.5);
+            step = usual.reduce((sum, curInterval) => sum + curInterval, 0) / usual.length;
+        }
+        let span = valid.length > 0 ? valid[valid.length - 1] - valid[0] : 0;
+        let count = Math.round(span / step) + 1;
+        // Browsers limit the canvas size, large gaps would exceed it
+        let maxCount = Math.floor(16384 / thickness);
+        if (count > maxCount) {
+            count = maxCount;
+            step = span / (count - 1);
+        }
+        return {start: valid.length > 0 ? valid[0] : 0, step: step, count: count};
     }
 
     /**
@@ -427,6 +697,7 @@ export default class Collage extends View {
             let strip = thumbElem.parentElement;
             strip.scrollLeft = thumbElem.offsetLeft - (strip.clientWidth - thumbElem.offsetWidth) / 2;
         }
+        this.updateKeogramCursor();
 
         document.dispatchEvent(new CustomEvent('swac_' + this.requestor.id + '_collage_select', {
             detail: {requestor: this.requestor, set: set, index: index}
@@ -540,13 +811,13 @@ export default class Collage extends View {
      * Loads an image into the browser cache
      *
      * @param {String} src Source of the image
-     * @returns {Promise} Resolves when the image is loaded or could not be loaded
+     * @returns {Promise<HTMLImageElement>} Resolves with the image or with null if it could not be loaded
      */
     preloadImage(src) {
         return new Promise((resolve) => {
             let img = new Image();
-            img.onload = resolve;
-            img.onerror = resolve;
+            img.onload = () => resolve(img);
+            img.onerror = () => resolve(null);
             img.src = src;
         });
     }
@@ -818,13 +1089,24 @@ export default class Collage extends View {
     }
 
     /**
+     * Gets the src of the keogram stripe from the set
+     *
+     * @param {WatchableSet} set Set with keogram stripe
+     * @returns {String} URL, data URL or path below docroot
+     */
+    getStripeSrc(set) {
+        return this.getImageSrc(set, this.options.keogramAttr || this.options.pathAttr);
+    }
+
+    /**
      * Gets the src for an image element from the set
      *
      * @param {WatchableSet} set Set with image information
+     * @param {String} attr Attribute with the image, defaults to the option pathAttr
      * @returns {String} URL, data URL or path below docroot
      */
-    getImageSrc(set) {
-        let value = set[this.options.pathAttr];
+    getImageSrc(set, attr = this.options.pathAttr) {
+        let value = set[attr];
         if (!value)
             return '';
         if (value.startsWith('data:') || value.startsWith('/') || value.includes('://'))

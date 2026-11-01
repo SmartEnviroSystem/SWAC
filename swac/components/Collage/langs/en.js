@@ -8,7 +8,6 @@ var Collage_en = {
     noolder: 'There are no older images.',
     nonewer: 'There are no newer images.',
     notimepoint: 'There are no images from this timepoint on.',
-    loaderror: 'The images could not be loaded.',
-    keogramtodo: 'Keogram display is not implemented yet. The stripes are shown as timeline.'
+    loaderror: 'The images could not be loaded.'
 };
 export default Collage_en;
