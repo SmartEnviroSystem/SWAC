@@ -129,10 +129,22 @@ export default class GeoJson extends MapModel {
             let datadescComp = null;
             if (thisRef.options.datadescription) {
                 let ddeElem = document.querySelector(thisRef.options.datadescription);
+                let ddLoaded = ddeElem && ddeElem.swac_comp
+                        && typeof ddeElem.swac_comp.getValueVisData === 'function'
+                        && ddeElem.swac_comp.options.activeSource;
                 if (!ddeElem) {
                     Msg.warn('GeoJson', 'Could not find datadescription component with selector >' + thisRef.options.datadescription + '< model will be colored with default values.');
-                } else {
+                } else if (!ddLoaded && !thisRef._waitedForDatadescription) {
+                    // Datadescription is not loaded yet, draw when it is available
+                    thisRef._waitedForDatadescription = true;
+                    window.swac.reactions.addReaction(() => {
+                        thisRef.draw(viewer).then(resolve).catch(reject);
+                    }, ddeElem.id);
+                    return;
+                } else if (ddLoaded) {
                     datadescComp = ddeElem.swac_comp;
+                } else {
+                    Msg.warn('GeoJson', 'Datadescription component >' + thisRef.options.datadescription + '< is not loaded. Model will be colored with default values.');
                 }
             } else {
                 Msg.warn('GeoJson', 'There is no description component bound and no visoptions set. Model will be colored with default values.');
@@ -359,7 +371,7 @@ export default class GeoJson extends MapModel {
 
             // Zoom into view
             if (thisRef.options.zoomTo) {
-                viewer.fitBounds(featuregroup.getBounds());
+                viewer.fitBounds(thisRef.featuregroup.getBounds());
             }
         });
     }

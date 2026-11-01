@@ -593,6 +593,11 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
 
     // public function
     getValuesVisdata(attr, value, visdataname) {
+        // Description may not be loaded yet, when other components ask for colors
+        if (!this.options.activeSource || !this.data[this.options.activeSource]) {
+            Msg.warn('Datadescription', 'Datadescription is not loaded yet. Can not get >' + visdataname + '< for attribute >' + attr + '<.', this.requestor);
+            return null;
+        }
         // Get matching legends data
         let legenddata = this.data[this.options.activeSource].getSet(this.options.activeSet);
         if (typeof legenddata[attr] === 'undefined') {
@@ -640,7 +645,7 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
                 let curValNumber = new Number(curVal);
                 if (value <= curValNumber) {
                     // If is below any specified color use first color
-                    if (!prevVal)
+                    if (prevVal === null)
                         return legenddata[attr].values[curVal][visdataname];
                     // Else calculate from distances
                     const f = (value - prevVal) / (curValNumber - prevVal);
@@ -655,6 +660,9 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
                 }
                 prevVal = curValNumber;
             }
+            // If is above any specified value use last color
+            if (vals.length > 0)
+                return legenddata[attr].values[vals[vals.length - 1]][visdataname];
         } else if (calcMode === '>') {
             console.error('calcMode > not implemented yet');
         } else {
@@ -1307,7 +1315,8 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
             // Check if attribute should be visualised
             if (typeof legenddata[attribute] === 'object') {
                 // Select all alements for attribute
-                let elemsForAttr = element.querySelectorAll('[swac_attrname=' + attribute + ']');
+                // Quotes needed for attribute names with dots (e.g. destatis.population)
+                let elemsForAttr = element.querySelectorAll('[swac_attrname="' + attribute + '"]');
 
                 // Walk trough every element
                 for (let curElemForAttr of elemsForAttr) {
