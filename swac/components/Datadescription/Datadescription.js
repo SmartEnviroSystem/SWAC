@@ -193,6 +193,49 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
             ]
         };
 
+        this.desc.funcs[2] = {
+            name: 'getDescribedAttributes',
+            desc: 'Gets the names of all attributes that have a value description (ATTRIBUTENAME.values) and can therefore be used for coloring.'
+        };
+        this.desc.funcs[3] = {
+            name: 'getAttributeDescription',
+            desc: 'Gets the description object (txt_title, col, calcmode, values, ...) of an attribute.',
+            parameter: [
+                {
+                    name: 'attr',
+                    desc: 'Attributes name'
+                }
+            ]
+        };
+        this.desc.funcs[4] = {
+            name: 'getValueLevel',
+            desc: 'Calculates the position (0 - 1) of a value within the described range of an attribute. Uses ATTRIBUTENAME.minValue / maxValue if available, otherwise the defined values.',
+            parameter: [
+                {
+                    name: 'attr',
+                    desc: 'Attributes name'
+                },
+                {
+                    name: 'value',
+                    desc: 'Value to get level for'
+                }
+            ]
+        };
+        this.desc.funcs[5] = {
+            name: 'getCombinedValueColor',
+            desc: 'Gets a color calculated from the values of multiple attributes of a dataset.',
+            parameter: [
+                {
+                    name: 'set',
+                    desc: 'Dataset with the values'
+                },
+                {
+                    name: 'combination',
+                    desc: 'Object describing the combination: {attrs: [String], mode: max|min|avg|weighted, weights: {ATTRIBUTENAME: Number}, targetAttr: String}'
+                }
+            ]
+        };
+
         this.desc.events[0] = {
             name: 'swac_Datadescription_REQUESTOR_ID_changed',
             desc: 'Event is fired, when user edits a value in the legend. The event is fired on the document.',
@@ -297,8 +340,7 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
             return null;
         }
         let visuAttributeFromOpts = false;
-        if (visuAttribute === null
-                && this.options.visuDataset) {
+        if (visuAttribute === null) {
             visuAttribute = this.options.visuAttribute;
             visuAttributeFromOpts = true;
         }
@@ -309,10 +351,11 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
             let dProp = set;
             for (let curProp of dProps) {
                 dProp = dProp[curProp];
-                if (!dProp)
+                // Values like 0 or false are valid values
+                if (dProp === null || typeof dProp === 'undefined')
                     break;
             }
-            if (dProp) {
+            if (dProp !== null && typeof dProp !== 'undefined') {
                 return dProp;
             } else {
                 let msg = 'visuAttribute >' + visuAttribute + '< was not found in dataset.';
@@ -540,7 +583,8 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
             value = data;
         }
 
-        if (!value || value === null) {
+        // Value 0 is a valid value
+        if (value === null || typeof value === 'undefined' || value === '') {
             Msg.warn('Datadescription', 'There is no value for attribute >' + visuAttribute + '<.', this.requestor);
             return null;
         }
@@ -616,6 +660,150 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
         } else {
             Msg.warn('Datadescription', 'Calculation mode >' + attr + '.calcmode = "' + calcMode + '< is not supported.');
         }
+        return null;
+    }
+
+    /**
+     * Gets the names of all attributes that have a value description and
+     * can therefore be used for coloring.
+     *
+     * @returns {String[]} Names of the described attributes
+     */
+    getDescribedAttributes() {
+        let attrs = [];
+        if (!this.options.activeSource || !this.data[this.options.activeSource])
+            return attrs;
+        let legenddata = this.data[this.options.activeSource].getSet(this.options.activeSet);
+        for (let attr in legenddata) {
+            if (attr.startsWith('swac_') || typeof legenddata[attr] !== 'object' || legenddata[attr] === null)
+                continue;
+            if (legenddata[attr].values && Object.keys(legenddata[attr].values).length > 0)
+                attrs.push(attr);
+        }
+        return attrs;
+    }
+
+    /**
+     * Gets the description object of an attribute.
+     *
+     * @param {String} attr Attributes name
+     * @returns {Object} Description object (txt_title, col, calcmode, values, ...) or null
+     */
+    getAttributeDescription(attr) {
+        if (!this.options.activeSource || !this.data[this.options.activeSource])
+            return null;
+        let legenddata = this.data[this.options.activeSource].getSet(this.options.activeSet);
+        if (!legenddata[attr] || typeof legenddata[attr] !== 'object')
+            return null;
+        return legenddata[attr];
+    }
+
+    /**
+     * Calculates the position of a value within the described range of an attribute.
+     * Uses ATTRIBUTENAME.minValue and ATTRIBUTENAME.maxValue if available.
+     * Otherwise the position is calculated from the defined values:
+     * - calcmode = : index of the matching value
+     * - calcmode < : index of the class the value belongs to
+     * - calcmode gradient : linear between the lowest and highest defined value
+     *
+     * @param {String} attr Attributes name
+     * @param {Number} value Value to get the level for
+     * @returns {Number} Level between 0 (lowest) and 1 (highest) or null if not calculateable
+     */
+    getValueLevel(attr, value) {
+        let desc = this.getAttributeDescription(attr);
+        let numValue = Number(value);
+        if (!desc || value === null || typeof value === 'undefined' || value === '' || isNaN(numValue))
+            return null;
+        const clamp = (level) => Math.min(1, Math.max(0, level));
+
+        // Use estimated range if given
+        if (typeof desc.minValue !== 'undefined' && typeof desc.maxValue !== 'undefined'
+                && Number(desc.maxValue) !== Number(desc.minValue)) {
+            return clamp((numValue - desc.minValue) / (desc.maxValue - desc.minValue));
+        }
+        if (!desc.values)
+            return null;
+
+        // Use defined values
+        let keys = Object.keys(desc.values).map(Number).filter(k => !isNaN(k)).sort((a, b) => a - b);
+        if (keys.length === 0)
+            return null;
+        if (keys.length === 1)
+            return 0;
+        let calcMode = desc.calcmode;
+        if (!calcMode || calcMode === '=') {
+            let idx = keys.indexOf(numValue);
+            return idx < 0 ? null : idx / (keys.length - 1);
+        } else if (calcMode === '<') {
+            let idx = keys.findIndex(k => numValue < k);
+            if (idx < 0)
+                idx = keys.length - 1;
+            return idx / (keys.length - 1);
+        } else if (calcMode === 'gradient') {
+            return clamp((numValue - keys[0]) / (keys[keys.length - 1] - keys[0]));
+        }
+        Msg.warn('Datadescription', 'Calculation mode >' + attr + '.calcmode = "' + calcMode + '< is not supported for level calculation.', this.requestor);
+        return null;
+    }
+
+    /**
+     * Gets a color calculated from the values of multiple attributes of a dataset.
+     * Supported modes:
+     * - max: Color of the attribute with the highest level (e.g. worst pollutant)
+     * - min: Color of the attribute with the lowest level
+     * - avg: Average level of all attributes
+     * - weighted: Weighted average level (weights given in combination.weights)
+     * For avg and weighted the color is taken from the description of
+     * combination.targetAttr (level is given as 0 - 100).
+     *
+     * @param {Object} set Dataset with the values
+     * @param {Object} combination Description of the combination {attrs, mode, weights, targetAttr}
+     * @returns {String} Color or null if no color could be calculated
+     */
+    getCombinedValueColor(set, combination) {
+        if (!set || !combination || !Array.isArray(combination.attrs) || combination.attrs.length === 0) {
+            Msg.error('Datadescription', 'Combination needs at least one attribute in >attrs<.', this.requestor);
+            return null;
+        }
+        let mode = combination.mode ? combination.mode : 'max';
+
+        // Collect values and levels of all attributes
+        let entries = [];
+        for (let curAttr of combination.attrs) {
+            let value = this.getDescribedValue(set, curAttr);
+            let level = this.getValueLevel(curAttr, value);
+            if (level === null)
+                continue;
+            let weight = 1;
+            if (mode === 'weighted' && combination.weights && typeof combination.weights[curAttr] !== 'undefined')
+                weight = Number(combination.weights[curAttr]);
+            entries.push({attr: curAttr, value: value, level: level, weight: weight});
+        }
+
+        if (entries.length === 0)
+            return null;
+
+        if (mode === 'max' || mode === 'min') {
+            let chosen = entries[0];
+            for (let curEntry of entries) {
+                if ((mode === 'max' && curEntry.level > chosen.level)
+                        || (mode === 'min' && curEntry.level < chosen.level))
+                    chosen = curEntry;
+            }
+            return this.getValuesVisdata(chosen.attr, chosen.value, 'col');
+        } else if (mode === 'avg' || mode === 'weighted') {
+            let weightSum = entries.reduce((sum, e) => sum + e.weight, 0);
+            if (weightSum <= 0)
+                return null;
+            if (!combination.targetAttr) {
+                Msg.error('Datadescription', 'Combination mode >' + mode + '< needs a >targetAttr< describing the colors.', this.requestor);
+                return null;
+            }
+            let level = entries.reduce((sum, e) => sum + e.level * e.weight, 0) / weightSum;
+            return this.getValuesVisdata(combination.targetAttr, level * 100, 'col');
+        }
+        Msg.warn('Datadescription', 'Combination mode >' + mode + '< is not supported.', this.requestor);
         return null;
     }
 

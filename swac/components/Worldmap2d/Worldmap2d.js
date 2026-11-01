@@ -476,10 +476,37 @@ export default class Worldmap2d extends View {
         if (typeof options.dataShowModalAllowDelete === 'undefined')
             this.options.dataShowModalAllowDelete = false;
 
+        this.desc.opts[32] = {
+            name: 'colorAttr',
+            desc: 'Name of the attribute whose value determines the color of markers. \n\
+The colors are taken from the datadescription component (option datadescription). \n\
+Can be overwritten per datasource with datasources.get(NAME).colorAttr. If not set, the \n\
+visuAttribute of the datadescription component is used.',
+            example: 'pm10_0'
+        };
+        if (typeof options.colorAttr === 'undefined')
+            this.options.colorAttr = null;
+
+        this.desc.opts[33] = {
+            name: 'colorCombination',
+            desc: 'Calculates the color of markers from multiple attribute values. \n\
+Has priority over colorAttr. Can be overwritten per datasource with datasources.get(NAME).colorCombination. \n\
+Object with: attrs (names of the attributes), mode (max, min, avg, weighted), \n\
+weights (object with weight per attribute for mode weighted) and targetAttr (attribute of the \n\
+datadescription that describes the colors for the combined level 0 - 100, needed for avg and weighted).',
+            example: {
+                attrs: ['pm2_5', 'pm10_0'],
+                mode: 'max'
+            }
+        };
+        if (typeof options.colorCombination === 'undefined')
+            this.options.colorCombination = null;
+
         // document plugins
         if (!options.plugins) {
             this.options.plugins = new Map();
             this.options.plugins.set('AreaMarker', {id: 'AreaMarker', active: false});
+            this.options.plugins.set('ColorSelect', {id: 'ColorSelect', active: false});
             this.options.plugins.set('CreateObjectModal', {id: 'CreateObjectModal', active: false});
             this.options.plugins.set('DataAPIShowModal', {id: 'DataAPIShowModal', active: false});
             this.options.plugins.set('DataAndMediaShowModal', {id: 'DataAndMediaShowModal', active: false});
@@ -519,6 +546,35 @@ export default class Worldmap2d extends View {
             ]
         };
 
+        this.desc.funcs[2] = {
+            name: 'getColorForSet',
+            desc: 'Gets the color for a dataset depending on the coloring options (user selection, colorCombination, colorAttr) and the datadescription.',
+            params: [
+                {
+                    name: 'set',
+                    desc: 'Dataset to get the color for',
+                    type: 'WatchableSet'
+                }
+            ]
+        };
+
+        this.desc.funcs[3] = {
+            name: 'setColorAttr',
+            desc: 'Sets the attribute used for coloring (user selection) and recolors all markers. Use null to return to the configured coloring.',
+            params: [
+                {
+                    name: 'attr',
+                    desc: 'Name of the attribute or null',
+                    type: 'String'
+                }
+            ]
+        };
+
+        this.desc.funcs[4] = {
+            name: 'getColorAttr',
+            desc: 'Gets the attribute that is currently used for coloring. Returns null when a colorCombination is used.'
+        };
+
         this.desc.events[0] = {
             name: 'swac_REQUESTOR_ID_map_click',
             desc: 'Event is fired, when a user clicks somewhere on the map (not on markers).',
@@ -534,6 +590,11 @@ export default class Worldmap2d extends View {
             desc: 'Event when the user moved on map.',
             data: 'Delivers the Leaflet movend data. See leflet documentation for details.'
         };
+        this.desc.events[3] = {
+            name: 'swac_REQUESTOR_ID_colorattr_changed',
+            desc: 'Event is fired, when the attribute used for coloring was changed with setColorAttr().',
+            data: 'Delivers the name of the new attribute in e.detail.attr (null when the configured coloring is used again).'
+        };
 
 
         // Attributes for internal usage
@@ -543,6 +604,7 @@ export default class Worldmap2d extends View {
         this.overlayLayers = {};
         this.markers = {}; // this is a sparse array
         this.markersArray = []; // this is a normal array
+        this.userColorAttr = null; // Attribute for coloring choosen by the user
 
         this.view = {};
         this.tile = null;
@@ -945,23 +1007,7 @@ export default class Worldmap2d extends View {
             }
             // Use icon from datadescription
             if (this.options.datadescription && this.datadescription && geoJSON.set) {
-                // Get color
-                let col = this.datadescription.getValueColor(geoJSON.set);
-                // If color is hex value remove sharp because its not allowed in file URL
-                col = col.replace('#', '');
-                col = col.replace('GREY', '7B7B7B');
-                col = col.replace('808080', '7B7B7B'); // replace grey hex with existing grey icon
-
-                icon = new L.Icon({
-                    iconUrl: '/SWAC/swac/components/Icon/imgs/map/marker-icon-' + col + '.png',
-                    shadowUrl: '/SWAC/swac/components/Icon/imgs/map/marker-shadow.png',
-                    iconSize: [25, 41],
-                    iconAnchor: [12, 41],
-                    popupAnchor: [1, -34],
-                    shadowSize: [41, 41],
-                    color: col,
-                    title: geoJSON.set.name
-                });
+                icon = this.getColoredMarkerIcon(this.getColorForSet(geoJSON.set), geoJSON.set.name);
             }
             if (icon)
                 markeropts.icon = icon;
@@ -1009,7 +1055,7 @@ export default class Worldmap2d extends View {
      * 
      * @param {geoJSON} geoJSON Object in geoJSON style
      * @param {String} color String for the color of the displayed area
-     * 
+     *
      * @returns {Object} The Area that was added to the map.
      */
     addArea(geoJSON, color = "red") {
@@ -1462,17 +1508,113 @@ export default class Worldmap2d extends View {
             if (!dd)
                 Msg.error('Worldmap2d', 'Datadescription component >' + this.options.datadescription + '< not found.', this.requestor);
             else
-                window.swac.reactions.addReaction(function (requestors) {
-                    // TODO check untimed Behaviour
-
+                // Arrow function needed: Reactions calls the function as method of the reaction object
+                window.swac.reactions.addReaction((requestors) => {
                     this.datadescription = dd.swac_comp;
 
                     // register event listener for datadescription
                     document.addEventListener('swac_Datadescription_' + this.datadescription.requestor.id + '_changed', () => {
                         this.rerenderIcons();
                     });
+                    // Color markers that were added before the datadescription was available
+                    this.rerenderIcons();
                 }, dd.getAttribute("id"));
         }
+    }
+
+    /**
+     * Gets the color for a dataset. The color is determined in this order:
+     * 1. Attribute choosen by the user (setColorAttr(), e.g. from ColorSelect plugin)
+     * 2. colorCombination / colorAttr of the datasource (datasources option)
+     * 3. colorCombination option
+     * 4. colorAttr option
+     * 5. visuAttribute of the datadescription component
+     *
+     * @param {WatchableSet} set Dataset to get the color for
+     * @returns {String} Color for the dataset (#808080 if no color is available)
+     */
+    getColorForSet(set) {
+        const defaultColor = '#808080';
+        if (!this.datadescription || !set)
+            return defaultColor;
+
+        let col = null;
+        let datasource = this.options.datasources?.get(set.swac_fromName);
+        if (this.userColorAttr) {
+            col = this.datadescription.getValueVisData(set, 'col', null, this.userColorAttr);
+        } else if (datasource && datasource.colorCombination) {
+            col = this.datadescription.getCombinedValueColor(set, datasource.colorCombination);
+        } else if (datasource && datasource.colorAttr) {
+            col = this.datadescription.getValueVisData(set, 'col', null, datasource.colorAttr);
+        } else if (this.options.colorCombination) {
+            col = this.datadescription.getCombinedValueColor(set, this.options.colorCombination);
+        } else if (this.options.colorAttr) {
+            col = this.datadescription.getValueVisData(set, 'col', null, this.options.colorAttr);
+        } else {
+            col = this.datadescription.getValueVisData(set, 'col');
+        }
+        return col ? col : defaultColor;
+    }
+
+    /**
+     * Sets the attribute used for coloring and recolors all markers.
+     *
+     * @param {String} attr Name of the attribute, null to use the configured coloring
+     */
+    setColorAttr(attr = null) {
+        this.userColorAttr = attr ? attr : null;
+        this.rerenderIcons();
+        document.dispatchEvent(new CustomEvent('swac_' + this.requestor.id + '_colorattr_changed', {detail: {attr: this.userColorAttr}}));
+    }
+
+    /**
+     * Gets the attribute that is currently used for coloring.
+     *
+     * @returns {String} Name of the attribute or null if a combination is used
+     */
+    getColorAttr() {
+        if (this.userColorAttr)
+            return this.userColorAttr;
+        if (this.options.colorCombination)
+            return null;
+        if (this.options.colorAttr)
+            return this.options.colorAttr;
+        if (this.datadescription)
+            return this.datadescription.options.visuAttribute;
+        return null;
+    }
+
+    /**
+     * Creates a marker icon in the given color.
+     *
+     * @param {String} col Color (hex, rgb or colorname)
+     * @param {String} title Title of the marker
+     * @returns {L.Icon} Icon for the marker
+     */
+    getColoredMarkerIcon(col, title) {
+        let hex = col;
+        if (typeof Colorcalculations !== 'undefined') {
+            try {
+                hex = Colorcalculations.stringToHex(col);
+            } catch (e) {
+                hex = '#808080';
+            }
+        }
+        // If color is hex value remove sharp because its not allowed in file URL
+        hex = hex.replace('#', '').replace('GREY', '7B7B7B').toUpperCase();
+        if (hex === '808080')
+            hex = '7B7B7B'; // replace grey hex with existing grey icon
+
+        return new L.Icon({
+            iconUrl: '/SWAC/swac/components/Icon/imgs/map/marker-icon-' + hex + '.png',
+            shadowUrl: '/SWAC/swac/components/Icon/imgs/map/marker-shadow.png',
+            iconSize: [25, 41],
+            iconAnchor: [12, 41],
+            popupAnchor: [1, -34],
+            shadowSize: [41, 41],
+            color: hex,
+            title: title
+        });
     }
 
     /**
@@ -1483,31 +1625,14 @@ export default class Worldmap2d extends View {
             return;
         for (let key in this.markers) {
             for (let marker of this.markers[key]) {
-                if (typeof marker !== 'undefined') {
-                    // Get color
-                    let col = this.datadescription.getValueColor(marker.feature.set);
-                    if (col === '#808080') {
-                        col = '#7B7B7B';
-                    }
-                    // If color is hex value remove sharp because its not allowed in file URL
-                    col = col.replace('#', '');
-                    col = col.replace('GREY', '7B7B7B')
-                    col = col.toUpperCase();
-                    if (marker.options.icon?.options?.color === col) {
-                        // do not rerender if color is the same
-                        continue;
-                    }
-                    const icon = new L.Icon({
-                        iconUrl: '/SWAC/swac/components/Icon/imgs/map/marker-icon-' + col + '.png',
-                        shadowUrl: '/SWAC/swac/components/Icon/imgs/map/marker-shadow.png',
-                        iconSize: [25, 41],
-                        iconAnchor: [12, 41],
-                        popupAnchor: [1, -34],
-                        shadowSize: [41, 41],
-                        color: col
-                    });
-                    marker.setIcon(icon);
+                if (typeof marker === 'undefined')
+                    continue;
+                const icon = this.getColoredMarkerIcon(this.getColorForSet(marker.feature.set), marker.feature.set?.name);
+                if (marker.options.icon?.options?.color === icon.options.color) {
+                    // do not rerender if color is the same
+                    continue;
                 }
+                marker.setIcon(icon);
             }
         }
     }
