@@ -68,6 +68,10 @@ export default class Present extends View {
 
         if (!options.plugins) {
             this.options.plugins = new Map();
+            this.options.plugins.set('TableHierarchy', {
+                id: 'TableHierarchy',
+                active: false
+            });
             this.options.plugins.set('TableActions', {
                 id: 'TableActions',
                 active: false
