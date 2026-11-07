@@ -7,6 +7,7 @@ import Model from '../../Model.js';
  * Component for showing multiple images as one collage.
  * Supports a timeline with navigation (e.g. for all sky images) and keograms,
  * where stripes of the images are drawn side by side by their timestamp.
+ * The stripes can be stored with the sets or cut out of the images in the browser.
  */
 export default class Collage extends View {
 
@@ -167,6 +168,53 @@ export default class Collage extends View {
         };
         if (!options.keogramGapFactor)
             this.options.keogramGapFactor = 3;
+        this.desc.opts[11] = {
+            name: "keogramFromImage",
+            desc: "Cut the keogram stripes out of the images in the browser instead of using stored stripes. "
+                    + "true: always cut out of the image from pathAttr, mode auto then uses keogram_columns. "
+                    + "false: use the image as stripe. "
+                    + "auto: cut only if the image is wider (columns) or higher (rows) than keogramMaxSize, so stored stripes are used as they are. "
+                    + "Cutting needs the whole images, so it loads much more data than stored stripes.",
+            example: true
+        };
+        if (options.keogramFromImage === undefined)
+            this.options.keogramFromImage = 'auto';
+        this.desc.opts[12] = {
+            name: "keogramPosition",
+            desc: "Position of the cut in percent of the image width (columns) or height (rows), from the left or top edge. 50 is the middle of the image.",
+            example: 50
+        };
+        if (options.keogramPosition === undefined)
+            this.options.keogramPosition = 50;
+        this.desc.opts[13] = {
+            name: "keogramThickness",
+            desc: "Number of pixels that are cut out of each image across the stripe.",
+            example: 1
+        };
+        if (options.keogramThickness === undefined)
+            this.options.keogramThickness = 1;
+        this.desc.opts[14] = {
+            name: "keogramStripeWidth",
+            desc: "Size of each cut stripe in the keogram along the time axis in pixel. Defaults to keogramThickness. "
+                    + "Smaller values average the cut pixels, larger values stretch them.",
+            example: 1
+        };
+        if (options.keogramStripeWidth === undefined)
+            this.options.keogramStripeWidth = null;
+        this.desc.opts[15] = {
+            name: "keogramStart",
+            desc: "Start of the cut along the stripe in percent of the image height (columns) or width (rows), e.g. to leave out the border or the caption of the camera.",
+            example: 0
+        };
+        if (options.keogramStart === undefined)
+            this.options.keogramStart = 0;
+        this.desc.opts[16] = {
+            name: "keogramEnd",
+            desc: "End of the cut along the stripe in percent of the image height (columns) or width (rows).",
+            example: 100
+        };
+        if (options.keogramEnd === undefined)
+            this.options.keogramEnd = 100;
 
         this.desc.funcs[0] = {
             name: 'select',
@@ -218,6 +266,22 @@ export default class Collage extends View {
             name: 'pause',
             desc: 'Pauses the playback.'
         };
+        this.desc.funcs[6] = {
+            name: 'redraw',
+            desc: 'Changes options and draws the collage again without loading the data again. '
+                    + 'Useful to change the cut of the keogram (e.g. keogramPosition, keogramThickness) or the mode.',
+            params: [
+                {
+                    name: 'options',
+                    desc: 'Options to change, e.g. {keogramPosition: 30, keogramThickness: 5}',
+                    type: 'Object'
+                }
+            ],
+            returns: {
+                desc: 'Promise that resolves when the collage is drawn.',
+                type: 'Promise'
+            }
+        };
 
         this.desc.events[0] = {
             name: 'swac_REQUESTOR_ID_collage_select',
@@ -248,6 +312,8 @@ export default class Collage extends View {
         this.playRun = 0;       // Number of the current playback
         this.keogramRun = 0;    // Number of the current keogram drawing
         this.keogramLayout = null;  // Position of the stripes in the shown keogram
+        this.stripeCache = new Map();   // Stripes cut out of the images, by image source
+        this.stripeCacheParams = null;  // Cut parameters of the cached stripes
     }
 
     init() {
@@ -325,10 +391,25 @@ export default class Collage extends View {
             }));
         }
         if (this.mode === 'keogram_columns' || this.mode === 'keogram_rows') {
-            this.renderKeogram();
+            await this.renderKeogram();
         } else {
             this.renderTimeline();
         }
+    }
+
+    /**
+     * Changes options and draws the collage again without loading the data again
+     *
+     * @param {Object} options Options to change, e.g. {keogramPosition: 30, keogramThickness: 5}
+     * @returns {Promise} Resolves when the collage is drawn
+     */
+    redraw(options = {}) {
+        Object.assign(this.options, options);
+        // A new mode is determined again, auto detects it from the first image
+        if (options.mode)
+            this.mode = options.mode === 'auto' ? null : options.mode;
+        this.showMsg('');
+        return this.render();
     }
 
     /**
@@ -341,6 +422,11 @@ export default class Collage extends View {
         return new Promise((resolve, reject) => {
             if (this.options.mode !== 'auto') {
                 resolve(this.options.mode);
+                return;
+            }
+            // Stripes cut out of whole images can not be detected by their size
+            if (this.getKeogramFromImage() === true) {
+                resolve('keogram_columns');
                 return;
             }
             let img = new Image();
@@ -366,6 +452,8 @@ export default class Collage extends View {
      * Draws the keogram stripes side by side on a canvas.
      * Columns are placed from left to right, rows from top to bottom.
      * Each stripe is placed by its timestamp, so gaps in the data stay visible.
+     * The stripes are drawn as soon as they are loaded, because cutting them
+     * out of whole images takes a while.
      *
      * @returns {Promise} Resolves when the keogram is drawn
      */
@@ -376,45 +464,88 @@ export default class Collage extends View {
         // New run number stops an earlier drawing that is still loading stripes
         let run = ++this.keogramRun;
         let sets = this.images.slice();
-        let stripes = await Promise.all(sets.map(curSet => this.preloadImage(this.getStripeSrc(curSet))));
+        let columns = this.mode === 'keogram_columns';
+        let params = this.getKeogramParams();
+        let cache = this.getStripeCache(sets, columns, params);
+        let keys = sets.map((curSet, i) => this.hasTs ? this.getKey(curSet) : i);
+        let keogram = null;     // Created with the first loaded stripe, that gives the size
+        let failed = new Set(); // Stripes that failed before the keogram was created
+        let done = 0;
+        let cut = false;
+        // Limit parallel loading of images from a server, so that a new drawing does not
+        // wait for many old requests. Stripes stored as base64 need no server.
+        let firstSrc = sets.length > 0 ? this.getStripeSrc(sets[0]) : '';
+        let limit = firstSrc.startsWith('data:') ? 64 : 6;
+        await this.forEachLimited(sets.length, limit, async i => {
+            let stripe = await this.loadStripe(sets[i], columns, params, cache);
+            if (run !== this.keogramRun)
+                return false;
+            done++;
+            if (!stripe) {
+                if (keogram)
+                    keogram.spans[i] = null;
+                else
+                    failed.add(i);
+                return true;
+            }
+            if (stripe instanceof HTMLCanvasElement)
+                cut = true;
+            if (!keogram)
+                keogram = this.createKeogram(strip, sets, keys, stripe, columns, failed);
+            this.drawStripe(keogram, i, stripe);
+            if (cut)
+                this.showMsg(SWAC.lang.dict.Collage.keogramcutting + ' ' + done + ' / ' + sets.length);
+            return true;
+        });
         if (run !== this.keogramRun)
             return;
-        let first = stripes.find(curStripe => curStripe);
-        if (!first) {
+        if (!keogram) {
             Msg.error('Collage', 'Could not load any keogram stripe.', this.requestor);
             this.showMsg(SWAC.lang.dict.Collage.loaderror);
             return;
         }
-        let columns = this.mode === 'keogram_columns';
+        if (cut)
+            this.showMsg('');
+    }
+
+    /**
+     * Creates the canvas of the keogram with cursor, hover label and time axis
+     * and places it in the strip.
+     *
+     * @param {HTMLElement} strip Element where the keogram is placed
+     * @param {WatchableSet[]} sets Sets of the keogram, ordered by time
+     * @param {Number[]} keys Positions of the sets (time in ms or index)
+     * @param {HTMLImageElement|HTMLCanvasElement} first First loaded stripe, gives the size of all stripes
+     * @param {Boolean} columns True for columns (time from left to right), false for rows
+     * @param {Set<Number>} failed Positions of stripes that could not be loaded
+     * @returns {Object} {ctx, thickness, length, spans} needed to draw the stripes
+     */
+    createKeogram(strip, sets, keys, first, columns, failed) {
+        let firstWidth = first.naturalWidth || first.width;
+        let firstHeight = first.naturalHeight || first.height;
         // Size of one stripe along the time axis and across it
-        let thickness = columns ? first.naturalWidth : first.naturalHeight;
-        let length = columns ? first.naturalHeight : first.naturalWidth;
-        let keys = sets.map((curSet, i) => this.hasTs ? this.getKey(curSet) : i);
+        let thickness = columns ? firstWidth : firstHeight;
+        let length = columns ? firstHeight : firstWidth;
         let scale = this.calcKeogramScale(keys, thickness);
         let slots = keys.map(curKey => Math.round((curKey - scale.start) / scale.step));
 
-        let canvas = document.createElement('canvas');
-        canvas.classList.add('swac_collage_keogram', columns ? 'swac_collage_keogram_columns' : 'swac_collage_keogram_rows');
-        canvas.width = columns ? scale.count * thickness : length;
-        canvas.height = columns ? length : scale.count * thickness;
-        let ctx = canvas.getContext('2d');
-        // Drawn slots of each stripe, used to find the clicked stripe
+        // Slots of each stripe, used to draw it and to find the clicked stripe
         let spans = [];
         for (let i = 0; i < sets.length; i++) {
             spans[i] = null;
-            if (!stripes[i] || isNaN(slots[i]))
+            if (failed.has(i) || isNaN(slots[i]))
                 continue;
             // Stretch the stripe to the next one, unless there is a gap in the data
             let width = 1;
             if (i + 1 < sets.length && !isNaN(slots[i + 1]) && keys[i + 1] - keys[i] <= scale.step * this.options.keogramGapFactor)
                 width = Math.max(slots[i + 1] - slots[i], 1);
             spans[i] = {start: slots[i], end: slots[i] + width};
-            let pos = slots[i] * thickness;
-            if (columns)
-                ctx.drawImage(stripes[i], pos, 0, width * thickness, length);
-            else
-                ctx.drawImage(stripes[i], 0, pos, length, width * thickness);
         }
+
+        let canvas = document.createElement('canvas');
+        canvas.classList.add('swac_collage_keogram', columns ? 'swac_collage_keogram_columns' : 'swac_collage_keogram_rows');
+        canvas.width = columns ? scale.count * thickness : length;
+        canvas.height = columns ? length : scale.count * thickness;
         this.keogramLayout = {columns: columns, count: scale.count, start: scale.start, step: scale.step, spans: spans};
         canvas.addEventListener('click', this.onKeogramClick.bind(this));
         canvas.addEventListener('mousemove', this.onKeogramHover.bind(this));
@@ -442,6 +573,179 @@ export default class Collage extends View {
         if (this.selected < 0 || this.selected >= this.images.length)
             this.selected = 0;
         this.select(this.selected);
+        return {ctx: canvas.getContext('2d'), columns: columns, thickness: thickness, length: length, spans: spans};
+    }
+
+    /**
+     * Draws one stripe into its slots of the keogram
+     *
+     * @param {Object} keogram Keogram from createKeogram()
+     * @param {Number} index Position of the stripe in the keogram
+     * @param {HTMLImageElement|HTMLCanvasElement} stripe Stripe to draw
+     * @returns {undefined}
+     */
+    drawStripe(keogram, index, stripe) {
+        let span = keogram.spans[index];
+        if (!span)
+            return;
+        let pos = span.start * keogram.thickness;
+        let size = (span.end - span.start) * keogram.thickness;
+        if (keogram.columns)
+            keogram.ctx.drawImage(stripe, pos, 0, size, keogram.length);
+        else
+            keogram.ctx.drawImage(stripe, 0, pos, keogram.length, size);
+    }
+
+    /**
+     * Loads the keogram stripe of a set. Whole images are cut to a stripe
+     * depending on the option keogramFromImage.
+     *
+     * @param {WatchableSet} set Set to load the stripe for
+     * @param {Boolean} columns True for columns, false for rows
+     * @param {Object} params Cut parameters from getKeogramParams()
+     * @param {Map} cache Cache for cut stripes from getStripeCache()
+     * @returns {Promise<HTMLImageElement|HTMLCanvasElement>} Stripe or null if it could not be loaded
+     */
+    async loadStripe(set, columns, params, cache) {
+        let src = this.getStripeSrc(set);
+        if (!src)
+            return null;
+        if (cache.has(src))
+            return cache.get(src);
+        let img = await this.preloadImage(src);
+        if (!img)
+            return null;
+        let across = columns ? img.naturalWidth : img.naturalHeight;
+        // Stored stripes are used as they are
+        if (params.fromImage === false || (params.fromImage === 'auto' && across <= this.options.keogramMaxSize))
+            return img;
+        let stripe = this.cutStripe(img, columns, params);
+        cache.set(src, stripe);
+        return stripe;
+    }
+
+    /**
+     * Cuts a stripe out of an image.
+     * Uses drawImage, so it works with images from other servers without CORS too.
+     *
+     * @param {HTMLImageElement} img Loaded image
+     * @param {Boolean} columns True cuts a column, false a row
+     * @param {Object} params Cut parameters from getKeogramParams()
+     * @returns {HTMLCanvasElement} Canvas with the stripe
+     */
+    cutStripe(img, columns, params) {
+        let across = columns ? img.naturalWidth : img.naturalHeight;
+        let along = columns ? img.naturalHeight : img.naturalWidth;
+        let thickness = Math.min(params.thickness, across);
+        // The position is the middle of the cut, the cut always stays inside the image
+        let from = Math.round(across * params.position / 100 - thickness / 2);
+        from = Math.min(Math.max(from, 0), across - thickness);
+        let start = Math.round(along * params.start / 100);
+        let length = Math.max(Math.round(along * params.end / 100) - start, 1);
+        let stripeWidth = params.stripeWidth || thickness;
+
+        let canvas = document.createElement('canvas');
+        canvas.width = columns ? stripeWidth : length;
+        canvas.height = columns ? length : stripeWidth;
+        let ctx = canvas.getContext('2d');
+        // A thick cut drawn into a thin stripe is scaled down, that averages its pixels
+        ctx.imageSmoothingQuality = 'high';
+        if (columns)
+            ctx.drawImage(img, from, start, thickness, length, 0, 0, stripeWidth, length);
+        else
+            ctx.drawImage(img, start, from, length, thickness, 0, 0, length, stripeWidth);
+        return canvas;
+    }
+
+    /**
+     * Gets the cache for cut stripes. The cache is emptied when the cut parameters
+     * change and keeps only the stripes of the given sets.
+     *
+     * @param {WatchableSet[]} sets Sets of the keogram
+     * @param {Boolean} columns True for columns, false for rows
+     * @param {Object} params Cut parameters from getKeogramParams()
+     * @returns {Map} Cut stripes by image source
+     */
+    getStripeCache(sets, columns, params) {
+        let paramsKey = JSON.stringify([columns, params]);
+        if (paramsKey !== this.stripeCacheParams) {
+            this.stripeCache = new Map();
+            this.stripeCacheParams = paramsKey;
+        }
+        let srcs = new Set(sets.map(curSet => this.getStripeSrc(curSet)));
+        for (let curSrc of this.stripeCache.keys()) {
+            if (!srcs.has(curSrc))
+                this.stripeCache.delete(curSrc);
+        }
+        return this.stripeCache;
+    }
+
+    /**
+     * Gets the options for cutting stripes with checked values.
+     * Options from the URL are strings, so they are converted here.
+     *
+     * @returns {Object} {fromImage, position, thickness, stripeWidth, start, end}
+     */
+    getKeogramParams() {
+        let num = (value, def) => {
+            let number = Number(value);
+            return value === null || value === undefined || value === '' || isNaN(number) ? def : number;
+        };
+        let limit = (value, min, max) => Math.min(Math.max(value, min), max);
+        let start = limit(num(this.options.keogramStart, 0), 0, 100);
+        let end = limit(num(this.options.keogramEnd, 100), 0, 100);
+        if (end <= start) {
+            Msg.warn('Collage', 'keogramEnd >' + end + '< must be greater than keogramStart >' + start + '<. Useing the whole image.', this.requestor);
+            start = 0;
+            end = 100;
+        }
+        let thickness = Math.max(Math.round(num(this.options.keogramThickness, 1)), 1);
+        return {
+            fromImage: this.getKeogramFromImage(),
+            position: limit(num(this.options.keogramPosition, 50), 0, 100),
+            thickness: thickness,
+            stripeWidth: Math.max(Math.round(num(this.options.keogramStripeWidth, thickness)), 1),
+            start: start,
+            end: end
+        };
+    }
+
+    /**
+     * Gets the option keogramFromImage, also if it is given as string in the URL
+     *
+     * @returns {Boolean|String} true, false or 'auto'
+     */
+    getKeogramFromImage() {
+        let fromImage = this.options.keogramFromImage;
+        if (fromImage === true || fromImage === 'true')
+            return true;
+        if (fromImage === false || fromImage === 'false')
+            return false;
+        return 'auto';
+    }
+
+    /**
+     * Runs a task for the numbers 0 to count - 1 with a limited number of parallel tasks
+     *
+     * @param {Number} count Number of tasks
+     * @param {Number} limit Maximum number of parallel tasks
+     * @param {Function} task Async function that gets the number, returning false stops all further tasks
+     * @returns {Promise} Resolves when all started tasks are done
+     */
+    async forEachLimited(count, limit, task) {
+        let next = 0;
+        let worker = async () => {
+            while (next < count) {
+                let index = next++;
+                if (await task(index) === false)
+                    next = count;
+            }
+        };
+        let workers = [];
+        for (let i = 0; i < Math.min(limit, count); i++) {
+            workers.push(worker());
+        }
+        await Promise.all(workers);
     }
 
     /**
@@ -636,6 +940,9 @@ export default class Collage extends View {
         let strip = this.requestor.querySelector('.swac_collage_strip');
         if (!strip)
             return;
+        // Stop a keogram that is still drawing, it would replace the timeline
+        this.keogramRun++;
+        this.keogramLayout = null;
         strip.innerHTML = '';
         for (let i = 0; i < this.images.length; i++) {
             let set = this.images[i];
@@ -1095,6 +1402,9 @@ export default class Collage extends View {
      * @returns {String} URL, data URL or path below docroot
      */
     getStripeSrc(set) {
+        // Stripes cut out of the images always come from the image shown in large
+        if (this.getKeogramFromImage() === true)
+            return this.getImageSrc(set);
         return this.getImageSrc(set, this.options.keogramAttr || this.options.pathAttr);
     }
 

@@ -8,6 +8,7 @@ var Collage_en = {
     noolder: 'There are no older images.',
     nonewer: 'There are no newer images.',
     notimepoint: 'There are no images from this timepoint on.',
-    loaderror: 'The images could not be loaded.'
+    loaderror: 'The images could not be loaded.',
+    keogramcutting: 'Cutting the keogram out of the images:'
 };
 export default Collage_en;
