@@ -90,6 +90,8 @@
     position: relative;
     flex: 1 1 auto;
     min-width: 0;
+    /* A short keogram stays in the middle */
+    margin: 0 auto;
 }
 
 .swac_collage_keogram_box_columns {

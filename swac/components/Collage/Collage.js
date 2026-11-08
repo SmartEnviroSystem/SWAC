@@ -149,7 +149,7 @@ export default class Collage extends View {
             this.options.keogramMaxSize = 10;
         this.desc.opts[8] = {
             name: "playInterval",
-            desc: "Milliseconds each image is shown while playing. Longer if the next image needs more time to load.",
+            desc: "Milliseconds each image is shown while playing. Longer if the next image needs more time to load. Can be changed while playing.",
             example: 500
         };
         if (!options.playInterval)
@@ -215,6 +215,21 @@ export default class Collage extends View {
         };
         if (options.keogramEnd === undefined)
             this.options.keogramEnd = 100;
+        this.desc.opts[17] = {
+            name: "keogramInterval",
+            desc: "Seconds between the images drawn in the keogram. Only the first image of each interval is drawn and stretched to the next one. "
+                    + "Click, arrow keys and playback then use only these images. 0 draws all images. Needs timestamps.",
+            example: 30
+        };
+        if (options.keogramInterval === undefined)
+            this.options.keogramInterval = 0;
+        this.desc.opts[18] = {
+            name: "playPreload",
+            desc: "Number of images that are loaded in advance while playing, so that the playback does not wait for each image.",
+            example: 10
+        };
+        if (!options.playPreload)
+            this.options.playPreload = 10;
 
         this.desc.funcs[0] = {
             name: 'select',
@@ -310,6 +325,7 @@ export default class Collage extends View {
         this.playing = false;
         this.playTimeout = null;
         this.playRun = 0;       // Number of the current playback
+        this.playPreloads = new Map();  // Images of the playback loaded in advance, by image source
         this.keogramRun = 0;    // Number of the current keogram drawing
         this.keogramLayout = null;  // Position of the stripes in the shown keogram
         this.stripeCache = new Map();   // Stripes cut out of the images, by image source
@@ -467,7 +483,8 @@ export default class Collage extends View {
         let columns = this.mode === 'keogram_columns';
         let params = this.getKeogramParams();
         let cache = this.getStripeCache(sets, columns, params);
-        let keys = sets.map((curSet, i) => this.hasTs ? this.getKey(curSet) : i);
+        let keys = this.getKeogramKeys(sets);
+        let total = keys.filter(curKey => !isNaN(curKey)).length;
         let keogram = null;     // Created with the first loaded stripe, that gives the size
         let failed = new Set(); // Stripes that failed before the keogram was created
         let done = 0;
@@ -477,6 +494,9 @@ export default class Collage extends View {
         let firstSrc = sets.length > 0 ? this.getStripeSrc(sets[0]) : '';
         let limit = firstSrc.startsWith('data:') ? 64 : 6;
         await this.forEachLimited(sets.length, limit, async i => {
+            // Images left out by keogramInterval need no stripe
+            if (isNaN(keys[i]))
+                return true;
             let stripe = await this.loadStripe(sets[i], columns, params, cache);
             if (run !== this.keogramRun)
                 return false;
@@ -494,7 +514,7 @@ export default class Collage extends View {
                 keogram = this.createKeogram(strip, sets, keys, stripe, columns, failed);
             this.drawStripe(keogram, i, stripe);
             if (cut)
-                this.showMsg(SWAC.lang.dict.Collage.keogramcutting + ' ' + done + ' / ' + sets.length);
+                this.showMsg(SWAC.lang.dict.Collage.keogramcutting + ' ' + done + ' / ' + total);
             return true;
         });
         if (run !== this.keogramRun)
@@ -531,15 +551,20 @@ export default class Collage extends View {
 
         // Slots of each stripe, used to draw it and to find the clicked stripe
         let spans = [];
-        for (let i = 0; i < sets.length; i++) {
+        // Next stripe with a slot, images left out by keogramInterval have none
+        let next = -1;
+        for (let i = sets.length - 1; i >= 0; i--) {
             spans[i] = null;
-            if (failed.has(i) || isNaN(slots[i]))
+            if (isNaN(slots[i]))
                 continue;
-            // Stretch the stripe to the next one, unless there is a gap in the data
-            let width = 1;
-            if (i + 1 < sets.length && !isNaN(slots[i + 1]) && keys[i + 1] - keys[i] <= scale.step * this.options.keogramGapFactor)
-                width = Math.max(slots[i + 1] - slots[i], 1);
-            spans[i] = {start: slots[i], end: slots[i] + width};
+            if (!failed.has(i)) {
+                // Stretch the stripe to the next one, unless there is a gap in the data
+                let width = 1;
+                if (next >= 0 && keys[next] - keys[i] <= scale.step * this.options.keogramGapFactor)
+                    width = Math.max(slots[next] - slots[i], 1);
+                spans[i] = {start: slots[i], end: slots[i] + width};
+            }
+            next = i;
         }
 
         let canvas = document.createElement('canvas');
@@ -552,6 +577,11 @@ export default class Collage extends View {
 
         let box = document.createElement('div');
         box.classList.add('swac_collage_keogram_box', columns ? 'swac_collage_keogram_box_columns' : 'swac_collage_keogram_box_rows');
+        // Not stretched, so a keogram with fewer stripes (e.g. by keogramInterval) is shorter
+        if (columns)
+            box.style.maxWidth = canvas.width + 'px';
+        else
+            canvas.style.height = 'min(60vh, ' + canvas.height + 'px)';
         box.appendChild(canvas);
         let cursor = document.createElement('div');
         cursor.classList.add('swac_collage_keogram_cursor');
@@ -572,8 +602,55 @@ export default class Collage extends View {
         this.updateJumpButtons();
         if (this.selected < 0 || this.selected >= this.images.length)
             this.selected = 0;
+        // The selected image may be left out by keogramInterval
+        if (!spans[this.selected]) {
+            let nearest = this.getNeighbourIndex(this.selected, 1);
+            if (nearest < 0)
+                nearest = this.getNeighbourIndex(this.selected, -1);
+            if (nearest >= 0)
+                this.selected = nearest;
+        }
         this.select(this.selected);
         return {ctx: canvas.getContext('2d'), columns: columns, thickness: thickness, length: length, spans: spans};
+    }
+
+    /**
+     * Gets the positions of the sets in the keogram. With the option keogramInterval
+     * only the first set of each interval gets a position.
+     *
+     * @param {WatchableSet[]} sets Sets of the keogram, ordered by time
+     * @returns {Number[]} Time in ms or index, NaN for sets that are not drawn
+     */
+    getKeogramKeys(sets) {
+        let keys = sets.map((curSet, i) => this.hasTs ? this.getKey(curSet) : i);
+        let interval = Number(this.options.keogramInterval) * 1000;
+        if (!this.hasTs || !(interval > 0))
+            return keys;
+        let lastSlot = null;
+        return keys.map(curKey => {
+            let slot = Math.floor(curKey / interval);
+            if (isNaN(curKey) || slot === lastSlot)
+                return NaN;
+            lastSlot = slot;
+            return curKey;
+        });
+    }
+
+    /**
+     * Gets the previous or next image. In a keogram images without stripe,
+     * e.g. left out by keogramInterval, are skipped.
+     *
+     * @param {Number} index Position of the image to start from
+     * @param {Number} direction -1 for the previous, 1 for the next image
+     * @returns {Number} Position of the image or -1 if there is none
+     */
+    getNeighbourIndex(index, direction) {
+        let spans = this.keogramLayout ? this.keogramLayout.spans : null;
+        for (let i = index + direction; i >= 0 && i < this.images.length; i += direction) {
+            if (!spans || spans[i])
+                return i;
+        }
+        return -1;
     }
 
     /**
@@ -987,7 +1064,14 @@ export default class Collage extends View {
             mainImg.src = this.getImageSrc(set);
         let captionElem = this.requestor.querySelector('.swac_collage_caption');
         if (captionElem) {
-            let caption = SWAC.lang.dict.Collage.image + ' ' + (index + 1) + ' ' + SWAC.lang.dict.Collage.of + ' ' + this.images.length;
+            let number = index + 1;
+            let total = this.images.length;
+            // In a keogram only the drawn images are counted
+            if (this.keogramLayout) {
+                number = this.keogramLayout.spans.slice(0, index + 1).filter(curSpan => curSpan).length;
+                total = this.keogramLayout.spans.filter(curSpan => curSpan).length;
+            }
+            let caption = SWAC.lang.dict.Collage.image + ' ' + number + ' ' + SWAC.lang.dict.Collage.of + ' ' + total;
             let date = this.getDate(set);
             if (date)
                 caption = date.toLocaleString() + ' · ' + caption;
@@ -1020,14 +1104,16 @@ export default class Collage extends View {
     onKeyDown(evt) {
         if (evt.key === 'ArrowLeft') {
             evt.preventDefault();
-            if (this.selected > 0)
-                this.select(this.selected - 1);
+            let prev = this.getNeighbourIndex(this.selected, -1);
+            if (prev >= 0)
+                this.select(prev);
             else
                 this.loadPrevious();
         } else if (evt.key === 'ArrowRight') {
             evt.preventDefault();
-            if (this.selected < this.images.length - 1)
-                this.select(this.selected + 1);
+            let next = this.getNeighbourIndex(this.selected, 1);
+            if (next >= 0)
+                this.select(next);
             else
                 this.loadNext();
         } else if (evt.key === ' ') {
@@ -1077,6 +1163,7 @@ export default class Collage extends View {
             return;
         this.playing = false;
         clearTimeout(this.playTimeout);
+        this.playPreloads.clear();
         this.updatePlayButton();
         document.dispatchEvent(new CustomEvent('swac_' + this.requestor.id + '_collage_play', {
             detail: {requestor: this.requestor, playing: false}
@@ -1093,25 +1180,53 @@ export default class Collage extends View {
     async playStep(run) {
         if (!this.playing || run !== this.playRun)
             return;
-        let start = Date.now();
-        if (this.selected >= this.images.length - 1) {
-            // End of timeline reached, continue with the next images
-            let loaded = await this.loadNext();
+        let nextIndex = this.getNeighbourIndex(this.selected, 1);
+        if (nextIndex < 0) {
+            // End of the timeline reached, continue with the next images. A keogram has all its images.
+            let loaded = !this.keogramLayout && await this.loadNext();
             if (run !== this.playRun)
                 return;
             if (!loaded) {
+                // Back to the first image, playing again needs the play button
                 this.pause();
+                this.showMsg('');
+                this.select(Math.max(this.getNeighbourIndex(-1, 1), 0));
                 return;
             }
         } else {
-            let next = this.images[this.selected + 1];
-            await this.preloadImage(this.getImageSrc(next));
+            // The following images load while the current ones are shown
+            this.preloadAhead(nextIndex);
+            let src = this.getImageSrc(this.images[nextIndex]);
+            await this.playPreloads.get(src);
+            this.playPreloads.delete(src);
             if (!this.playing || run !== this.playRun)
                 return;
-            this.select(this.selected + 1);
+            this.select(nextIndex);
         }
-        let wait = Math.max(0, this.options.playInterval - (Date.now() - start));
-        this.playTimeout = setTimeout(this.playStep.bind(this, run), wait);
+        // Each image is shown for the whole interval, also after waiting for it
+        this.playTimeout = setTimeout(this.playStep.bind(this, run), this.options.playInterval);
+    }
+
+    /**
+     * Loads the next images of the playback in advance (option playPreload).
+     * Images that are not needed any more are forgotten.
+     *
+     * @param {Number} index Position of the next image of the playback
+     * @returns {undefined}
+     */
+    preloadAhead(index) {
+        let srcs = new Set();
+        let count = Math.max(Number(this.options.playPreload) || 1, 1);
+        for (let i = index; i >= 0 && srcs.size < count; i = this.getNeighbourIndex(i, 1)) {
+            let src = this.getImageSrc(this.images[i]);
+            srcs.add(src);
+            if (!this.playPreloads.has(src))
+                this.playPreloads.set(src, this.preloadImage(src));
+        }
+        for (let curSrc of this.playPreloads.keys()) {
+            if (!srcs.has(curSrc))
+                this.playPreloads.delete(curSrc);
+        }
     }
 
     /**
