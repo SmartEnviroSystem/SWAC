@@ -1,0 +1,78 @@
+<main class="pm-app">
+    <div class="pm-head">
+      <div>
+        <div class="pm-kicker">SmartMonitoring · Web Engineering · Gruppe 4</div>
+        <h1 class="pm-title">Datenpipelines</h1>
+        <p class="pm-desc">Verarbeitungspipelines erstellen und konfigurieren</p>
+      </div>
+      
+    </div>
+
+    <div class="pm-grid">
+      
+      <section class="pm-card" aria-label="Pipeline-Verwaltung">
+        <div class="pm-card-head"><h2>Pipeline-Verwaltung</h2><p>Vorhandene Pipeline öffnen oder neu anlegen</p></div>
+        <div class="pm-card-body">
+          <button type="button" class="pm-sidebar-btn" id="loadExample">
+            <strong>Messdaten aufbereiten</strong><span>Pipeline · 4 Bausteine</span>
+          </button>
+          <div style="height:10px"></div>
+          <button type="button" class="pm-btn" id="newPipeline">＋ Neue Pipeline anlegen</button>
+          <div style="height:10px"></div>
+          <button type="button" class="pm-btn" id="savePipeline">Pipeline speichern</button>
+          <div class="pm-smhead">Verfügbare Bausteine</div>
+          <div class="pm-palette" aria-label="Bausteintypen">
+            <span class="pm-chip pm-chip-source">Quelle</span>
+            <span class="pm-chip pm-chip-filter">Filter</span>
+            <span class="pm-chip pm-chip-script">Skript</span>
+            <span class="pm-chip pm-chip-target">Ziel</span>
+          </div>
+          <p class="pm-desc" style="margin-top:12px;font-size:12px">Die Bausteine sind im Flow bereits dargestellt. Klicke einen an, um seine Einstellungen zu sehen. Bei „Skript“ kannst du eine Vorlage auswählen oder eigenen Python-Code erstellen.</p>
+        </div>
+      </section>
+
+      
+      <section class="pm-card" aria-label="Pipeline-Editor">
+        <div class="pm-card-head"><h2>Pipeline-Editor</h2><p id="pipelineLabel">Messdaten aufbereiten</p></div>
+        <div class="pm-flow-wrap">
+          <div class="pm-flow" role="group" aria-label="Verarbeitungsschritte">
+            <button type="button" class="pm-node" data-step="source" aria-pressed="false">
+              <div class="pm-node-num">SCHRITT 01</div><div class="pm-node-name">Quelle</div>
+              <div class="pm-node-value" id="sourcePreview">exampledata_timeseries_1week</div>
+            </button>
+            <span class="pm-arrow" aria-hidden="true">→</span>
+            <button type="button" class="pm-node" data-step="filter" aria-pressed="false">
+              <div class="pm-node-num">SCHRITT 02</div><div class="pm-node-name">Filter</div>
+              <div class="pm-node-value" id="filterPreview">Zeitraum: 7 Tage</div>
+            </button>
+            <span class="pm-arrow" aria-hidden="true">→</span>
+            <button type="button" class="pm-node" data-step="script" aria-pressed="true">
+              <div class="pm-node-num">SCHRITT 03</div><div class="pm-node-name">Skript</div>
+              <div class="pm-node-value" id="scriptPreview">normalize_values.py</div>
+            </button>
+            <span class="pm-arrow" aria-hidden="true">→</span>
+            <button type="button" class="pm-node" data-step="target" aria-pressed="false">
+              <div class="pm-node-num">SCHRITT 04</div><div class="pm-node-name">Ziel</div>
+              <div class="pm-node-value" id="targetPreview">ergebnis_tabelle</div>
+            </button>
+          </div>
+          <div class="pm-flow-help">↑ Baustein anklicken, um rechts seine Einstellungen zu öffnen</div>
+        </div>
+        <div class="pm-flow-footer">
+          <h3>Anwendungsfall</h3>
+          <p>Messdaten aus einer vorhandenen Tabelle lesen, zeitlich einschränken, mit einem Skript bearbeiten und das Ergebnis in einer Zieltabelle ablegen. </p>
+        </div>
+      </section>
+
+      
+      <section class="pm-card pm-settings" aria-label="Bausteinkonfiguration">
+        <div class="pm-card-head"><h2>Bausteinkonfiguration</h2><p>Felder ändern sich je nach ausgewähltem Baustein</p></div>
+        <div class="pm-card-body">
+          <span class="pm-badge" id="currentStep">Ausgewählter Baustein: Skript</span>
+          <form id="detailsForm"></form>
+          <div class="pm-feedback" id="feedback" role="status" hidden></div>
+        </div>
+      </section>
+    </div>
+    <div class="pm-footer">SmartMonitoring · Datenpipelines · Gruppe 4</div>
+  </main>
