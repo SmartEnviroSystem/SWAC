@@ -1,0 +1,90 @@
+<main class="dc-app">
+  <header class="dc-hero">
+    <div>
+      <div class="dc-kicker">SmartMonitoring · Web Engineering · Gruppe 4</div>
+      <h1>Datenkonsolidierung</h1>
+      <p>Zwei Datenquellen zeitbasiert zusammenführen – Konfigurations-Mockup</p>
+    </div>
+    <span class="dc-demo">Frontend-Mockup</span>
+  </header>
+
+  <div class="dc-process" aria-label="Konsolidierungsablauf">
+    <div class="dc-process-item"><span>01</span><strong>Quelltabellen</strong></div>
+    <div class="dc-process-arrow" aria-hidden="true">→</div>
+    <div class="dc-process-item"><span>02</span><strong>Zeit-Matching</strong></div>
+    <div class="dc-process-arrow" aria-hidden="true">→</div>
+    <div class="dc-process-item"><span>03</span><strong>Zieltabelle</strong></div>
+  </div>
+
+  <div class="dc-layout">
+    <form id="dcForm" class="dc-card">
+      <div class="dc-card-head">
+        <h2>Konfiguration</h2>
+        <p>Tabellen und ihre Spalten werden live aus SmartData geladen.</p>
+      </div>
+      <div class="dc-card-body">
+        <h3><span class="dc-section-num">1</span> Datenquellen auswählen</h3>
+        <div class="dc-two-col">
+          <div class="dc-field">
+            <label for="dcSourceA">Tabelle A</label>
+            <select id="dcSourceA" required disabled><option value="">Tabellen werden geladen ...</option></select>
+          </div>
+          <div class="dc-field">
+            <label for="dcSourceB">Tabelle B</label>
+            <select id="dcSourceB" required disabled><option value="">Tabellen werden geladen ...</option></select>
+          </div>
+        </div>
+        <p class="dc-hint" id="dcTableHint">Verbinde mit SmartData ...</p>
+
+        <h3><span class="dc-section-num">2</span> Zeitstempel und Matching</h3>
+        <div class="dc-two-col">
+          <div class="dc-field">
+            <label for="dcTimeA">Zeitstempel-Spalte A</label>
+            <select id="dcTimeA" required disabled><option value="">Bitte zuerst Tabelle A auswählen</option></select>
+            <p class="dc-hint" id="dcTimeHintA">Bitte zuerst eine Quelltabelle auswählen.</p>
+          </div>
+          <div class="dc-field">
+            <label for="dcTimeB">Zeitstempel-Spalte B</label>
+            <select id="dcTimeB" required disabled><option value="">Bitte zuerst Tabelle B auswählen</option></select>
+            <p class="dc-hint" id="dcTimeHintB">Bitte zuerst eine Quelltabelle auswählen.</p>
+          </div>
+          <div class="dc-field">
+            <label for="dcMode">Matching-Modus</label>
+            <select id="dcMode">
+              <option value="intersection">Intersection – nur gemeinsame Zeitpunkte</option>
+              <option value="union">Union – alle Zeitpunkte</option>
+            </select>
+          </div>
+          <div class="dc-field">
+            <label for="dcTolerance">Zeitliche Toleranz (Sekunden)</label>
+            <input id="dcTolerance" type="number" min="0" max="86400" step="1" value="30" required>
+          </div>
+        </div>
+        <p class="dc-hint">Die Spaltennamen und Datentypen stammen aus SmartData. Ob eine Spalte für Zeit-Matching geeignet ist (z. B. Unix-Zeitstempel als Zahl), und die Matching-Semantik müssen mit dem Backend-Team abgestimmt werden.</p>
+
+        <h3><span class="dc-section-num">3</span> Ziel konfigurieren</h3>
+        <div class="dc-field">
+          <label for="dcTarget">Name der Zieltabelle</label>
+          <input id="dcTarget" value="consolidated_timeseries" placeholder="z. B. consolidated_timeseries" required>
+        </div>
+        <button type="submit" class="dc-primary">Konfiguration prüfen</button>
+        <p class="dc-status" id="dcStatus" role="status">Initialisiere ...</p>
+      </div>
+    </form>
+
+    <aside class="dc-card dc-results">
+      <div class="dc-card-head">
+        <h2>Konfigurationsvorschau</h2>
+        <p>Parameterentwurf für die spätere SmartDataLyser-Anbindung</p>
+      </div>
+      <div class="dc-card-body">
+        <p id="dcPreviewHint" class="dc-hint">Wähle zwei Tabellen und klicke auf „Konfiguration prüfen“.</p>
+        <pre id="dcOutput" class="dc-code" aria-live="polite">Noch keine Konfiguration erzeugt.</pre>
+        <div class="dc-info">
+          <strong>Noch keine echte Datenverarbeitung</strong>
+          <p>Dieser Prototyp liest nur Tabellen- und Spaltendefinitionen. Er führt keine Jobs aus, schreibt keine Daten und berechnet kein zeitliches Matching. Das JSON ist noch kein bestätigtes Backend-API-Format.</p>
+        </div>
+      </div>
+    </aside>
+  </div>
+</main>
