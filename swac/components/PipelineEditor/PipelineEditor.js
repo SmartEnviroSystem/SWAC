@@ -43,7 +43,7 @@ export default class PipelineEditor extends View {
             const ownScripts = [];
             const example = () => ({
               source:'exampledata_timeseries_1week', period:'7 Tage', script:'normalize_values.py',
-              scriptType:'predefined', description:'Werte aufbereiten',
+              scriptType:'predefined', jobId:null, description:'Werte aufbereiten',
               parameter:'threshold=0.95', target:'ergebnis_tabelle'
             });
             let pipeline = example();
@@ -57,6 +57,208 @@ export default class PipelineEditor extends View {
             // Die Datenbank wird niemals direkt vom Browser angesprochen.
             let availableTables = null;  // null = Anfrage läuft
             let tablesError = null;
+
+            // Bestehende Jobs und deren Parameter werden ausschließlich lesend geladen.
+            // Wichtig: Diese Oberfläche startet keine Jobs und speichert keine Änderungen.
+            let availableJobs = null; // null = wird geladen
+            let jobsError = null;
+            let jobParams = null;
+            let jobParamsError = null;
+            let actionDescriptions = null;
+            let actionDescriptionsError = null;
+
+            async function fetchRecords(url, responseKey) {
+              const response = await fetch(url, {
+                method: 'GET',
+                headers: { 'Accept': 'application/json' }
+              });
+              if (!response.ok) throw new Error(`HTTP ${response.status} (${url})`);
+              const data = await response.json();
+              if (!data || !Array.isArray(data[responseKey])) {
+                throw new Error(`Unerwartetes JSON: ${responseKey} fehlt (${url})`);
+              }
+              return data[responseKey];
+            }
+
+            function findJob(id) {
+              return (availableJobs || []).find(job => String(job.id) === String(id));
+            }
+
+            function updateJobOptions() {
+              const select = $('fieldJob');
+              if (!select) return; // Panel ist aktuell nicht sichtbar.
+              const selectedBefore = select.value ||
+                (pipeline.scriptType === 'job' ? String(pipeline.jobId || '') : '');
+              select.replaceChildren();
+              if (jobsError) {
+                select.add(new Option('Jobs konnten nicht geladen werden', ''));
+                select.disabled = true;
+              } else if (availableJobs === null) {
+                select.add(new Option('Jobs werden geladen ...', ''));
+                select.disabled = true;
+              } else if (!availableJobs.length) {
+                select.add(new Option('Keine Jobs gefunden', ''));
+                select.disabled = true;
+              } else {
+                select.disabled = false;
+                select.add(new Option('Bitte Job auswählen', ''));
+                availableJobs.forEach(job => {
+                  select.add(new Option(`${job.name || 'Job'} (ID ${job.id})`, String(job.id)));
+                });
+                select.value = findJob(selectedBefore) ? selectedBefore : '';
+              }
+              const help = $('jobHelp');
+              if (help) {
+                help.textContent = jobsError
+                  ? 'SmartData nicht erreichbar. Payara und Browser-Konsole prüfen.'
+                  : availableJobs === null
+                    ? 'Bestehende Jobs werden aus SmartData geladen.'
+                    : `${availableJobs.length} vorhandene Jobs aus SmartData. Auswahl führt keinen Job aus.`;
+              }
+              renderJobDetails();
+            }
+
+            // DOM-Elemente statt HTML-Strings: Werte aus API-Antworten nicht als HTML ausführen.
+            function appendJobText(container, text, className = 'pm-field-help') {
+              const element = document.createElement('p');
+              element.className = className;
+              element.textContent = text;
+              container.appendChild(element);
+              return element;
+            }
+
+            function appendJobField(container, label, value) {
+              const wrapper = document.createElement('div');
+              wrapper.className = 'pm-field';
+              const title = document.createElement('label');
+              title.textContent = label;
+              wrapper.appendChild(title);
+              const valueString = value == null ? '' : String(value);
+              if (/(password|passwd|pwd|secret|token|api.?key)/i.test(label)) {
+                const hidden = document.createElement('input');
+                hidden.type = 'text';
+                hidden.readOnly = true;
+                hidden.value = '[Wert aus Sicherheitsgründen ausgeblendet]';
+                wrapper.appendChild(hidden);
+              } else if (valueString.length > 110 || valueString.includes('\n')) {
+                const area = document.createElement('textarea');
+                area.readOnly = true;
+                area.rows = 5;
+                area.value = valueString;
+                area.style.maxHeight = '220px';
+                wrapper.appendChild(area);
+              } else {
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.readOnly = true;
+                input.value = valueString;
+                wrapper.appendChild(input);
+              }
+              container.appendChild(wrapper);
+            }
+
+            function renderJobDetails() {
+              const details = $('jobDetails');
+              const selected = $('fieldJob');
+              if (!details || !selected) return;
+              details.replaceChildren();
+              const job = findJob(selected.value);
+              if (!job) return;
+
+              appendJobField(details, 'Action / Job-Art', job.action || 'Keine Angabe');
+              appendJobField(details, 'Beschreibung', job.desc || 'Keine Beschreibung vorhanden');
+              appendJobText(details, `Status: ${job.active ? 'aktiv' : 'inaktiv'} · Job-ID: ${job.id}`);
+
+              const heading = document.createElement('h3');
+              heading.className = 'pm-script-subheading';
+              heading.textContent = 'Gespeicherte Job-Parameter (nur lesbar)';
+              details.appendChild(heading);
+
+              if (jobParamsError) {
+                appendJobText(details, 'Die Job-Parameter konnten nicht geladen werden.');
+              } else if (jobParams === null) {
+                appendJobText(details, 'Job-Parameter werden geladen ...');
+              } else {
+                const params = jobParams.filter(param => String(param.datajob_id) === String(job.id));
+                if (params.length === 0) {
+                  appendJobText(details, 'Für diesen Job sind keine Parameter gespeichert.');
+                }
+                params.forEach(param => {
+                  appendJobField(details, `${param.key || 'Parameter'} (${param.type || 'unbekannter Typ'})`, param.value);
+                });
+              }
+
+              const actionHeading = document.createElement('h3');
+              actionHeading.className = 'pm-script-subheading';
+              actionHeading.textContent = 'Action-Beschreibung (SmartDataJobs)';
+              details.appendChild(actionHeading);
+              if (actionDescriptionsError) {
+                appendJobText(details, 'getActionsDescription konnte nicht geladen werden.');
+              } else if (actionDescriptions === null) {
+                appendJobText(details, 'Action-Beschreibungen werden geladen ...');
+              } else {
+                // In datajobs steht z. B. "CheckNet", in der Dokumentation "CheckNetAction".
+                const action = actionDescriptions.find(item =>
+                  String(item.name || '').replace(/Action$/i, '').toLowerCase() ===
+                  String(job.action || '').replace(/Action$/i, '').toLowerCase()
+                );
+                if (!action) {
+                  appendJobText(details, `Für "${job.action || 'unbekannt'}" liefert getActionsDescription derzeit keine Beschreibung.`);
+                } else {
+                  appendJobText(details, `Dokumentierte Action: ${action.name}`);
+                  (Array.isArray(action.params) ? action.params : []).forEach(param => {
+                    const mandatory = param.optional === false ? 'Pflichtfeld' : 'optional';
+                    const dataType = param.type ? ` · Typ: ${param.type}` : '';
+                    appendJobText(details,
+                      `${param.name}: ${mandatory}${dataType}${param.description ? ' — ' + param.description : ''}`);
+                  });
+                }
+              }
+            }
+
+            async function loadExistingJobs() {
+              try {
+                availableJobs = await fetchRecords(
+                  '/SmartData/smartdata/records/datajobs?storage=smartmonitoring', 'records'
+                );
+                availableJobs = availableJobs.filter(job => job && job.id != null)
+                  .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+                jobsError = null;
+              } catch (error) {
+                jobsError = error;
+                availableJobs = [];
+                console.error('PipelineEditor: Jobs konnten nicht geladen werden:', error);
+              }
+              updateJobOptions();
+            }
+
+            async function loadJobParams() {
+              try {
+                jobParams = await fetchRecords(
+                  '/SmartData/smartdata/records/datajobs_params?storage=smartmonitoring', 'records'
+                );
+                jobParamsError = null;
+              } catch (error) {
+                jobParams = [];
+                jobParamsError = error;
+                console.error('PipelineEditor: Job-Parameter konnten nicht geladen werden:', error);
+              }
+              renderJobDetails();
+            }
+
+            async function loadActionDescriptions() {
+              try {
+                actionDescriptions = await fetchRecords(
+                  '/SmartDataJobs/smartdatajobs/jobexecution/getActionsDescription', 'list'
+                );
+                actionDescriptionsError = null;
+              } catch (error) {
+                actionDescriptions = [];
+                actionDescriptionsError = error;
+                console.error('PipelineEditor: Action-Beschreibungen konnten nicht geladen werden:', error);
+              }
+              renderJobDetails();
+            }
 
             function updateSourceOptions() {
               const select = $('fieldSource');
@@ -152,9 +354,20 @@ export default class PipelineEditor extends View {
                   <span class="pm-field-help">Zeitbereich für die ausgewählten Messdaten festlegen.</span>
                 </div>`,
               script: `
-                <div class="pm-script-modes" role="group" aria-label="Art des Skripts auswählen">
-                  <button type="button" class="pm-mode-btn" data-script-mode="existing" aria-pressed="true">Vorhandenes Skript</button>
-                  <button type="button" class="pm-mode-btn" data-script-mode="new" aria-pressed="false">Eigenes Skript erstellen</button>
+                <div class="pm-script-modes" role="group" aria-label="Skript oder Job auswählen" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+                  <button type="button" class="pm-mode-btn" data-script-mode="existing" aria-pressed="true">Skript</button>
+                  <button type="button" class="pm-mode-btn" data-script-mode="new" aria-pressed="false">Eigenes Skript</button>
+                  <button type="button" class="pm-mode-btn" data-script-mode="job" aria-pressed="false">Job</button>
+                </div>
+                <div id="existingJobPanel" class="pm-script-panel" hidden>
+                  <div class="pm-script-subheading">Vorhandenen Job auswählen</div>
+                  <div class="pm-field"><label for="fieldJob">Job</label>
+                    <select id="fieldJob" name="job" disabled>
+                      <option value="">Jobs werden geladen ...</option>
+                    </select>
+                    <span class="pm-field-help" id="jobHelp">Bestehende Jobs werden aus SmartData geladen.</span>
+                  </div>
+                  <div id="jobDetails" aria-live="polite"></div>
                 </div>
                 <div id="existingScriptPanel" class="pm-script-panel">
                   <div class="pm-script-subheading">Skript aus der Liste auswählen</div>
@@ -217,7 +430,7 @@ export default class PipelineEditor extends View {
               };
               createGroup('Vorhandene Skripte', predefinedScripts);
               if (ownScripts.length) createGroup('Eigene Skripte', ownScripts);
-              select.value = pipeline.script;
+              select.value = pipeline.scriptType === 'job' ? '' : pipeline.script;
             }
             function showSelectedScriptMetadata() {
               const selected = findScript($('fieldScript').value);
@@ -229,24 +442,28 @@ export default class PipelineEditor extends View {
             }
             function setScriptMode(nextMode) {
               scriptMode = nextMode;
-              const isNew = nextMode === 'new';
-              $('existingScriptPanel').hidden = isNew;
-              $('newScriptPanel').hidden = !isNew;
+              $('existingScriptPanel').hidden = nextMode !== 'existing';
+              $('newScriptPanel').hidden = nextMode !== 'new';
+              $('existingJobPanel').hidden = nextMode !== 'job';
               root.querySelectorAll('.pm-mode-btn').forEach(btn => {
                 btn.setAttribute('aria-pressed', String(btn.dataset.scriptMode === nextMode));
               });
-              $('submitSettings').textContent = isNew ? 'Eigenes Skript übernehmen' : 'Änderungen übernehmen';
+              $('submitSettings').textContent = nextMode === 'new'
+                ? 'Eigenes Skript übernehmen'
+                : nextMode === 'job' ? 'Job übernehmen' : 'Änderungen übernehmen';
               clearMessage();
             }
             function setupScriptPanel() {
               populateScriptList();
-              if (pipeline.script) {
+              if (pipeline.script && pipeline.scriptType !== 'job') {
                 $('fieldDescription').value = pipeline.description;
                 $('fieldParameter').value = pipeline.parameter;
                 const own = ownScripts.find(s => s.name === pipeline.script);
                 $('ownCodePreviewWrapper').hidden = !own;
                 $('ownCodePreview').textContent = own ? own.code : '';
               }
+              updateJobOptions();
+              $('fieldJob').addEventListener('change', renderJobDetails);
               $('fieldScript').addEventListener('change', showSelectedScriptMetadata);
               root.querySelectorAll('.pm-mode-btn').forEach(btn => {
                 btn.addEventListener('click', () => setScriptMode(btn.dataset.scriptMode));
@@ -293,6 +510,21 @@ export default class PipelineEditor extends View {
               if (currentStep === 'source') pipeline.source = $('fieldSource').value;
               if (currentStep === 'filter') pipeline.period = $('fieldPeriod').value;
               if (currentStep === 'script') {
+                if (scriptMode === 'job') {
+                  const job = findJob($('fieldJob').value);
+                  if (!job) {
+                    showMessage('Bitte zuerst einen vorhandenen Job auswählen.');
+                    return;
+                  }
+                  pipeline.jobId = job.id;
+                  pipeline.script = job.name;
+                  pipeline.scriptType = 'job';
+                  pipeline.description = job.desc || '';
+                  pipeline.parameter = '';
+                  renderFlow();
+                  showMessage(`Job „${job.name}“ ausgewählt. Eine Job-Ausführung oder Speicherung findet noch nicht statt.`);
+                  return;
+                }
                 if (scriptMode === 'new') {
                   const name = $('newScriptName').value.trim();
                   const code = $('newScriptCode').value;
@@ -321,6 +553,7 @@ export default class PipelineEditor extends View {
                   if (existingIndex >= 0) ownScripts[existingIndex] = custom;
                   else ownScripts.push(custom);
                   pipeline.script = name;
+                  pipeline.jobId = null;
                   pipeline.scriptType = 'custom';
                   pipeline.description = custom.description;
                   pipeline.parameter = custom.parameter;
@@ -331,6 +564,7 @@ export default class PipelineEditor extends View {
                   return;
                 }
                 pipeline.script = $('fieldScript').value;
+                pipeline.jobId = null;
                 pipeline.scriptType = ownScripts.some(s => s.name === pipeline.script) ? 'custom' : 'predefined';
                 pipeline.description = $('fieldDescription').value;
                 pipeline.parameter = $('fieldParameter').value;
@@ -345,7 +579,7 @@ export default class PipelineEditor extends View {
               showMessage('Pipeline geöffnet.');
             });
             $('newPipeline').addEventListener('click', () => {
-              pipeline = {source:'', period:'7 Tage', script:'',scriptType:'predefined', description:'', parameter:'', target:''};
+              pipeline = {source:'', period:'7 Tage', script:'',scriptType:'predefined', jobId:null, description:'', parameter:'', target:''};
               newDraft = true; scriptMode = 'existing';
               selectStep('source');
               showMessage('Neue Pipeline erstellt.');
@@ -356,6 +590,10 @@ export default class PipelineEditor extends View {
             renderFlow();
             renderDetails();
             loadAvailableTables();
+            // Drei reine Lesezugriffe: Jobs, gespeicherte Parameter, Action-Dokumentation.
+            loadExistingJobs();
+            loadJobParams();
+            loadActionDescriptions();
           })();
     }
 }
