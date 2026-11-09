@@ -26,6 +26,7 @@ var Worldmap2d_pl = {
     context_copycoords: 'Kopiuj współrzędne',
     context_centermap: 'Wycentruj mapę tutaj',
     context_zoomin: 'Powiększ',
-    context_zoomout: 'Pomniejsz'
+    context_zoomout: 'Pomniejsz',
+    areas: 'obszary'
 };
 export default Worldmap2d_pl;
