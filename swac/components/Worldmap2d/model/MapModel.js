@@ -26,6 +26,9 @@ export default class MapModel {
         if (!options || typeof options.outlineWidth === 'undefined') {
             this.options.outlineWidth = 10;
         }
+        if (!options || typeof options.fillOpacity === 'undefined') {
+            this.options.fillOpacity = 0.2;
+        }
         this._filepath = null;
         this._drawnref = null;
         this._locations = [];
