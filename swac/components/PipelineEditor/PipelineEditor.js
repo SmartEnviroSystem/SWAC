@@ -126,7 +126,7 @@ export default class PipelineEditor extends View {
               container.appendChild(element);
               return element;
             }
-
+            
             function appendJobField(container, label, value) {
               const wrapper = document.createElement('div');
               wrapper.className = 'pm-field';
@@ -156,7 +156,7 @@ export default class PipelineEditor extends View {
               }
               container.appendChild(wrapper);
             }
-
+            
             function renderJobDetails() {
               const details = $('jobDetails');
               const selected = $('fieldJob');
