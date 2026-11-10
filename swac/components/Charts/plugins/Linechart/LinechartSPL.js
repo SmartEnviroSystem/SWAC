@@ -6,6 +6,58 @@ export default class LinechartSPL extends Plugin {
 
     constructor(opts = {}) {
         super(opts);
+        this.selectedTimepoint = null;
+        this.timepointMarkerPlugin = {
+            id: 'swacTimepointMarker',
+            afterUpdate: (chart) => this.updateTimeline(chart),
+            afterDestroy: () => {
+                if (this.timeline)
+                    this.timeline.hidden = true;
+            },
+            afterDatasetsDraw: (chart) => {
+                const timestamp = this.selectedTimepoint;
+                const xScale = chart.scales.x;
+                const area = chart.chartArea;
+                if (!Number.isFinite(timestamp) || !xScale || !area)
+                    return;
+                if (xScale.type !== 'time') {
+                    const ctx = chart.ctx;
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.rect(area.left, area.top, area.right - area.left, area.bottom - area.top);
+                    ctx.clip();
+                    ctx.strokeStyle = '#d32f2f';
+                    ctx.lineWidth = 2;
+                    for (const {timestamp: pointTime, point} of this.getTimelinePoints(chart)) {
+                        if (pointTime !== timestamp || point.skip || point.hidden
+                                || !Number.isFinite(point.x) || !Number.isFinite(point.y)
+                                || point.x < area.left || point.x > area.right
+                                || point.y < area.top || point.y > area.bottom)
+                            continue;
+                        ctx.beginPath();
+                        ctx.arc(point.x, point.y, 6, 0, Math.PI * 2);
+                        ctx.stroke();
+                    }
+                    ctx.restore();
+                    return;
+                }
+                if (timestamp < xScale.min || timestamp > xScale.max)
+                    return;
+                const x = xScale.getPixelForValue(timestamp);
+                if (!Number.isFinite(x) || x < area.left || x > area.right)
+                    return;
+
+                const ctx = chart.ctx;
+                ctx.save();
+                ctx.beginPath();
+                ctx.strokeStyle = '#d32f2f';
+                ctx.lineWidth = 1;
+                ctx.moveTo(x, area.top);
+                ctx.lineTo(x, area.bottom);
+                ctx.stroke();
+                ctx.restore();
+            }
+        };
         this.name = 'Charts/plugins/Linechart';
         this.desc.templates[0] = {
             name: 'linechart',
@@ -35,6 +87,112 @@ export default class LinechartSPL extends Plugin {
                     color: 'rgb(0, 0, 0)'
                 }
             };
+        this.desc.opts[3] = {
+            name: 'timeAttr',
+            desc: 'Separate time attribute for discrete timeline selection on a non-time x axis.',
+            example: 'ts'
+        };
+        this.options.timeAttr = opts.timeAttr || null;
+    }
+
+    /** Returns valid measurement times and their rendered points in visible series. */
+    getTimelinePoints(chart) {
+        const points = [];
+        if (!this.options.timeAttr)
+            return points;
+        chart.data.datasets.forEach((dataset, datasetIndex) => {
+            if (!chart.isDatasetVisible(datasetIndex))
+                return;
+            const elements = chart.getDatasetMeta(datasetIndex).data;
+            dataset.data.forEach((set, index) => {
+                const raw = set && set[this.options.timeAttr];
+                if (!(raw instanceof Date) && typeof raw !== 'number' && typeof raw !== 'string')
+                    return;
+                if (typeof raw === 'string' && !raw.trim())
+                    return;
+                const timestamp = new Date(raw).getTime();
+                const point = elements[index];
+                if (Number.isFinite(timestamp) && point && !point.skip && !point.hidden)
+                    points.push({timestamp, point});
+            });
+        });
+        return points;
+    }
+
+    /**
+     * Sets the marker in epoch milliseconds, or clears it with null/invalid input.
+     * Stored independently of the chart so DataManager rebuilds retain it.
+     *
+     * @param {number|null} timestampMsOrNull Selected timestamp or null
+     */
+    setTimepointMarker(timestampMsOrNull) {
+        this.selectedTimepoint = Number.isFinite(timestampMsOrNull) ? timestampMsOrNull : null;
+        if (this.chart) {
+            this.updateTimeline(this.chart);
+            this.chart.draw();
+        }
+    }
+
+    /** Creates the timeline once, outside the canvas replaced by DataManager. */
+    createTimeline(canvas) {
+        if (!this.timeline) {
+            this.timeline = document.createElement('div');
+            this.timeline.className = 'swac_linechart_timeline uk-margin-small-top';
+            this.timeline.hidden = true;
+            const label = document.createElement('label');
+            label.style.cssText = 'display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap';
+            this.timelineSlider = document.createElement('input');
+            this.timelineSlider.type = 'range';
+            this.timelineSlider.step = 'any';
+            this.timelineSlider.setAttribute('aria-label', 'Timeline');
+            this.timelineSlider.style.cssText = 'flex:1;min-width:10rem';
+            this.timelineValue = document.createElement('span');
+            this.timelineSlider.addEventListener('input', () => {
+                const value = Number(this.timelineSlider.value);
+                this.setTimepointMarker(this.timelineTimes
+                        ? (value === -1 ? null : this.timelineTimes[value]) : value);
+            });
+            label.append(this.timelineSlider, this.timelineValue);
+            this.timeline.appendChild(label);
+        }
+        const canvasElement = canvas.canvas ?? canvas;
+        canvasElement.after(this.timeline);
+    }
+
+    /** Synchronizes the controls with the current visible time scale. */
+    updateTimeline(chart) {
+        if (!this.timeline)
+            return;
+        const scale = chart.scales.x;
+        const timeAxis = scale && scale.type === 'time';
+        this.timelineTimes = timeAxis ? null : [...new Set(
+            this.getTimelinePoints(chart).map(entry => entry.timestamp)
+        )].sort((a, b) => a - b);
+        const available = timeAxis
+                && Number.isFinite(scale.min) && Number.isFinite(scale.max)
+                && scale.min <= scale.max || (!timeAxis && this.timelineTimes.length > 0);
+        this.timeline.hidden = !available;
+        if (timeAxis && !available)
+            return;
+        const min = timeAxis ? scale.min : -1;
+        const max = timeAxis ? scale.max : this.timelineTimes.length - 1;
+        this.timelineSlider.step = timeAxis ? 'any' : '1';
+        this.timelineSlider.min = min;
+        this.timelineSlider.max = max;
+        this.timelineSlider.disabled = min === max;
+        // Keep the selected timestamp even if zoom/filtering moves it off screen.
+        const selected = this.selectedTimepoint;
+        this.timelineSlider.value = timeAxis
+                ? (Number.isFinite(selected) ? Math.max(min, Math.min(max, selected)) : min)
+                : this.timelineTimes.indexOf(selected);
+        const date = new Date(selected);
+        this.timelineValue.textContent = Number.isFinite(selected) && Number.isFinite(date.getTime())
+                ? date.toLocaleString() : '';
+        if (!timeAxis && this.timelineTimes.indexOf(selected) === -1) {
+            this.timelineValue.textContent = Number.isFinite(selected)
+                    ? this.timelineValue.textContent + ' — Gespeicherter Zeitpunkt derzeit nicht in den angezeigten Daten enthalten.'
+                    : 'Keine verfügbare Auswahl';
+        }
     }
 
     init() {
@@ -46,6 +204,8 @@ export default class LinechartSPL extends Plugin {
                     || thisRef.requestor.parent.swac_comp.options.plugins.get('Linechart');
             if (pluginConfig && pluginConfig.legend)
                 thisRef.options.legend = pluginConfig.legend;
+            if (pluginConfig && typeof pluginConfig.timeAttr !== 'undefined')
+                thisRef.options.timeAttr = pluginConfig.timeAttr;
 
             // Check if content area is available
             if (!thisRef.contElements || thisRef.contElements.length === 0) {
@@ -229,8 +389,10 @@ export default class LinechartSPL extends Plugin {
             datasets_inst.push(ddesc);
         }
 
+        this.createTimeline(ctx);
         this.chart = new Chart(ctx, {
             type: 'line',
+            plugins: [this.timepointMarkerPlugin],
             data: {
                 labels: label_inst,
                 datasets: datasets_inst
