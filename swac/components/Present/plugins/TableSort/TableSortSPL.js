@@ -51,6 +51,15 @@ export default class TableSortSPL extends Plugin {
      * @param {DOMEvent} evt Event of the click
      */
     onClickTh(evt) {
+        // Controls in headers must not trigger sorting (including filter inputs).
+        if (evt.target.closest('input, button, select, textarea'))
+            return;
+        const header = evt.target.closest('th');
+        const hierarchy = header?.closest('table')?.swac_tableHierarchy;
+        if (hierarchy) {
+            hierarchy.sort(header);
+            return;
+        }
         let th = evt.target;
         while (th.nodeName != 'TH' && th.parentNode) {
             th = th.parentNode;
