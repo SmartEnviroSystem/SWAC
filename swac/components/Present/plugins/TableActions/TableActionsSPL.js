@@ -10,7 +10,7 @@ export default class TableActionsSPL extends Plugin {
         this.desc.text = 'Adds configurable icon buttons to each table row.';
         this.desc.opts.push({
             name: 'actions',
-            desc: 'Array of {id, icon, title, onClick}. onClick receives the complete dataset object.'
+            desc: 'Array of {id, icon, title, onClick, visible?, disabled?}. Callbacks receive the dataset.'
         });
         this.rowIds = new WeakMap();
         this.nextRowId = 0;
@@ -39,8 +39,13 @@ export default class TableActionsSPL extends Plugin {
         if (!this.actions?.length)
             return;
         for (const row of repeateds) {
-            if (row.tagName !== 'TR' || row.querySelector('.swac_tableactions_cell'))
+            if (row.tagName !== 'TR')
                 continue;
+            const existingCell = row.querySelector('.swac_tableactions_cell');
+            if (existingCell) {
+                this.updateActions(set, existingCell);
+                continue;
+            }
             const table = row.closest('table');
             if (!table)
                 continue;
@@ -80,6 +85,24 @@ export default class TableActionsSPL extends Plugin {
                 // Attach immediately so duplicate prefixes also get unique IDs.
                 row.appendChild(cell);
             }
+            this.updateActions(set, cell);
+        }
+    }
+
+    updateActions(set, cell) {
+        this.actions.forEach((action, index) => {
+            const button = cell.children[index];
+            button.hidden = typeof action.visible === 'function' && !action.visible(set);
+            button.disabled = typeof action.disabled === 'function' && !!action.disabled(set);
+        });
+    }
+
+    /** Reevaluate action conditions after external status data changes. */
+    refresh() {
+        for (const row of this.requestor.parent.querySelectorAll('tr.swac_repeatedForSet')) {
+            const cell = row.querySelector('.swac_tableactions_cell');
+            if (cell && row.swac_dataset)
+                this.updateActions(row.swac_dataset, cell);
         }
     }
 }
