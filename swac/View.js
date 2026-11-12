@@ -132,6 +132,35 @@ export default class View extends Component {
 //                container.appendChild(btn);
 //            }
 //        };
+        this.desc.sidebar[1001] = {
+            name: "core.view_datasource",
+            desc: "Choose the datasource to show. Available when the option datasources is set.",
+            icon: "database",
+            isAvailable: (view) => view.getDatasources().length > 1,
+            render: (view, container) => {
+                let sources = view.getDatasources();
+                let active = view.activeDatasource;
+                if (!active) {
+                    let first = sources.find(source => source.fromName === view.requestor.fromName);
+                    active = first ? first.name : null;
+                }
+                let select = document.createElement('select');
+                select.classList.add('uk-select', 'swac_sidebar_datasource');
+                for (let curSource of sources) {
+                    let option = document.createElement('option');
+                    option.value = curSource.name;
+                    option.textContent = curSource.name;
+                    option.selected = curSource.name === active;
+                    select.appendChild(option);
+                }
+                select.addEventListener('change', function () {
+                    view.switchDatasource(select.value).catch(function () {
+                        // switchDatasource() already shows the error
+                    });
+                });
+                container.appendChild(select);
+            }
+        };
 
 
         this.desc.styles = [];
@@ -228,6 +257,9 @@ export default class View extends Component {
         for (let curRepeated of repeateds) {
             curRepeated.parentElement.removeChild(curRepeated);
         }
+        // Forget the removed attribute columns, so they are created again when new data arrives
+        let remainingAttrs = this.requestor.querySelectorAll('.swac_repeatedForAttribute');
+        this.repAttrs = Array.from(remainingAttrs, curAttr => curAttr.getAttribute('swac_attrname'));
     }
 
     //public function
@@ -504,6 +536,58 @@ export default class View extends Component {
         });
     }
 
+    // public function
+    switchDatasource(name) {
+        let thisRef = this;
+        let lastNo = this.datasourceSwitchNo;
+        let switching = super.switchDatasource(name);
+        // Unchanged number means the datasource is unknown and nothing was changed
+        let switchNo = this.datasourceSwitchNo;
+        return switching.then(function (dataCapsule) {
+            // Only the latest switch updates the view
+            if (switchNo === thisRef.datasourceSwitchNo) {
+                thisRef.remCoverMsg();
+                if (thisRef.countSets() < 1)
+                    thisRef.insertNoDataInformation();
+                thisRef.refreshSidebar();
+            }
+            return dataCapsule;
+        }).catch(function (err) {
+            if (switchNo !== lastNo && switchNo === thisRef.datasourceSwitchNo) {
+                thisRef.remCoverMsg();
+                // Text errors are already logged, responses from the datasource are shown
+                if (typeof err === 'object')
+                    thisRef.insertDataLoadErrorMessage(err, thisRef.requestor.fromName);
+                thisRef.refreshSidebar();
+            }
+            throw err;
+        });
+    }
+
+    /**
+     * Prepares the view for the data of a new datasource. Removes messages and
+     * cells that plugins added next to the attribute columns (e.g. extra table
+     * columns), because the plugins are loaded again.
+     *
+     * @returns {Promise} Resolves when the view is ready for the new data
+     */
+    prepareForDatasource() {
+        this.removeDataLoadErrorMessage();
+        this.removeNoDataInformation(this.requestor);
+        this.showCoverMsg('core.loadingdata');
+        for (let curTemplate of this.findRepeatableForAttribute(this.requestor)) {
+            let parent = curTemplate.parentElement;
+            if (!parent || !parent.swac_templateChildren)
+                continue;
+            for (let curChild of Array.from(parent.children)) {
+                if (!parent.swac_templateChildren.has(curChild)
+                        && !curChild.classList.contains('swac_repeatedForAttribute'))
+                    curChild.remove();
+            }
+        }
+        return super.prepareForDatasource();
+    }
+
     /**
      * Create an error message from a response from data loading
      * 
@@ -590,6 +674,13 @@ export default class View extends Component {
         let repForAttrs = this.findRepeatableForAttribute(this.requestor);
         if (repForAttrs.length === 0) {
             return;
+        }
+        // Remember the elements around the attribute template as they came from
+        // the template, so that cells added by plugins can be told apart
+        for (let curRepForAttr of repForAttrs) {
+            let parent = curRepForAttr.parentElement;
+            if (parent && !parent.swac_templateChildren)
+                parent.swac_templateChildren = new Set(parent.children);
         }
 
         // Alle verfügbaren Attribute je Datenquelle
@@ -1673,12 +1764,30 @@ export default class View extends Component {
     }
 
     openSidebar() {
+        this.renderSidebarContent();
+        UIkit.offcanvas(this.sidebarElem).show();
+    }
+
+    /**
+     * Builds the sidebar contents again when the sidebar is open, e.g. after
+     * the plugins were loaded again.
+     */
+    refreshSidebar() {
+        if (this.sidebarElem && this.sidebarElem.classList.contains('uk-open'))
+            this.renderSidebarContent();
+    }
+
+    /** Creates the sections of all sidebar entries **/
+    renderSidebarContent() {
         let entries = this.getSidebarEntries();
         let content = this.sidebarElem.querySelector('.swac_sidebar_content');
         content.innerHTML = '';
 
         for (let entry of entries) {
             if (!entry)
+                continue;
+            // Entries can hide themselves when they have nothing to offer
+            if (entry.isAvailable && !entry.isAvailable(this))
                 continue;
             let section = document.createElement('div');
             section.classList.add('swac_sidebar_section');
@@ -1696,8 +1805,6 @@ export default class View extends Component {
 
             content.appendChild(section);
         }
-
-        UIkit.offcanvas(this.sidebarElem).show();
     }
 
     /** Collect all sidebar entries from component and plugins **/

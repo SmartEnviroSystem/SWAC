@@ -41,6 +41,7 @@ let core_de = {
     day_5: 'Fr',
     day_6: 'Sa',
     view_adddata: 'Daten hinzufügen',
+    view_datasource: 'Datenquelle',
     contenttype_unsupported: 'Der Inhaltstyp %content-type% wird derzeit nicht unterstützt.',
     contenttype_jparseerr: 'Der Inhalt konnte nicht als JSON verarbeitet werden.',
     updateavail: 'Es steht ein Update zur Verfügung. Starten Sie die Anwendung neu, um es zu installieren.'

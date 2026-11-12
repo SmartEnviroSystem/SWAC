@@ -287,6 +287,12 @@ export default class ComponentHandler {
             // Set default mainSource
             //TODO unify this with other ways adding data
             requestor.swac_comp.options.mainSource = requestor.fromName;
+            // Remember the first source before loading changes its fromWheres,
+            // so it can be choosen again after switchDatasource()
+            requestor.swac_comp.firstDatasource = {
+                fromName: dataRequestor.fromName,
+                fromWheres: Object.assign({}, dataRequestor.fromWheres)
+            };
             // Load the data
             Model.load(dataRequestor, requestor.swac_comp).then(function (dataCapsule) {
                 resolve(dataCapsule);

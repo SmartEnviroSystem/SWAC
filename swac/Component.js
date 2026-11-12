@@ -294,6 +294,19 @@ export default class Component {
         };
         if (!options.apiActualUrlAttr)
             this.options.apiActualUrlAttr = null;
+        this.desc.opts[1028] = {
+            name: 'datasources',
+            desc: 'Additional datasources the component can switch to, each with a readable name. \n\
+Map with the name as key and the fromName (String) or an object with fromName and optional fromWheres as value. \n\
+The source the component is loaded with is added automatically. Give it a name by adding an entry with the same fromName. \n\
+Views with showSidebar=true offer the choice in the sidebar, switchDatasource() switches by code.',
+            example: new Map([
+                ['Station A', '../../data/station_a.json'],
+                ['Station B', {fromName: 'station_b', fromWheres: {filter: 'ts,gt,2026-01-01T00:00'}}]
+            ])
+        };
+        if (!options.datasources)
+            this.options.datasources = new Map();
 
 
 
@@ -607,12 +620,40 @@ DEFINTION of SET:\n\
                 type: 'WatchableSource{}'
             }
         }
+        this.desc.funcs[1027] = {
+            name: 'getDatasources',
+            desc: 'Gets the datasources the component can switch to. Contains the source the component was loaded with and the sources from option datasources.',
+            returns: {
+                desc: 'List of datasources with name, fromName and fromWheres.',
+                type: 'Object[]'
+            }
+        };
+        this.desc.funcs[1028] = {
+            name: 'switchDatasource',
+            desc: 'Removes the shown data, loads the plugins again and loads the data from another datasource instead.',
+            params: [
+                {
+                    name: 'name',
+                    desc: 'Name of the datasource as given in option datasources, or its fromName.',
+                    type: 'String'
+                }
+            ],
+            returns: {
+                desc: 'Promise that resolves when the data of the new source is loaded.',
+                type: 'Promise'
+            }
+        };
 
         // Documentation for events
         this.desc.events[1000] = {
             name: 'swac_Component_REQUESTOR.ID_lastSetFromRequestAdded',
             desc: 'Event is fired, when the last dataset from a request was added to the component. The event is fired on the document.',
             data: 'Sends the last dataset as detail.'
+        };
+        this.desc.events[1001] = {
+            name: 'swac_REQUESTOR.ID_datasource_switched',
+            desc: 'Event is fired on the document, when the component has loaded the data of a datasource choosen with switchDatasource().',
+            data: 'Sends name and fromName of the new datasource as detail.'
         };
 
         // Component data
@@ -632,6 +673,12 @@ DEFINTION of SET:\n\
         this.pluginsystem = null;
         // Eco mode
         this.ecoMode = {active: false, defaults: {fetchNewSetsEvery: null, fromWheres: null}};
+        // Source the component was loaded with and name of the source choosen with switchDatasource()
+        this.firstDatasource = null;
+        this.activeDatasource = null;
+        // Counter for switchDatasource() and chain of plugin restarts
+        this.datasourceSwitchNo = 0;
+        this.pluginRestart = null;
 
         // Init automatic reload
         this.startReloadInterval();
@@ -1933,6 +1980,142 @@ DEFINTION of SET:\n\
                 });
             }
         });
+    }
+
+    // public function
+    getDatasources() {
+        let conf = this.options.datasources;
+        // Options given by URL parameter arrive as text
+        if (typeof conf === 'string') {
+            try {
+                conf = JSON.parse(conf);
+            } catch (e) {
+                Msg.error('Component', 'Option datasources is no valid JSON: ' + e, this.requestor);
+                conf = null;
+            }
+        }
+        let entries = [];
+        if (conf instanceof Map) {
+            entries = Array.from(conf.entries());
+        } else if (Array.isArray(conf)) {
+            entries = conf.map(source => [source ? source.name : null, source]);
+        } else if (conf && typeof conf === 'object') {
+            entries = Object.entries(conf);
+        }
+
+        let sources = [];
+        for (let [name, source] of entries) {
+            if (typeof source === 'string')
+                source = {fromName: source};
+            if (!source || typeof source.fromName !== 'string' || !source.fromName) {
+                Msg.error('Component', 'Datasource >' + name + '< in option datasources has no fromName.', this.requestor);
+                continue;
+            }
+            sources.push({
+                name: name ? String(name) : source.fromName,
+                fromName: source.fromName,
+                fromWheres: Object.assign({}, source.fromWheres)
+            });
+        }
+
+        // Add the source the component was loaded with, so it can be choosen again
+        let first = this.firstDatasource;
+        if (!first && this.requestor && this.requestor.fromName)
+            first = {fromName: this.requestor.fromName, fromWheres: {}};
+        if (first && !sources.some(source => source.fromName === first.fromName)) {
+            sources.unshift({
+                name: first.fromName,
+                fromName: first.fromName,
+                fromWheres: Object.assign({}, first.fromWheres)
+            });
+        }
+        return sources;
+    }
+
+    // public function
+    switchDatasource(name) {
+        return new Promise((resolve, reject) => {
+            let sources = this.getDatasources();
+            let source = sources.find(curSource => curSource.name === name)
+                    || sources.find(curSource => curSource.fromName === name);
+            if (!source) {
+                Msg.error('Component', 'Datasource >' + name + '< is not defined in option datasources.', this.requestor);
+                reject('Datasource >' + name + '< is not defined.');
+                return;
+            }
+            Msg.flow('Component', 'Switch datasource to >' + source.fromName + '<', this.requestor);
+
+            // Remove the shown data and stop watching the old sources.
+            // Otherwise sets loaded later for an old source would still appear.
+            for (let curSource of Object.keys(this.data)) {
+                let watchable = this.data[curSource];
+                this.removeData(curSource);
+                for (let curStoreId in Model.store) {
+                    let store = Model.store[curStoreId];
+                    if (store && store.swac_observers && store.swac_observers.has(watchable))
+                        store.delObserver(watchable);
+                }
+                delete this.data[curSource];
+            }
+
+            // Load the new source the same way as the first one
+            let dataRequest = Object.assign({}, this.options, {
+                fromName: source.fromName,
+                fromWheres: Object.assign({}, source.fromWheres)
+            });
+            this.requestor.fromName = source.fromName;
+            this.requestor.fromWheres = dataRequest.fromWheres;
+            this.options.fromName = source.fromName;
+            this.options.mainSource = source.fromName;
+            this.activeDatasource = source.name;
+            this.lazyLoadPage = 1;
+            // Number of this switch, a later switch replaces this one
+            let switchNo = ++this.datasourceSwitchNo;
+
+            let thisRef = this;
+            this.prepareForDatasource().then(function () {
+                // Another source was choosen in the meantime, that switch loads its data
+                if (switchNo !== thisRef.datasourceSwitchNo) {
+                    resolve(null);
+                    return;
+                }
+                return Model.load(dataRequest, thisRef).then(function (dataCapsule) {
+                    if (switchNo === thisRef.datasourceSwitchNo) {
+                        document.dispatchEvent(new CustomEvent('swac_' + thisRef.requestor.id + '_datasource_switched', {
+                            detail: {
+                                name: source.name,
+                                fromName: source.fromName
+                            }
+                        }));
+                    }
+                    resolve(dataCapsule);
+                });
+            }).catch(function (err) {
+                reject(err);
+            });
+        });
+    }
+
+    /**
+     * Prepares the component for the data of a new datasource, after the old
+     * data was removed. Plugins are loaded again, so that they do not keep
+     * results from the old data.
+     *
+     * @returns {Promise} Resolves when the component is ready for the new data
+     */
+    prepareForDatasource() {
+        if (!this.pluginsystem || !this.unloadPlugins)
+            return Promise.resolve();
+        let thisRef = this;
+        // Restart one after the other, so fast switching does not load plugins twice
+        let lastRestart = this.pluginRestart || Promise.resolve();
+        this.pluginRestart = lastRestart.catch(function () {
+            // A failed restart must not block the next one
+        }).then(function () {
+            thisRef.unloadPlugins();
+            return thisRef.loadPlugins();
+        });
+        return this.pluginRestart;
     }
 
     /**

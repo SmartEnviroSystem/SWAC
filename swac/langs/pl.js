@@ -41,6 +41,7 @@ let core_pl = {
     day_5: 'Pt',
     day_6: 'Sb',
     view_adddata: 'Dodaj dane',
+    view_datasource: 'Źródło danych',
     contenttype_unsupported: 'Typ zawartości %content-type% nie jest obecnie obsługiwany.',
     contenttype_jparseerr: 'Nie udało się przetworzyć zawartości jako JSON.',
     updateavail: 'Dostępna jest aktualizacja. Uruchom ponownie aplikację, aby ją zainstalować.'
