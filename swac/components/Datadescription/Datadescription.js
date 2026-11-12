@@ -6,6 +6,11 @@ export default class Datadescription extends View {
 
     constructor(options = {}) {
         super(options);
+
+      this.options.borderColor = options.borderColor ?? false;
+this.options.backgroundColor = options.backgroundColor ?? false;
+
+
         this.name = 'Datadescription';
         this.desc.text = 'Describe your data with text and colors. This component makes it possible to describe data. So a simple analysis is possible.';
         this.desc.developers = 'Florian Fehring (HSBI)';
@@ -1076,7 +1081,13 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
         let requestors = document.querySelectorAll('[swa]');
         for (let curRequestor of requestors) {
             // Direclty format if possible
-            thisRef.formatDataElement(curRequestor);
+            if(this.options.borderColor){
+thisRef.formatDataElement(curRequestor);
+            }
+            if(this.options.backgroundColor){
+         thisRef.formatDataElementBackground(curRequestor)
+            }
+   
         }
     }
 
@@ -1144,10 +1155,67 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
         }
     }
 
-    renderFormatedDataElements() {
+
+    formatDataElementBackground(element) {
+        Msg.flow('Datadescription', 'formatDataElement(' + element.id + ')', this.requestor);
+        // store formated elements
+        let elementInStorage = false;
         for (let curElem of this.formatedDataElements) {
-            this.formatDataElement(curElem);
+            if (curElem.id === element.id) {
+                elementInStorage = true;
+                break;
+            }
         }
+        if (!elementInStorage) {
+            this.formatedDataElements.push(element);
+        }
+        
+        if(!this.options.activeSource) {
+            Msg.error('Datadescription','No datadescription loaded.',this.requestor);
+            return;
+        }
+        if (!this.data[this.options.activeSource]) {
+            Msg.error('Datadescription', 'There is no datadescription with name >' + this.options.activeSource + '<', this.requestor);
+            return;
+        }
+        
+        let legenddata = this.data[this.options.activeSource].getSet(this.options.activeSet);
+        for (var attribute in legenddata) {
+            // Exclude swac internal attributes
+            if (attribute.startsWith('swac_'))
+                continue;
+            // Check if attribute should be visualised
+            if (typeof legenddata[attribute] === 'object') {
+                // Select all alements for attribute
+                let elemsForAttr = element.querySelectorAll('[swac_attrname=' + attribute + ']');
+
+                // Walk trough every element
+                for (let curElemForAttr of elemsForAttr) {
+                    // Exclude attr elements
+                    if (curElemForAttr.classList.contains('swac_repeatedForAttribute')) {
+                        continue;
+                    }
+              curElemForAttr.style.backgroundColor = 'RED';
+                }
+            }
+        }
+    }
+    renderFormatedDataElements() {
+        if(this.options.borderColor){
+             for (let curElem of this.formatedDataElements) {
+                if(this.options.borderColor){
+ this.formatDataElement(curElem);
+                }
+                   if(this.options.backgroundColor){
+                    this.formatDataElementBackground(curElem);
+                }
+           
+        }
+        
+     
+        
+        }
+       
         document.dispatchEvent(new CustomEvent('swac_Datadescription_' + this.requestor.id + '_changed', {
         }));
     }
