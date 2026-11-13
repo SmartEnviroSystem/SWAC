@@ -100,6 +100,14 @@ export default class Datadescription extends View {
             name: 'ATTRIBUTENAME.values[VALUE].txt',
             desc: 'Text describing this value. Used in legend and as vocable in description texts.'
         };
+        this.desc.optPerSet[13] = {
+            name: 'ATTRIBUTENAME.col_uknw',
+            desc: 'Color to use, when there is no value or no matching value description. Default is grey (#808080).'
+        };
+        this.desc.optPerSet[14] = {
+            name: 'ATTRIBUTENAME.combine',
+            desc: 'Makes the attribute a combined attribute, whose value is calculated from multiple other attributes. Object with: attrs (names of the attributes), mode (max, min, avg, weighted), weights (object with weight per attribute for mode weighted) and invert (names of attributes where a high value means a low level). For avg and weighted the combined level (0 - 100) is colored with the values of this attribute. Example: {"attrs": ["irradiance", "cloudcover"], "mode": "weighted", "weights": {"irradiance": 2, "cloudcover": 1}, "invert": ["cloudcover"]}'
+        };
         this.desc.opts[0] = {
             name: 'visuDataset',
             desc: 'Name or id of the dataset that should be described. \n\
@@ -232,6 +240,21 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
                 {
                     name: 'combination',
                     desc: 'Object describing the combination: {attrs: [String], mode: max|min|avg|weighted|custom, weights: {ATTRIBUTENAME: Number}, invert: [String], targetAttr: String, func: Function(values, set, datadescription)}'
+                }
+            ]
+        };
+
+        this.desc.funcs[6] = {
+            name: 'getColor',
+            desc: 'Gets the color for a dataset. Uses the combination rules if the attribute has a combine description. If there is no color the col_uknw of the attribute is used.',
+            parameter: [
+                {
+                    name: 'set',
+                    desc: 'Dataset with the values'
+                },
+                {
+                    name: 'attr',
+                    desc: 'Name of the attribute to color by, null for the visuAttribute option'
                 }
             ]
         };
@@ -753,6 +776,42 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
         }
         Msg.warn('Datadescription', 'Calculation mode >' + attr + '.calcmode = "' + calcMode + '< is not supported for level calculation.', this.requestor);
         return null;
+    }
+
+    /**
+     * Gets the color for a dataset. This is the one place where components get
+     * their data colors from:
+     * - If the attribute has a combine description (ATTRIBUTENAME.combine) the
+     *   color is calculated from the combined attributes
+     * - otherwise the color is taken from the values description of the attribute
+     * - if there is no matching color, ATTRIBUTENAME.col_uknw is used
+     *
+     * @param {Object} set Dataset with the values
+     * @param {String} attr Name of the attribute to color by, null for the visuAttribute option
+     * @returns {String} Color
+     */
+    getColor(set, attr = null) {
+        if (!attr)
+            attr = this.options.visuAttribute;
+        let desc = this.getAttributeDescription(attr);
+        let col = null;
+        if (desc && desc.combine) {
+            col = this.getCombinedValueColor(set, Object.assign({targetAttr: attr}, desc.combine));
+        } else {
+            col = this.getValueVisData(set, 'col', null, attr);
+        }
+        return col ? col : this.getUnknownColor(attr);
+    }
+
+    /**
+     * Gets the color for datasets without value or without matching value description.
+     *
+     * @param {String} attr Name of the attribute
+     * @returns {String} ATTRIBUTENAME.col_uknw or grey if not defined
+     */
+    getUnknownColor(attr = null) {
+        let desc = this.getAttributeDescription(attr ? attr : this.options.visuAttribute);
+        return desc && desc.col_uknw ? desc.col_uknw : '#808080';
     }
 
     /**

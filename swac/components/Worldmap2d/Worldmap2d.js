@@ -235,7 +235,7 @@ export default class Worldmap2d extends View {
         };
         this.desc.optPerSet[5] = {
             name: 'map_areacolorattr',
-            desc: 'Name of the attribute whose value determines the fill color of the area around the location of this dataset. Overwrites the areaColorAttr option.',
+            desc: 'Name of the attribute whose value determines the fill color of the area around the location of this dataset. Overwrites the areaColorAttr option of the ColorSelect plugin.',
             type: 'String'
         };
 
@@ -487,34 +487,6 @@ export default class Worldmap2d extends View {
             this.options.dataShowModalAllowDelete = false;
 
         this.desc.opts[32] = {
-            name: 'colorAttr',
-            desc: 'Name of the attribute whose value determines the color of markers and areas. \n\
-The colors are taken from the datadescription component (option datadescription). \n\
-Can be overwritten per datasource with datasources.get(NAME).colorAttr. If not set, the \n\
-visuAttribute of the datadescription component is used.',
-            example: 'pm10_0'
-        };
-        if (typeof options.colorAttr === 'undefined')
-            this.options.colorAttr = null;
-
-        this.desc.opts[33] = {
-            name: 'colorCombination',
-            desc: 'Calculates the color of markers and areas from multiple attribute values. \n\
-Has priority over colorAttr. Can be overwritten per datasource with datasources.get(NAME).colorCombination. \n\
-Object with: attrs (names of the attributes), mode (max, min, avg, weighted, custom), \n\
-weights (object with weight per attribute for mode weighted), invert (names of attributes \n\
-where a high value means a low level), targetAttr (attribute of the \n\
-datadescription that describes the colors for the combined level 0 - 100) and func \n\
-(function(values, set, datadescription) for mode custom, returns a color or a level 0 - 1).',
-            example: {
-                attrs: ['pm2_5', 'pm10_0'],
-                mode: 'max'
-            }
-        };
-        if (typeof options.colorCombination === 'undefined')
-            this.options.colorCombination = null;
-
-        this.desc.opts[34] = {
             name: 'areaShape',
             desc: 'Shape of the area that is drawn around the location of each dataset. \n\
 Use this when the data of a location is ment for an area around it (e.g. raster data). \n\
@@ -524,7 +496,7 @@ Possible values: rect, circle. If not set no areas are drawn.',
         if (typeof options.areaShape === 'undefined')
             this.options.areaShape = null;
 
-        this.desc.opts[35] = {
+        this.desc.opts[33] = {
             name: 'areaSize',
             desc: 'Size of the area around a location in meters. Edge length for rect, diameter for circle.',
             example: 3000
@@ -532,18 +504,7 @@ Possible values: rect, circle. If not set no areas are drawn.',
         if (typeof options.areaSize === 'undefined')
             this.options.areaSize = 1000;
 
-        this.desc.opts[36] = {
-            name: 'areaColorAttr',
-            desc: 'Name of the attribute whose value determines the fill color of the areas. \n\
-Can be overwritten per dataset with the attribute map_areacolorattr. The color is taken \n\
-from the datadescription component (option datadescription). Without datadescription \n\
-the value is used as color, if it is a valid color. If not set the areas are colored like the markers.',
-            example: 'irradiance'
-        };
-        if (typeof options.areaColorAttr === 'undefined')
-            this.options.areaColorAttr = null;
-
-        this.desc.opts[37] = {
+        this.desc.opts[34] = {
             name: 'areaStyle',
             desc: 'Style of the areas (leaflet path options, see leaflet docu). If color is given, it is used for the lines while the fill color depends on the data.',
             example: {weight: 1, opacity: 0.8, fillOpacity: 0.4}
@@ -551,7 +512,7 @@ the value is used as color, if it is a valid color. If not set the areas are col
         if (typeof options.areaStyle === 'undefined')
             this.options.areaStyle = {weight: 1, opacity: 0.8, fillOpacity: 0.4};
 
-        this.desc.opts[38] = {
+        this.desc.opts[35] = {
             name: 'mapIconOptions',
             desc: 'Options for icons given per dataset with the attribute map_icon (leaflet icon options, see leaflet docu).',
             example: {iconSize: [32, 32], iconAnchor: [16, 32], popupAnchor: [0, -32]}
@@ -605,31 +566,19 @@ the value is used as color, if it is a valid color. If not set the areas are col
 
         this.desc.funcs[2] = {
             name: 'getColorForSet',
-            desc: 'Gets the color for a dataset depending on the coloring options (user selection, colorCombination, colorAttr) and the datadescription.',
+            desc: 'Gets the color for a dataset from the datadescription. Which attribute is used is set by the ColorSelect plugin (user selection, colorAttr, areaColorAttr) or the dataset (map_areacolorattr). Without plugin the visuAttribute of the datadescription is used.',
             params: [
                 {
                     name: 'set',
                     desc: 'Dataset to get the color for',
                     type: 'WatchableSet'
-                }
-            ]
-        };
-
-        this.desc.funcs[3] = {
-            name: 'setColorAttr',
-            desc: 'Sets the attribute used for coloring (user selection) and recolors all markers and areas. Use null to return to the configured coloring.',
-            params: [
+                },
                 {
-                    name: 'attr',
-                    desc: 'Name of the attribute or null',
-                    type: 'String'
+                    name: 'forArea',
+                    desc: 'true to get the color for the area around the location',
+                    type: 'Boolean'
                 }
             ]
-        };
-
-        this.desc.funcs[4] = {
-            name: 'getColorAttr',
-            desc: 'Gets the attribute that is currently used for coloring. Returns null when a colorCombination is used.'
         };
 
         this.desc.events[0] = {
@@ -647,11 +596,6 @@ the value is used as color, if it is a valid color. If not set the areas are col
             desc: 'Event when the user moved on map.',
             data: 'Delivers the Leaflet movend data. See leflet documentation for details.'
         };
-        this.desc.events[3] = {
-            name: 'swac_REQUESTOR_ID_colorattr_changed',
-            desc: 'Event is fired, when the attribute used for coloring was changed with setColorAttr().',
-            data: 'Delivers the name of the new attribute in e.detail.attr (null when the configured coloring is used again).'
-        };
 
 
         // Attributes for internal usage
@@ -664,7 +608,7 @@ the value is used as color, if it is a valid color. If not set the areas are col
         this.areas = {}; // Areas per datasource, used by addArea()
         this.locationAreas = {}; // Areas around locations per datasource, used by addLocationArea()
         this.areaLayers = {}; // Layers for areas around locations per datasource
-        this.userColorAttr = null; // Attribute for coloring choosen by the user
+        this.colorSelect = null; // ColorSelect plugin, registers itself when loaded
         // Colors where marker icons exist in Icon/imgs/map
         this.markerIconColors = ['2A81CB', '2AAD27', '3D3D3D', '7B7B7B', '9C2BCB', 'CAC428', 'CB2B3E', 'CB8427', 'FFD326'];
 
@@ -1199,11 +1143,14 @@ the value is used as color, if it is a valid color. If not set the areas are col
     addLocationArea(geoJSON) {
         const set = geoJSON.set;
         const latlng = L.latLng(geoJSON.geometry.coordinates[1], geoJSON.geometry.coordinates[0]);
-        const color = this.getAreaColorForSet(set);
+        const color = this.getColorForSet(set, true);
         let style = Object.assign({interactive: false}, this.options.areaStyle);
-        style.fillColor = color;
-        if (!style.color)
-            style.color = color;
+        // Without datadescription the colors of areaStyle (or leaflets defaults) are used
+        if (color) {
+            style.fillColor = color;
+            if (!style.color)
+                style.color = color;
+        }
 
         let area;
         if (this.options.areaShape === 'circle') {
@@ -1249,34 +1196,6 @@ the value is used as color, if it is a valid color. If not set the areas are col
             return;
         this.areaLayers[set.swac_fromName]?.removeLayer(area);
         delete this.locationAreas[set.swac_fromName][set.id];
-    }
-
-    /**
-     * Gets the fill color for the area around the location of a dataset.
-     * The attribute that determines the color is taken in this order:
-     * 1. Attribute choosen by the user (setColorAttr(), e.g. from ColorSelect plugin)
-     * 2. Attribute map_areacolorattr of the dataset
-     * 3. areaColorAttr option
-     * Without any of these the area gets the same color as the marker.
-     *
-     * @param {WatchableSet} set Dataset to get the area color for
-     * @returns {String} Color for the area
-     */
-    getAreaColorForSet(set) {
-        const defaultColor = '#3388ff'; // Leaflet default color
-        let attr = this.userColorAttr || set?.map_areacolorattr || this.options.areaColorAttr;
-        if (!attr)
-            return this.datadescription ? this.getColorForSet(set) : defaultColor;
-
-        if (this.datadescription) {
-            let col = this.datadescription.getValueVisData(set, 'col', null, attr);
-            return col ? col : '#808080';
-        }
-        // Without datadescription the value itself can be a color
-        let value = this.getSetValue(set, attr);
-        if (typeof value === 'string' && CSS.supports('color', value))
-            return value;
-        return defaultColor;
     }
 
     /**
@@ -1698,65 +1617,26 @@ the value is used as color, if it is a valid color. If not set the areas are col
     }
 
     /**
-     * Gets the color for a dataset. The color is determined in this order:
-     * 1. Attribute choosen by the user (setColorAttr(), e.g. from ColorSelect plugin)
-     * 2. colorCombination / colorAttr of the datasource (datasources option)
-     * 3. colorCombination option
-     * 4. colorAttr option
-     * 5. visuAttribute of the datadescription component
+     * Gets the color for a dataset. The color always comes from the datadescription.
+     * The attribute that determines the color is taken in this order:
+     * 1. Attribute choosen by the user (ColorSelect plugin)
+     * 2. Only for areas: attribute map_areacolorattr of the dataset
+     * 3. Attribute configured in the ColorSelect plugin (areaColorAttr for areas, colorAttr)
+     * 4. visuAttribute of the datadescription component
+     * Combined colors are described in the datadescription (ATTRIBUTENAME.combine).
      *
      * @param {WatchableSet} set Dataset to get the color for
-     * @returns {String} Color for the dataset (#808080 if no color is available)
+     * @param {Boolean} forArea true to get the color for the area around the location
+     * @returns {String} Color for the dataset or null if there is no datadescription
      */
-    getColorForSet(set) {
-        const defaultColor = '#808080';
+    getColorForSet(set, forArea = false) {
         if (!this.datadescription || !set)
-            return defaultColor;
-
-        let col = null;
-        let datasource = this.options.datasources?.get(set.swac_fromName);
-        if (this.userColorAttr) {
-            col = this.datadescription.getValueVisData(set, 'col', null, this.userColorAttr);
-        } else if (datasource && datasource.colorCombination) {
-            col = this.datadescription.getCombinedValueColor(set, datasource.colorCombination);
-        } else if (datasource && datasource.colorAttr) {
-            col = this.datadescription.getValueVisData(set, 'col', null, datasource.colorAttr);
-        } else if (this.options.colorCombination) {
-            col = this.datadescription.getCombinedValueColor(set, this.options.colorCombination);
-        } else if (this.options.colorAttr) {
-            col = this.datadescription.getValueVisData(set, 'col', null, this.options.colorAttr);
-        } else {
-            col = this.datadescription.getValueVisData(set, 'col');
-        }
-        return col ? col : defaultColor;
-    }
-
-    /**
-     * Sets the attribute used for coloring and recolors all markers and areas.
-     *
-     * @param {String} attr Name of the attribute, null to use the configured coloring
-     */
-    setColorAttr(attr = null) {
-        this.userColorAttr = attr ? attr : null;
-        this.rerenderColors();
-        document.dispatchEvent(new CustomEvent('swac_' + this.requestor.id + '_colorattr_changed', {detail: {attr: this.userColorAttr}}));
-    }
-
-    /**
-     * Gets the attribute that is currently used for coloring.
-     *
-     * @returns {String} Name of the attribute or null if a combination is used
-     */
-    getColorAttr() {
-        if (this.userColorAttr)
-            return this.userColorAttr;
-        if (this.options.colorCombination)
             return null;
-        if (this.options.colorAttr)
-            return this.options.colorAttr;
-        if (this.datadescription)
-            return this.datadescription.options.visuAttribute;
-        return null;
+        let attr = this.colorSelect?.getUserAttr()
+                || (forArea && set.map_areacolorattr)
+                || this.colorSelect?.getConfiguredAttr(forArea)
+                || null;
+        return this.datadescription.getColor(set, attr);
     }
 
     /**
@@ -1849,7 +1729,9 @@ the value is used as color, if it is a valid color. If not set the areas are col
         // Areas around locations
         for (let key in this.locationAreas) {
             for (let area of Object.values(this.locationAreas[key])) {
-                const col = this.getAreaColorForSet(area.feature.set);
+                const col = this.getColorForSet(area.feature.set, true);
+                if (!col)
+                    continue;
                 area.setStyle(area.swac_ownLineColor ? {fillColor: col} : {color: col, fillColor: col});
             }
         }
