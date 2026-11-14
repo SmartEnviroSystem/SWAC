@@ -520,6 +520,22 @@ Possible values: rect, circle. If not set no areas are drawn.',
         if (typeof options.mapIconOptions === 'undefined')
             this.options.mapIconOptions = {iconSize: [32, 32], iconAnchor: [16, 32], popupAnchor: [0, -32]};
 
+        this.desc.opts[36] = {
+            name: 'areaOnly',
+            desc: 'If true and areaShape is set, only the areas are drawn and no markers. Use this for raster data with many locations (e.g. satellite data). The areas are clickable then and fire the same event as a marker click.',
+            example: true
+        };
+        if (typeof options.areaOnly === 'undefined')
+            this.options.areaOnly = false;
+
+        this.desc.opts[37] = {
+            name: 'areaSizeDeg',
+            desc: 'Size of rect areas in degrees [longitude, latitude]. Use this instead of areaSize for raster data with a grid in degrees (e.g. satellite data), so the cells fit together without gaps.',
+            example: [0.04, 0.0268]
+        };
+        if (typeof options.areaSizeDeg === 'undefined')
+            this.options.areaSizeDeg = null;
+
         // document plugins
         if (!options.plugins) {
             this.options.plugins = new Map();
@@ -964,7 +980,9 @@ Possible values: rect, circle. If not set no areas are drawn.',
         if (zoomToSource && zoomToSource === set.swac_fromName && zoomToSet && parseInt(zoomToSet) === set.id) {
             this.zoomToSet(set);
         }
-        this.addMarker(geoJSON);
+        // Raster data with many locations: only areas, no markers
+        if (!this.options.areaShape || !this.options.areaOnly)
+            this.addMarker(geoJSON);
         // Draw area around the location
         if (this.options.areaShape)
             this.addLocationArea(geoJSON);
@@ -1144,7 +1162,9 @@ Possible values: rect, circle. If not set no areas are drawn.',
         const set = geoJSON.set;
         const latlng = L.latLng(geoJSON.geometry.coordinates[1], geoJSON.geometry.coordinates[0]);
         const color = this.getColorForSet(set, true);
-        let style = Object.assign({interactive: false}, this.options.areaStyle);
+        // Areas are only clickable when they replace the markers (option areaOnly)
+        // Like markers, clicks on areas are not passed on to the map
+        let style = Object.assign({interactive: this.options.areaOnly === true, bubblingMouseEvents: false}, this.options.areaStyle);
         // Without datadescription the colors of areaStyle (or leaflets defaults) are used
         if (color) {
             style.fillColor = color;
@@ -1157,12 +1177,24 @@ Possible values: rect, circle. If not set no areas are drawn.',
             style.radius = this.options.areaSize / 2;
             area = L.circle(latlng, style);
         } else if (this.options.areaShape === 'rect') {
-            area = L.rectangle(latlng.toBounds(this.options.areaSize), style);
+            let bounds;
+            if (Array.isArray(this.options.areaSizeDeg)) {
+                // Grid in degrees: cells fit together without gaps
+                const halfLon = this.options.areaSizeDeg[0] / 2;
+                const halfLat = this.options.areaSizeDeg[1] / 2;
+                bounds = L.latLngBounds([latlng.lat - halfLat, latlng.lng - halfLon], [latlng.lat + halfLat, latlng.lng + halfLon]);
+            } else {
+                bounds = latlng.toBounds(this.options.areaSize);
+            }
+            area = L.rectangle(bounds, style);
         } else {
             Msg.error('Worldmap2d', 'Area shape >' + this.options.areaShape + '< is not supported. Use rect or circle.', this.requestor);
             return null;
         }
         area.feature = geoJSON;
+        // Click on the area works like a click on a marker (e.g. DataShowModal plugin)
+        if (this.options.areaOnly)
+            area.on('click', (e) => this.map_click_evts?.markerclick(e));
         // Lines with own color are not changed when recoloring
         area.swac_ownLineColor = !!this.options.areaStyle?.color;
 
