@@ -64,3 +64,12 @@
     .pm-script-subheading { font-size:12px; font-weight:750; margin:0 0 13px; color:#284d70; }
     .pm-custom-code-preview { white-space:pre-wrap; overflow-wrap:anywhere; background:#f5f7fa; border:1px solid #e2e8f0; padding:11px; border-radius:8px; font:11px/1.6 ui-monospace,Consolas,monospace; max-height:170px; overflow-y:auto; }
     .pm-script-panel[hidden] { display:none; }
+
+/* Neuer Konsolidierungs-Baustein in der bestehenden Pipeline-Oberfläche. */
+.pm-chip-consolidation { border-left:4px solid #8b64c5; }
+.pm-node[data-step="consolidation"] { border-top-color:#8b64c5; }
+.pm-flow { min-width:850px; }
+.pm-con-intro { margin:0 0 16px; }
+.pm-con-preview { margin:14px 0 20px; padding:12px; border:1px solid #dfe5ee; border-radius:10px; background:#f7f9fc; }
+.pm-con-preview strong { font-size:12px; color:#284d70; }
+.pm-con-preview pre { margin:12px 0 8px; padding:11px; overflow-x:auto; white-space:pre-wrap; overflow-wrap:anywhere; border:1px solid #e2e8f0; background:white; border-radius:8px; color:#26384f; font:11px/1.5 ui-monospace,Consolas,monospace; }

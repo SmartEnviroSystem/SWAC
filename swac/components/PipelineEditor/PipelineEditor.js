@@ -41,22 +41,34 @@ export default class PipelineEditor extends View {
             ];
 
             const ownScripts = [];
+            // Frontend-only configuration; no execution or persistence.
+            const blankConsolidation = (source = '') => ({
+              source_a: source, source_b: '', timestamp_column_a: '', timestamp_column_b: '',
+              matching_mode: 'intersection', tolerance_seconds: 30,
+              target_table: 'consolidated_timeseries', configured: false
+            });
             const example = () => ({
               source:'exampledata_timeseries_1week', period:'7 Tage', script:'normalize_values.py',
               scriptType:'predefined', jobId:null, description:'Werte aufbereiten',
-              parameter:'threshold=0.95', target:'ergebnis_tabelle'
+              parameter:'threshold=0.95', target:'ergebnis_tabelle',
+              consolidation: blankConsolidation('exampledata_timeseries_1week')
             });
             let pipeline = example();
             let currentStep = 'script';
             let newDraft = false;
             let scriptMode = 'existing';
             const $ = id => root.querySelector('#' + id);
-            const labels = {source:'Quelle',filter:'Filter',script:'Skript',target:'Ziel'};
+            const labels = {
+              source:'Quelle', consolidation:'Konsolidierung', filter:'Filter',
+              script:'Skript / Job', target:'Ziel'
+            };
 
             // Tabellen werden über die bestehende SmartData REST API gelesen.
             // Die Datenbank wird niemals direkt vom Browser angesprochen.
             let availableTables = null;  // null = Anfrage läuft
             let tablesError = null;
+            const consolidationColumns = { a: null, b: null };
+            const consolidationRequestNumbers = { a: 0, b: 0 };
 
             // Bestehende Jobs und deren Parameter werden ausschließlich lesend geladen.
             // Wichtig: Diese Oberfläche startet keine Jobs und speichert keine Änderungen.
@@ -126,7 +138,7 @@ export default class PipelineEditor extends View {
               container.appendChild(element);
               return element;
             }
-            
+
             function appendJobField(container, label, value) {
               const wrapper = document.createElement('div');
               wrapper.className = 'pm-field';
@@ -156,7 +168,7 @@ export default class PipelineEditor extends View {
               }
               container.appendChild(wrapper);
             }
-            
+
             function renderJobDetails() {
               const details = $('jobDetails');
               const selected = $('fieldJob');
@@ -314,6 +326,7 @@ export default class PipelineEditor extends View {
                 console.error('PipelineEditor: Tabellen konnten nicht geladen werden:', error);
               }
               updateSourceOptions();
+              updateConsolidationTableOptions();
             }
 
             function showMessage(message) {
@@ -327,6 +340,10 @@ export default class PipelineEditor extends View {
             function renderFlow() {
               $('sourcePreview').textContent = pipeline.source || 'Bitte auswählen';
               $('filterPreview').textContent = 'Zeitraum: ' + pipeline.period;
+              const consolidation = pipeline.consolidation;
+              $('consolidationPreview').textContent = consolidation.configured
+                ? `${consolidation.source_a} + ${consolidation.source_b} · ${consolidation.matching_mode}`
+                : 'Noch nicht konfiguriert';
               $('scriptPreview').textContent = pipeline.script
                 ? pipeline.script
                 : 'Bitte auswählen';
@@ -352,6 +369,47 @@ export default class PipelineEditor extends View {
                     <option>24 Stunden</option><option>7 Tage</option><option>30 Tage</option><option>Alle Daten</option>
                   </select>
                   <span class="pm-field-help">Zeitbereich für die ausgewählten Messdaten festlegen.</span>
+                </div>`,
+              consolidation: `
+                <p class="pm-field-help pm-con-intro">Zeitbasiertes Matching aus dem Datenkonsolidierungs-Mockup. Tabelle A wird mit dem Schritt „Quelle“ synchronisiert.</p>
+                <div class="pm-field">
+                  <label for="fieldConSourceA">Tabelle A (Quelle)</label>
+                  <select id="fieldConSourceA" disabled required><option value="">Tabellen werden geladen ...</option></select>
+                </div>
+                <div class="pm-field">
+                  <label for="fieldConSourceB">Tabelle B (zweite Datenquelle)</label>
+                  <select id="fieldConSourceB" disabled required><option value="">Tabellen werden geladen ...</option></select>
+                </div>
+                <div class="pm-field">
+                  <label for="fieldConTimeA">Zeitstempel-Spalte A</label>
+                  <select id="fieldConTimeA" required disabled><option value="">Zuerst Tabelle A auswählen</option></select>
+                  <span id="conTimeHintA" class="pm-field-help"></span>
+                </div>
+                <div class="pm-field">
+                  <label for="fieldConTimeB">Zeitstempel-Spalte B</label>
+                  <select id="fieldConTimeB" required disabled><option value="">Zuerst Tabelle B auswählen</option></select>
+                  <span id="conTimeHintB" class="pm-field-help"></span>
+                </div>
+                <div class="pm-field">
+                  <label for="fieldConMode">Matching-Modus</label>
+                  <select id="fieldConMode">
+                    <option value="intersection">Intersection – nur passende Zeitpunkte</option>
+                    <option value="union">Union – auch nicht passende Datensätze</option>
+                  </select>
+                </div>
+                <div class="pm-field">
+                  <label for="fieldConTolerance">Zeitliche Toleranz (Sekunden)</label>
+                  <input id="fieldConTolerance" type="number" min="0" max="86400" step="1" required>
+                </div>
+                <div class="pm-field">
+                  <label for="fieldConTarget">Gewünschte Konsolidierungs-Zieltabelle</label>
+                  <input id="fieldConTarget" type="text" required placeholder="consolidated_timeseries">
+                </div>
+                <div class="pm-con-preview">
+                  <strong>JSON-Konfigurationsvorschau</strong>
+                  <p id="conPreviewHint" class="pm-field-help">Noch keine Konfiguration übernommen.</p>
+                  <pre id="consolidationJson" aria-live="polite">Noch keine Konfiguration erzeugt.</pre>
+                  <p class="pm-field-help">Nur Frontend-Konfiguration: Es werden keine Daten zusammengeführt, keine Jobs gestartet und keine Daten gespeichert. Das JSON ist kein bestätigter Backend-Vertrag.</p>
                 </div>`,
               script: `
                 <div class="pm-script-modes" role="group" aria-label="Skript oder Job auswählen" style="grid-template-columns:repeat(3,minmax(0,1fr))">
@@ -413,6 +471,147 @@ export default class PipelineEditor extends View {
                   <span class="pm-field-help">Tabelle für die Ausgabe der Verarbeitung festlegen.</span>
                 </div>`
             };
+
+            // Konsolidierung als zusätzlicher Pipeline-Schritt.
+            // Die vorhandenen SmartData-REST-Endpunkte werden nur lesend verwendet.
+            function isTimestampCandidate(attribute) {
+              const type = String(attribute.type || '').toLowerCase();
+              const name = String(attribute.name || '').toLowerCase();
+              return /(timestamp|timestamptz|datetime|date|time)/i.test(type) ||
+                /^(ts|timestamp|time|datetime|recorded_at|measured_at|acquiretime|created_at|updated_at)$/.test(name);
+            }
+
+            function isTimestampType(attribute) {
+              // Nicht jede Spalte mit einem passenden Namen enthält tatsächlich Zeitwerte.
+              return /(timestamp|timestamptz|datetime|date|time)/i.test(String(attribute.type || ''));
+            }
+
+            function updateConsolidationTableOptions() {
+              const sourceA = $('fieldConSourceA');
+              const sourceB = $('fieldConSourceB');
+              if (!sourceA || !sourceB) return;
+              const previousA = sourceA.value || pipeline.consolidation.source_a || pipeline.source;
+              const previousB = sourceB.value || pipeline.consolidation.source_b;
+              for (const select of [sourceA, sourceB]) {
+                select.replaceChildren();
+                if (tablesError) {
+                  select.add(new Option('SmartData nicht erreichbar', ''));
+                  select.disabled = true;
+                } else if (availableTables === null) {
+                  select.add(new Option('Tabellen werden geladen ...', ''));
+                  select.disabled = true;
+                } else if (!availableTables.length) {
+                  select.add(new Option('Keine Tabellen vorhanden', ''));
+                  select.disabled = true;
+                } else {
+                  select.add(new Option('Bitte Tabelle auswählen', ''));
+                  availableTables.forEach(name => select.add(new Option(name, name)));
+                  select.disabled = false;
+                }
+              }
+              if (availableTables && availableTables.length) {
+                sourceA.value = availableTables.includes(previousA) ? previousA : '';
+                sourceB.value = availableTables.includes(previousB) ? previousB : '';
+                loadConsolidationColumns('a', pipeline.consolidation.timestamp_column_a);
+                loadConsolidationColumns('b', pipeline.consolidation.timestamp_column_b);
+              }
+            }
+
+            async function loadConsolidationColumns(side, preferredColumn = '') {
+              const tableSelect = $('fieldConSource' + side.toUpperCase());
+              const timeSelect = $('fieldConTime' + side.toUpperCase());
+              const hint = $('conTimeHint' + side.toUpperCase());
+              if (!tableSelect || !timeSelect || !hint) return;
+              const requestNumber = ++consolidationRequestNumbers[side];
+              const table = tableSelect.value;
+              consolidationColumns[side] = null;
+              timeSelect.disabled = true;
+              timeSelect.replaceChildren(new Option(table ? 'Spalten werden geladen ...' : 'Zuerst Tabelle auswählen', ''));
+              hint.textContent = table ? `Lade Spalten für ${table} ...` : 'Bitte zuerst eine Quelltabelle auswählen.';
+              if (!table) return;
+              try {
+                const url = `/SmartData/smartdata/collection/${encodeURIComponent(table)}?storage=smartmonitoring`;
+                const response = await fetch(url, { method: 'GET', headers: { 'Accept': 'application/json' } });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const data = await response.json();
+                if (!data || !Array.isArray(data.attributes)) throw new Error('Spaltendefinition fehlt');
+                if (requestNumber !== consolidationRequestNumbers[side] || !root.contains(timeSelect)) return;
+                const attributes = data.attributes
+                  .filter(item => item && typeof item.name === 'string' && item.name.trim())
+                  .map(item => ({name:item.name, type:String(item.type || 'unbekannt')}));
+                consolidationColumns[side] = attributes;
+                const sorted = [...attributes].sort((a, b) =>
+                  Number(isTimestampCandidate(b)) - Number(isTimestampCandidate(a)) || a.name.localeCompare(b.name));
+                timeSelect.replaceChildren(new Option('Zeitstempel-Spalte auswählen', ''));
+                sorted.forEach(item => timeSelect.add(new Option(`${item.name} (${item.type})`, item.name)));
+                timeSelect.disabled = !sorted.length;
+                timeSelect.value = sorted.some(item => item.name === preferredColumn) ? preferredColumn : '';
+                const candidates = sorted.filter(isTimestampType).map(item => item.name);
+                hint.textContent = candidates.length
+                  ? `Mögliche Zeitspalten: ${candidates.join(', ')}. Datentyp prüfen.`
+                  : 'Keine Timestamp-Spalte erkannt. Für dieses zeitbasierte Matching ist eine echte Zeitspalte nötig.';
+              } catch (error) {
+                if (requestNumber !== consolidationRequestNumbers[side] || !root.contains(timeSelect)) return;
+                timeSelect.replaceChildren(new Option('Spalten nicht verfügbar', ''));
+                hint.textContent = `SmartData-Spalten konnten nicht geladen werden: ${error.message}`;
+                console.error('PipelineEditor: Konsolidierungs-Spalten konnten nicht geladen werden:', error);
+              }
+            }
+
+            function readConsolidationConfiguration() {
+              return {
+                source_a: $('fieldConSourceA').value,
+                source_b: $('fieldConSourceB').value,
+                timestamp_column_a: $('fieldConTimeA').value,
+                timestamp_column_b: $('fieldConTimeB').value,
+                matching_mode: $('fieldConMode').value,
+                tolerance_seconds: Number($('fieldConTolerance').value),
+                target_table: $('fieldConTarget').value.trim()
+              };
+            }
+
+            function validateConsolidation(config) {
+              if (!config.source_a || !config.source_b) return 'Bitte zwei Tabellen auswählen.';
+              if (config.source_a === config.source_b) return 'Bitte zwei unterschiedliche Tabellen auswählen.';
+              if (!availableTables || !availableTables.includes(config.source_a) || !availableTables.includes(config.source_b)) {
+                return 'Bitte nur vorhandene SmartData-Tabellen verwenden.';
+              }
+              for (const side of ['a', 'b']) {
+                const column = (consolidationColumns[side] || []).find(item => item.name === config['timestamp_column_' + side]);
+                if (!column) return `Bitte eine vorhandene Zeitspalte für Tabelle ${side.toUpperCase()} auswählen.`;
+                if (!isTimestampType(column)) return `Spalte „${column.name}“ in Tabelle ${side.toUpperCase()} hat keinen geeigneten Zeit-Datentyp.`;
+              }
+              if (!['intersection','union'].includes(config.matching_mode)) return 'Ungültiger Matching-Modus.';
+              if (!Number.isInteger(config.tolerance_seconds) || config.tolerance_seconds < 0 || config.tolerance_seconds > 86400) {
+                return 'Die Toleranz muss zwischen 0 und 86400 Sekunden liegen.';
+              }
+              if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(config.target_table)) {
+                return 'Bitte einen gültigen Namen für die Zieltabelle eingeben.';
+              }
+              return null;
+            }
+
+            function setupConsolidationPanel() {
+              const c = pipeline.consolidation;
+              $('fieldConMode').value = c.matching_mode;
+              $('fieldConTolerance').value = c.tolerance_seconds;
+              $('fieldConTarget').value = c.target_table;
+              const updatePreview = () => {
+                $('consolidationJson').textContent = 'Einstellungen verändert – bitte Konsolidierung übernehmen.';
+                $('conPreviewHint').textContent = 'Noch nicht übernommen. Es werden keine Daten verarbeitet.';
+              };
+              root.querySelectorAll('#detailsForm input, #detailsForm select').forEach(field => {
+                field.addEventListener('input', updatePreview);
+              });
+              $('fieldConSourceA').addEventListener('change', () => loadConsolidationColumns('a'));
+              $('fieldConSourceB').addEventListener('change', () => loadConsolidationColumns('b'));
+              updateConsolidationTableOptions();
+              if (c.configured) {
+                const { configured, ...config } = c;
+                $('consolidationJson').textContent = JSON.stringify(config, null, 2);
+                $('conPreviewHint').textContent = 'Zuletzt übernommene Konfiguration (nur lokal im Browser).';
+              }
+            }
 
             function populateScriptList() {
               const select = $('fieldScript');
@@ -492,6 +691,10 @@ export default class PipelineEditor extends View {
                 '<button id="submitSettings" type="submit" class="pm-btn pm-btn-primary">Änderungen übernehmen</button>';
               if (currentStep === 'source') updateSourceOptions();
               if (currentStep === 'filter') $('fieldPeriod').value = pipeline.period;
+              if (currentStep === 'consolidation') {
+                $('submitSettings').textContent = 'Konsolidierung übernehmen';
+                setupConsolidationPanel();
+              }
               if (currentStep === 'script') setupScriptPanel();
               if (currentStep === 'target') $('fieldTarget').value = pipeline.target;
             }
@@ -507,8 +710,28 @@ export default class PipelineEditor extends View {
             });
             $('detailsForm').addEventListener('submit', event => {
               event.preventDefault();
-              if (currentStep === 'source') pipeline.source = $('fieldSource').value;
+              if (currentStep === 'source') {
+                const nextSource = $('fieldSource').value;
+                if (nextSource !== pipeline.source) {
+                  pipeline.source = nextSource;
+                  pipeline.consolidation.source_a = nextSource;
+                  pipeline.consolidation.timestamp_column_a = '';
+                  pipeline.consolidation.configured = false;
+                }
+              }
               if (currentStep === 'filter') pipeline.period = $('fieldPeriod').value;
+              if (currentStep === 'consolidation') {
+                const config = readConsolidationConfiguration();
+                const error = validateConsolidation(config);
+                if (error) { showMessage(error); return; }
+                pipeline.consolidation = {...config, configured:true};
+                pipeline.source = config.source_a; // Quelle und Tabelle A bleiben konsistent.
+                $('consolidationJson').textContent = JSON.stringify(config, null, 2);
+                $('conPreviewHint').textContent = 'Konfiguration übernommen (nur im Browser).';
+                renderFlow();
+                showMessage('Konsolidierung konfiguriert. Noch keine Daten zusammengeführt oder gespeichert.');
+                return;
+              }
               if (currentStep === 'script') {
                 if (scriptMode === 'job') {
                   const job = findJob($('fieldJob').value);
@@ -579,7 +802,7 @@ export default class PipelineEditor extends View {
               showMessage('Pipeline geöffnet.');
             });
             $('newPipeline').addEventListener('click', () => {
-              pipeline = {source:'', period:'7 Tage', script:'',scriptType:'predefined', jobId:null, description:'', parameter:'', target:''};
+              pipeline = {source:'', period:'7 Tage', script:'',scriptType:'predefined', jobId:null, description:'', parameter:'', target:'', consolidation:blankConsolidation()};
               newDraft = true; scriptMode = 'existing';
               selectStep('source');
               showMessage('Neue Pipeline erstellt.');

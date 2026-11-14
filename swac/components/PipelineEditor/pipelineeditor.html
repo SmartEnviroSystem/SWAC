@@ -14,7 +14,7 @@
         <div class="pm-card-head"><h2>Pipeline-Verwaltung</h2><p>Vorhandene Pipeline öffnen oder neu anlegen</p></div>
         <div class="pm-card-body">
           <button type="button" class="pm-sidebar-btn" id="loadExample">
-            <strong>Messdaten aufbereiten</strong><span>Pipeline · 4 Bausteine</span>
+            <strong>Messdaten aufbereiten</strong><span>Pipeline · 5 Bausteine</span>
           </button>
           <div style="height:10px"></div>
           <button type="button" class="pm-btn" id="newPipeline">＋ Neue Pipeline anlegen</button>
@@ -24,10 +24,11 @@
           <div class="pm-palette" aria-label="Bausteintypen">
             <span class="pm-chip pm-chip-source">Quelle</span>
             <span class="pm-chip pm-chip-filter">Filter</span>
-            <span class="pm-chip pm-chip-script">Skript</span>
+            <span class="pm-chip pm-chip-consolidation">Konsolidierung</span>
+            <span class="pm-chip pm-chip-script">Skript / Job</span>
             <span class="pm-chip pm-chip-target">Ziel</span>
           </div>
-          <p class="pm-desc" style="margin-top:12px;font-size:12px">Die Bausteine sind im Flow bereits dargestellt. Klicke einen an, um seine Einstellungen zu sehen. Bei „Skript“ kannst du eine Vorlage auswählen oder eigenen Python-Code erstellen.</p>
+          <p class="pm-desc" style="margin-top:12px;font-size:12px">Die Bausteine sind im Flow bereits dargestellt. Klicke einen an, um seine Einstellungen zu sehen. Bei „Konsolidierung“ konfigurierst du zwei Tabellen und Zeit-Matching. Bei „Skript / Job“ kannst du eine Vorlage, eigenen Python-Code oder einen Job wählen.</p>
         </div>
       </section>
 
@@ -41,18 +42,23 @@
               <div class="pm-node-value" id="sourcePreview">exampledata_timeseries_1week</div>
             </button>
             <span class="pm-arrow" aria-hidden="true">→</span>
+            <button type="button" class="pm-node" data-step="consolidation" aria-pressed="false">
+              <div class="pm-node-num">SCHRITT 02</div><div class="pm-node-name">Konsolidierung</div>
+              <div class="pm-node-value" id="consolidationPreview">Noch nicht konfiguriert</div>
+            </button>
+            <span class="pm-arrow" aria-hidden="true">→</span>
             <button type="button" class="pm-node" data-step="filter" aria-pressed="false">
-              <div class="pm-node-num">SCHRITT 02</div><div class="pm-node-name">Filter</div>
+              <div class="pm-node-num">SCHRITT 03</div><div class="pm-node-name">Filter</div>
               <div class="pm-node-value" id="filterPreview">Zeitraum: 7 Tage</div>
             </button>
             <span class="pm-arrow" aria-hidden="true">→</span>
             <button type="button" class="pm-node" data-step="script" aria-pressed="true">
-              <div class="pm-node-num">SCHRITT 03</div><div class="pm-node-name">Skript</div>
+              <div class="pm-node-num">SCHRITT 04</div><div class="pm-node-name">Skript / Job</div>
               <div class="pm-node-value" id="scriptPreview">normalize_values.py</div>
             </button>
             <span class="pm-arrow" aria-hidden="true">→</span>
             <button type="button" class="pm-node" data-step="target" aria-pressed="false">
-              <div class="pm-node-num">SCHRITT 04</div><div class="pm-node-name">Ziel</div>
+              <div class="pm-node-num">SCHRITT 05</div><div class="pm-node-name">Ziel</div>
               <div class="pm-node-value" id="targetPreview">ergebnis_tabelle</div>
             </button>
           </div>
@@ -60,7 +66,7 @@
         </div>
         <div class="pm-flow-footer">
           <h3>Anwendungsfall</h3>
-          <p>Messdaten aus einer vorhandenen Tabelle lesen, zeitlich einschränken, mit einem Skript bearbeiten und das Ergebnis in einer Zieltabelle ablegen. </p>
+          <p>Messdaten aus einer Quelle lesen, filtern und optional mit einer zweiten Tabelle zeitbasiert konsolidieren; danach als Skript-/Job-Schritt konfigurieren und das gewünschte Ziel festlegen. Aktuell nur Frontend-Konfiguration ohne Ausführung. </p>
         </div>
       </section>
 
