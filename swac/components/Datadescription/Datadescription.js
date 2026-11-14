@@ -7,8 +7,8 @@ export default class Datadescription extends View {
     constructor(options = {}) {
         super(options);
 
-      this.options.borderColor = options.borderColor ?? false;
-this.options.backgroundColor = options.backgroundColor ?? false;
+        this.options.borderColor = true;
+        this.options.backgroundColor = options.backgroundColor ?? false;
 
 
         this.name = 'Datadescription';
@@ -1195,8 +1195,13 @@ thisRef.formatDataElement(curRequestor);
                     if (curElemForAttr.classList.contains('swac_repeatedForAttribute')) {
                         continue;
                     }
-              curElemForAttr.style.backgroundColor = 'RED';
-                }
+              const component = curElemForAttr.closest('[swa]')?.swac_comp;
+              const set = component?.findSourceSet(curElemForAttr);
+              if (set && set[attribute] !== undefined && set[attribute] !== null) {
+                  curElemForAttr.style.backgroundColor = this.getValueColor(String(set[attribute]),null,attribute);
+              }
+            }
+
             }
         }
     }
