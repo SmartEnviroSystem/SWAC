@@ -53,9 +53,17 @@ export default class PipelineEditor extends View {
               parameter:'threshold=0.95', target:'ergebnis_tabelle',
               consolidation: blankConsolidation('exampledata_timeseries_1week')
             });
-            let pipeline = example();
+            // Mehrere unabhängige Pipeline-Bäume, nur im Browserspeicher.
+            const pipelineTrees = [{ id: 1, name: 'Messdaten aufbereiten', data: example(), isDraft: false }];
+            let activeTreeId = 1;
+            let nextTreeId = 2;
+            let pipeline = pipelineTrees[0].data;
             let currentStep = 'script';
             let newDraft = false;
+            let visualModel = null;
+            const graphSource = 'PmTreeNode';
+            const graphHeight = 685;
+            const graphColumn = 375;
             let scriptMode = 'existing';
             const $ = id => root.querySelector('#' + id);
             const labels = {
@@ -351,9 +359,226 @@ export default class PipelineEditor extends View {
               root.querySelectorAll('.pm-node').forEach(node => {
                 node.setAttribute('aria-pressed', String(node.dataset.step === currentStep));
               });
-              $('pipelineLabel').textContent = newDraft ? 'Neue Pipeline · Entwurf' : 'Messdaten aufbereiten';
+              const tree = pipelineTrees.find(item => item.id === activeTreeId);
+              $('pipelineLabel').textContent = `${tree.name}${tree.isDraft ? ' · Entwurf' : ''} · ${pipelineTrees.length} ${pipelineTrees.length === 1 ? 'Baum' : 'Bäume'}`;
               $('currentStep').textContent = 'Ausgewählter Baustein: ' + labels[currentStep];
+              renderTreeList();
+              try {
+                renderVisualTree();
+              } catch (error) {
+                console.error('PipelineEditor: Fehler beim Zeichnen des Pipeline-Baums:', error);
+                const message = $('visualModelMessage');
+                message.textContent = `Baumansicht konnte nicht gezeichnet werden: ${error.message}. Details siehe F12 → Console.`;
+                message.hidden = false;
+              }
             }
+
+            function renderTreeList() {
+              const container = $('pipelineTreeList');
+              container.replaceChildren();
+              for (const tree of pipelineTrees) {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'pm-sidebar-btn pm-tree-entry';
+                button.setAttribute('aria-current', String(tree.id === activeTreeId));
+                const title = document.createElement('strong');
+                title.textContent = tree.name;
+                const status = document.createElement('span');
+                status.className = 'pm-tree-status';
+                status.textContent = `${tree.isDraft ? 'Entwurf · ' : ''}5 Schritte · Baum ${tree.id}`;
+                button.append(title, status);
+                button.addEventListener('click', () => activateTree(tree.id));
+                container.appendChild(button);
+              }
+            }
+
+            function activateTree(id, step) {
+              const tree = pipelineTrees.find(item => item.id === id);
+              if (!tree) return;
+              activeTreeId = tree.id;
+              pipeline = tree.data;
+              newDraft = tree.isDraft;
+              scriptMode = pipeline.scriptType === 'job' ? 'job' : 'existing';
+              selectStep(step || (tree.isDraft ? 'source' : 'script'));
+              const index = pipelineTrees.findIndex(item => item.id === id);
+              const viewport = $('visualViewport');
+              if (viewport && index >= 0) viewport.scrollLeft = Math.max(0, index * graphColumn - 85);
+            }
+
+            // VisualModel nutzt die vorhandene SWAC-View Visualmodel und Konva.
+            // Die Darstellung wird ausschließlich aus unseren lokalen Pipeline-Daten erzeugt.
+            async function loadKonva() {
+              if (window.Konva) return;
+              let lastError;
+              for (const rel of ['../VisualModel/libs/konva.min.js', '../Visualmodel/libs/konva.min.js']) {
+                try {
+                  await new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = new URL(rel, import.meta.url).href;
+                    script.onload = resolve;
+                    script.onerror = () => { script.remove(); reject(new Error(`Konva nicht gefunden: ${rel}`)); };
+                    document.head.appendChild(script);
+                  });
+                  if (window.Konva) return;
+                } catch (error) { lastError = error; }
+              }
+              throw lastError || new Error('Konva konnte nicht geladen werden.');
+            }
+
+            async function loadVisualModelClass() {
+              let lastError;
+              for (const rel of ['../VisualModel/Visualmodel.js', '../Visualmodel/Visualmodel.js']) {
+                try { return (await import(rel)).default; }
+                catch (error) { lastError = error; }
+              }
+              throw lastError || new Error('Visualmodel.js nicht gefunden.');
+            }
+
+            async function initializeVisualModel() {
+              try {
+                await loadKonva();
+                const Visualmodel = await loadVisualModelClass();
+                const instance = new Visualmodel({
+                  showMenue: false,
+                  showScenegraph: false,
+                  plugins: new Map(),
+                  allowZoom: false, // Mausrad scrollt, Zoom über die Toolbar.
+                  stageWidth: 760,
+                  stageHeight: graphHeight,
+                  autosave: false
+                });
+                instance.requestor = $('visualModelHost');
+                const general = instance.options.attributeDefaults.get('VisualmodelGeneral');
+                instance.options.attributeDefaults.set(graphSource, {
+                  ...general,
+                  dragmode: 'none', // Nur die gesamte Ansicht wird verschoben.
+                  onClick: event => {
+                    const set = event.target && event.target.attrs.swac_set;
+                    if (set && set.pmTreeId && set.pmStep) activateTree(set.pmTreeId, set.pmStep);
+                  }
+                });
+                await instance.init();
+                visualModel = instance;
+                $('visualModelMessage').hidden = true;
+                renderVisualTree();
+              } catch (error) {
+                console.error('PipelineEditor: VisualModel-Initialisierung fehlgeschlagen:', error);
+                $('visualModelMessage').textContent =
+                  `VisualModel konnte nicht geladen werden: ${error.message}. Die Bausteine unten bleiben bedienbar. Prüfe F12 → Console.`;
+                $('visualModelMessage').hidden = false;
+              }
+            }
+
+            // VisualModel provides the SWAC canvas (stage/layer). Draw the pipeline
+            // directly with Konva shapes on that canvas. This does not require a
+            // SmartData data source or Visualmodel's getMainSourceData() metadata.
+            function renderVisualTree() {
+              if (!visualModel || !visualModel.stage || !visualModel.layer || !window.Konva) return;
+              const vm = visualModel;
+              const K = window.Konva;
+              const canvasWidth = Math.max(760, pipelineTrees.length * graphColumn + 70);
+              const nodeWidth = 170;
+              const nodeHeight = 65;
+              const rows = { source: 80, consolidation: 192, filter: 304, script: 416, target: 528 };
+              const colors = { source:'#138b70', consolidation:'#8057c4', filter:'#2c7cbe', script:'#bc852d', target:'#c65e80' };
+              vm.requestor.style.width = `${canvasWidth}px`;
+              vm.stage.width(canvasWidth);
+              vm.stage.height(graphHeight);
+              vm.layer.destroyChildren();
+
+              function addArrow(ax, ay, bx, by) {
+                vm.layer.add(new K.Arrow({
+                  points: [ax, ay, bx, by],
+                  stroke: '#91a4b9', fill: '#91a4b9', strokeWidth: 2,
+                  pointerLength: 8, pointerWidth: 8,
+                  listening: false
+                }));
+              }
+
+              function addNode(tree, x, y, step, title, subtitle) {
+                const selected = tree.id === activeTreeId && currentStep === step;
+                const group = new K.Group({x, y, listening:true});
+                group.add(new K.Rect({
+                  x:0, y:0, width:nodeWidth, height:nodeHeight,
+                  fill:selected ? '#e6f3ff' : '#ffffff',
+                  stroke:selected ? '#1769aa' : colors[step],
+                  strokeWidth:selected ? 2.8 : 1.5, cornerRadius:9,
+                  shadowColor:'#304960', shadowBlur:3, shadowOpacity:0.09
+                }));
+                group.add(new K.Text({
+                  x:10,y:11,width:nodeWidth-20,height:20,text:title,
+                  fontSize:13,fontStyle:'bold',fill:'#203854',listening:false
+                }));
+                group.add(new K.Text({
+                  x:10,y:35,width:nodeWidth-20,height:24,text:String(subtitle || ''),
+                  fontSize:10.5,fill:'#697d91',wrap:'none',ellipsis:true,listening:false
+                }));
+                group.on('mouseenter', () => {
+                  vm.stage.draggable(false);
+                  vm.stage.container().style.cursor = 'pointer';
+                });
+                group.on('mouseleave', () => {
+                  vm.stage.draggable(true);
+                  vm.stage.container().style.cursor = 'grab';
+                });
+                group.on('click tap', event => {
+                  event.cancelBubble = true;
+                  activateTree(tree.id, step);
+                });
+                vm.layer.add(group);
+              }
+
+              for (let index=0; index<pipelineTrees.length; index++) {
+                const tree = pipelineTrees[index];
+                const base = index * graphColumn + 34;
+                const centralX = base + 91;
+                const leftX = base;
+                const rightX = base + 183;
+                const con = tree.data.consolidation;
+                const hasB = Boolean(con.source_b);
+                const center = x => x + nodeWidth / 2;
+                // Connections are drawn before nodes so arrows stay behind boxes.
+                addArrow(center(hasB ? leftX : centralX), rows.source+nodeHeight, center(centralX), rows.consolidation);
+                if (hasB) addArrow(center(rightX), rows.source+nodeHeight, center(centralX), rows.consolidation);
+                for (const [from,to] of [
+                  ['consolidation','filter'], ['filter','script'], ['script','target']
+                ]) addArrow(center(centralX), rows[from]+nodeHeight, center(centralX), rows[to]);
+                vm.layer.add(new K.Text({
+                  x:base,y:28,width:nodeWidth*2+12,
+                  text:`${tree.name}${tree.isDraft ? ' · Entwurf' : ''}`,
+                  fill:tree.id === activeTreeId ? '#1769aa' : '#465d75',
+                  fontStyle:'bold',fontSize:16,listening:false
+                }));
+                addNode(tree, hasB ? leftX : centralX, rows.source,'source',
+                  hasB ? 'Quelle A':'Quelle',tree.data.source || 'Keine Tabelle gewählt');
+                if (hasB) addNode(tree,rightX,rows.source,'consolidation','Quelle B',con.source_b);
+                addNode(tree,centralX,rows.consolidation,'consolidation','Konsolidierung',
+                  con.configured ? `${con.matching_mode} · ${con.tolerance_seconds}s` : 'Noch nicht konfiguriert');
+                addNode(tree,centralX,rows.filter,'filter','Filter',tree.data.period);
+                // Never show Python source code inside the tree.
+                addNode(tree,centralX,rows.script,'script','Skript / Job',
+                  tree.data.scriptType === 'job' ? 'Job konfiguriert' : 'Skriptschritt');
+                addNode(tree,centralX,rows.target,'target','Ziel',tree.data.target || 'Kein Ziel gewählt');
+              }
+              vm.stage.draggable(true);
+              vm.layer.batchDraw();
+            }
+
+            function changeZoom(delta) {
+              if (!visualModel) return;
+              const next = Math.max(0.5, Math.min(1.6, Math.round((visualModel.stage.scaleX() + delta) * 100) / 100));
+              visualModel.zoom(next);
+              $('vmZoomLabel').textContent = `${Math.round(next * 100)} %`;
+            }
+            $('vmZoomIn').addEventListener('click', () => changeZoom(0.15));
+            $('vmZoomOut').addEventListener('click', () => changeZoom(-0.15));
+            $('vmReset').addEventListener('click', () => {
+              if (!visualModel) return;
+              visualModel.resetZoom();
+              $('vmZoomLabel').textContent = '100 %';
+              $('visualViewport').scrollTop = 0;
+              $('visualViewport').scrollLeft = 0;
+            });
 
             const forms = {
               source: `
@@ -701,8 +926,9 @@ export default class PipelineEditor extends View {
             function selectStep(step) {
               currentStep = step;
               clearMessage();
-              renderFlow();
+              // Update the form first. A canvas error must not block the UI.
               renderDetails();
+              renderFlow();
             }
 
             root.querySelectorAll('.pm-node').forEach(node => {
@@ -796,16 +1022,17 @@ export default class PipelineEditor extends View {
               renderFlow();
               showMessage('Einstellungen übernommen.');
             });
-            $('loadExample').addEventListener('click', () => {
-              pipeline = example(); newDraft = false; scriptMode = 'existing';
-              selectStep('script');
-              showMessage('Pipeline geöffnet.');
-            });
             $('newPipeline').addEventListener('click', () => {
-              pipeline = {source:'', period:'7 Tage', script:'',scriptType:'predefined', jobId:null, description:'', parameter:'', target:'', consolidation:blankConsolidation()};
-              newDraft = true; scriptMode = 'existing';
-              selectStep('source');
-              showMessage('Neue Pipeline erstellt.');
+              const id = nextTreeId++;
+              const tree = {
+                id, name: `Pipeline ${id}`,
+                data: {source:'', period:'7 Tage', script:'',scriptType:'predefined', jobId:null,
+                  description:'', parameter:'', target:'', consolidation:blankConsolidation()},
+                isDraft:true
+              };
+              pipelineTrees.push(tree);
+              activateTree(id, 'source');
+              showMessage(`Neuer Pipeline-Baum ${id} angelegt (nur lokal im Browser).`);
             });
             $('savePipeline').addEventListener('click', () => {
               showMessage('Die dauerhafte Speicherung ist noch nicht angebunden.');
@@ -817,6 +1044,7 @@ export default class PipelineEditor extends View {
             loadExistingJobs();
             loadJobParams();
             loadActionDescriptions();
+            initializeVisualModel();
           })();
     }
 }
