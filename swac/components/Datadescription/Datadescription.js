@@ -5,7 +5,14 @@ import Msg from '../../Msg.js';
 export default class Datadescription extends View {
 
     constructor(options = {}) {
+        if (typeof options.showWhenNoData === 'undefined')
+            options.showWhenNoData = true;
         super(options);
+
+        this.options.borderColor = true;
+        this.options.backgroundColor = options.backgroundColor ?? false;
+
+
         this.name = 'Datadescription';
         this.desc.text = 'Describe your data with text and colors. This component makes it possible to describe data. So a simple analysis is possible.';
         this.desc.developers = 'Florian Fehring (HSBI)';
@@ -25,6 +32,11 @@ export default class Datadescription extends View {
             name: 'datadescription',
             style: 'datadescription',
             desc: 'Shows the legend of the data'
+        };
+        this.desc.templates[1] = {
+            name: 'min_median_max',
+            style: 'datadescription',
+            desc: 'Shows minimum, median and maximum with editable colours.'
         };
 
         this.desc.reqPerTpl[0] = {
@@ -588,6 +600,9 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
                     return legenddata[attr].values[curVal][visdataname];
                 }
             }
+            let last = vals[vals.length - 1];
+            if (legenddata[attr].includeMax && Number(value) === Number(last))
+                return legenddata[attr].values[last][visdataname];
         } else if (calcMode === 'gradient') {
             // Get attributes into array
             let vals = Object.keys(legenddata[attr].values);
@@ -609,7 +624,7 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
                     };
                     return Colorcalculations.rgbToHex(rgbres);
                 }
-                prevVal = curValNumber;
+                prevVal = curVal;
             }
         } else if (calcMode === '>') {
             console.error('calcMode > not implemented yet');
@@ -625,6 +640,9 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
      * @returns {DOMElement} HTML DIV Element containing the legend
      */
     getLegend() {
+        if (this.options.showWhenNoData && !this.options.activeSource)
+            return;
+
         let requestor = this.requestor;
 
         // setup border Color input in modal
@@ -820,7 +838,7 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
         // Accordion content
         const addButton = attributeElem.querySelector('.swac_datadescription_addbutton');
         const acordCont = attributeElem.querySelector('.swac_datadescription_attribution');
-        if (legenddata[attribute].calcmode === 'gradient') {
+        if (legenddata[attribute].calcmode === 'gradient' && this.requestor.templateName !== 'min_median_max') {
             const wrapper = document.createElement('div');
             wrapper.style = 'display: flex;';
 
@@ -1070,13 +1088,22 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
     }
 
     formatAll() {
+        if (this.options.showWhenNoData && !this.options.activeSource)
+            return;
+
         Msg.flow('Datadescription', 'formatAll()', this.requestor);
         let thisRef = this;
         // Find requestors on page and wait for them to load, than format
         let requestors = document.querySelectorAll('[swa]');
         for (let curRequestor of requestors) {
             // Direclty format if possible
-            thisRef.formatDataElement(curRequestor);
+            if(this.options.borderColor){
+thisRef.formatDataElement(curRequestor);
+            }
+            if(this.options.backgroundColor){
+         thisRef.formatDataElementBackground(curRequestor)
+            }
+   
         }
     }
 
@@ -1144,10 +1171,75 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
         }
     }
 
-    renderFormatedDataElements() {
+
+    formatDataElementBackground(element) {
+        Msg.flow('Datadescription', 'formatDataElement(' + element.id + ')', this.requestor);
+        // store formated elements
+        let elementInStorage = false;
         for (let curElem of this.formatedDataElements) {
-            this.formatDataElement(curElem);
+            if (curElem.id === element.id) {
+                elementInStorage = true;
+                break;
+            }
         }
+        if (!elementInStorage) {
+            this.formatedDataElements.push(element);
+        }
+        
+        if(!this.options.activeSource) {
+            Msg.error('Datadescription','No datadescription loaded.',this.requestor);
+            return;
+        }
+        if (!this.data[this.options.activeSource]) {
+            Msg.error('Datadescription', 'There is no datadescription with name >' + this.options.activeSource + '<', this.requestor);
+            return;
+        }
+        
+        let legenddata = this.data[this.options.activeSource].getSet(this.options.activeSet);
+        for (var attribute in legenddata) {
+            // Exclude swac internal attributes
+            if (attribute.startsWith('swac_'))
+                continue;
+            // Check if attribute should be visualised
+            if (typeof legenddata[attribute] === 'object') {
+                // Select all alements for attribute
+                let elemsForAttr = element.querySelectorAll('[swac_attrname=' + attribute + ']');
+
+                // Walk trough every element
+                for (let curElemForAttr of elemsForAttr) {
+                    // Exclude attr elements
+                    if (curElemForAttr.classList.contains('swac_repeatedForAttribute')) {
+                        continue;
+                    }
+                    curElemForAttr.style.backgroundColor = '';
+                    if (legenddata[attribute].visualise === false)
+                        continue;
+              const component = curElemForAttr.closest('[swa]')?.swac_comp;
+              const set = component?.findSourceSet(curElemForAttr);
+              if (set && set[attribute] !== undefined && set[attribute] !== null) {
+                  curElemForAttr.style.backgroundColor = this.getValueColor(String(set[attribute]),null,attribute);
+              }
+            }
+
+            }
+        }
+    }
+    renderFormatedDataElements() {
+        if(this.options.borderColor){
+             for (let curElem of this.formatedDataElements) {
+                if(this.options.borderColor){
+ this.formatDataElement(curElem);
+                }
+                   if(this.options.backgroundColor){
+                    this.formatDataElementBackground(curElem);
+                }
+           
+        }
+        
+     
+        
+        }
+       
         document.dispatchEvent(new CustomEvent('swac_Datadescription_' + this.requestor.id + '_changed', {
         }));
     }
