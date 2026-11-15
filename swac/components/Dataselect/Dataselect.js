@@ -144,6 +144,14 @@ export default class Dataselect extends View {
                 type: 'Promise'
             }
         };
+        this.desc.funcs[2] = {
+            name: 'getAttributes',
+            desc: 'Gets the attribute definitions of the selected datasets collection, including the ones not offered for selection.',
+            returns: {
+                desc: 'List of attribute definitions ({name, type, ...}) as delivered by the data source, empty if nothing is loaded.',
+                type: 'Object[]'
+            }
+        };
 
         this.desc.events[0] = {
             name: 'swac_REQUESTOR_ID_dataselect_changed',
@@ -153,6 +161,7 @@ export default class Dataselect extends View {
 
         // Internal attributes
         this.sets = new Map();
+        this.attributes = [];
         this.pendingAttribute = null;
         this.loadingCollection = null;
     }
@@ -276,6 +285,7 @@ export default class Dataselect extends View {
     }
 
     resetAttributes(langKey, fallback) {
+        this.attributes = [];
         this.attrSelect.innerHTML = '';
         this.attrSelect.appendChild(this.createOption('', fallback, langKey));
         this.attrSelect.disabled = true;
@@ -322,7 +332,8 @@ export default class Dataselect extends View {
             // Ignore the answer if another dataset was selected meanwhile
             if (thisRef.loadingCollection !== collection)
                 return;
-            thisRef.renderAttributes(definitions || []);
+            thisRef.attributes = definitions || [];
+            thisRef.renderAttributes(thisRef.attributes);
             thisRef.notifyChange('set');
         }).catch(function (error) {
             if (thisRef.loadingCollection !== collection)
@@ -420,5 +431,9 @@ export default class Dataselect extends View {
         this.setSelect.value = String(id);
         this.pendingAttribute = attribute;
         return this.onSetChange();
+    }
+
+    getAttributes() {
+        return this.attributes;
     }
 }
