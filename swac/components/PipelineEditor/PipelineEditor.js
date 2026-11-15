@@ -1,4 +1,5 @@
 import View from '../../View.js';
+import forms from './PipelineForms.js';
 
 /**
  * PipelineEditor for SmartMonitoring.
@@ -6,1046 +7,2186 @@ import View from '../../View.js';
  * Data retrieval, Job execution, persistence and secure Python handling
  * must be implemented through the existing SWAC/SmartData architecture.
  */
+
 export default class PipelineEditor extends View {
+
     constructor(options = {}) {
         super(options);
+
         this.name = 'PipelineEditor';
         this.desc.text = 'Visual editor for data-processing pipelines and block configuration.';
         this.desc.developers = 'Web Engineering Gruppe 4 (HSBI)';
+
         this.desc.templates[0] = {
             name: 'pipelineeditor',
             style: 'pipelineeditor',
             desc: 'Pipeline-Verwaltung, Pipeline-Flow und Bausteinkonfiguration'
         };
+
         this.desc.reqPerTpl[0] = {
             selc: '.pm-app',
             desc: 'Container of the PipelineEditor UI'
         };
+
         if (options.showWhenNoData === undefined) {
             this.options.showWhenNoData = true;
         }
+
+        this.forms = forms || {};
+
+        // Klassenvariablen
+        // Instanzvariablen: Skriptverwaltung
+        this.predefinedScripts = [];
+        this.ownScripts = [];
+
+        // Instanzvariablen: Pipeline-Verwaltung
+        this.blankConsolidation = null;
+        this.example = null;
+        this.pipelineTrees = [];
+
+        this.activeTreeId = null;
+        this.nextTreeId = null;
+        this.pipeline = null;
+
+        // Instanzvariablen: Bearbeitungszustand
+        this.currentStep = null;
+        this.newDraft = false;
+        this.visualModel = null;
+        this.scriptMode = null;
+
+        // Instanzvariablen: Graph-Konfiguration
+        this.graphSource = null;
+        this.graphHeight = null;
+        this.graphColumn = null;
+
+        // Beschriftung
+        this.labels = [];
+
+        //Tabellen
+        this.availableTables = null;
+        this.tablesError = null;
+        this.consolidationColumns = { a: null, b: null };
+        this.consolidationRequestNumbers = { a: 0, b: 0 };
+
+        // Jobs und deren Parameter
+        this.availableJobs = null;
+        this.jobsError = null;
+        this.jobParams = null;
+        this.jobParamsError = null;
+        this.actionDescriptions = null;
+        this.actionDescriptionsError = null;
+
+        // PipelineEditor vergrößern und wieder verkleinern
+        this.expandButton = null;
+        this.expandLabel = null;
+        this.editorCard = null;
     }
 
-    /** Initialize once SWAC has loaded the template and component. */
-    async init() {
+
+    async init(){
+
+        // This code checks whether a specific HTML element is present before the PipelineEditor continues processing.
         const root = this.requestor;
         if (!root || !root.querySelector('.pm-app')) {
             throw new Error('PipelineEditor: HTML template was not loaded.');
         }
-        (function () {
-            'use strict';
 
-            const predefinedScripts = [
-              {name:'normalize_values.py', description:'Werte aufbereiten', parameter:'threshold=0.95'},
-              {name:'replace_null.py', description:'Fehlende Werte ersetzen', parameter:'ersatzwert=0'}
-            ];
+        this.root = root; // für alle Klassenmethoden root element speichern.
 
-            const ownScripts = [];
-            // Frontend-only configuration; no execution or persistence.
-            const blankConsolidation = (source = '') => ({
-              source_a: source, source_b: '', timestamp_column_a: '', timestamp_column_b: '',
-              matching_mode: 'intersection', tolerance_seconds: 30,
-              target_table: 'consolidated_timeseries', configured: false
+
+        this.initializeVariables();
+        this.initializeUI();
+        await this.loadData();
+
+        // Initiales Rendern von Flow und Details beim Start erzwingen (behebt das Leerbleiben beim Laden)
+        this.renderFlow();
+        this.selectStep(this.currentStep || 'script');
+    }
+
+
+    initializeVariables() {
+        // Vordefinierte Python-Skripte
+        this.predefinedScripts = [
+            {
+                name: 'normalize_values.py',
+                description: 'Werte aufbereiten',
+                parameter: 'threshold=0.95'
+            },
+            {
+                name: 'replace_null.py',
+                description: 'Fehlende Werte ersetzen',
+                parameter: 'ersatzwert=0'
+            }
+        ];
+
+        // Datenkonsolidierung
+        this.blankConsolidation = (source = '') => ({
+            source_a: source,
+            source_b: '',
+            timestamp_column_a: '',
+            timestamp_column_b: '',
+            matching_mode: 'intersection',
+            tolerance_seconds: 30,
+            target_table: 'consolidated_timeseries',
+            configured: false
+        });
+
+        // Beispiel-Pipeline
+        this.example = () => ({
+            source: 'exampledata_timeseries_1week',
+            period: '7 Tage',
+            filter: {
+                column: '',
+                operator: 'gt',
+                value: '',
+                enabled: false
+            },
+            script: 'normalize_values.py',
+            scriptType: 'predefined',
+            jobId: null,
+            description: 'Werte aufbereiten',
+            parameter: 'threshold=0.95',
+            target: 'ergebnis_tabelle',
+            targetConfig: {
+                format: 'table',
+                writeMode: 'replace',
+                includeTimestamp: true
+            },
+            consolidation: this.blankConsolidation(
+                'exampledata_timeseries_1week'
+            )
+        });
+
+        // Pipeline-Baum
+        this.pipelineTrees = [{
+            id: 1,
+            name: 'Messdaten aufbereiten',
+            data: this.example(),
+            isDraft: false
+        }];
+
+        // Aktive Pipeline
+        this.activeTreeId = 1;
+        this.nextTreeId = 2;
+        this.pipeline = this.pipelineTrees[0].data;
+
+        // Bearbeitungszustand
+        this.currentStep = 'script';
+        this.newDraft = false;
+        this.visualModel = null;
+        this.scriptMode = 'existing';
+
+        // Graph-Konfiguration
+        this.graphSource = 'PmTreeNode';
+        this.graphHeight = 685;
+        this.graphColumn = 375;
+
+        // Beschriftung
+        this.labels = {
+            source:'Quelle',
+            consolidation:'Konsolidierung',
+            filter:'Filter',
+            script:'Skript / Job',
+            target:'Ziel'
+        };
+
+        // Feature: Vergrößern und verkleinern
+        this.expandButton = this.$('vmExpand');
+        this.expandLabel = this.$('vmExpandLabel');
+        this.editorCard = this.root.querySelector(
+            '.pm-card[aria-label="Pipeline-Editor"]'
+        );
+
+    }
+
+    $(id) {
+        return this.root.querySelector('#' + id);
+    }
+
+    initializeUI() {
+
+        /*
+            Dieser Code gehört zur Initialisierung der Benutzeroberfläche.
+            Er verbindet die drei Zoom-Schaltflächen mit den entsprechenden Funktionen.
+            Dadurch kann der Benutzer die grafische Pipeline-Ansicht vergrößern,
+            verkleinern oder auf die ursprüngliche Ansicht zurücksetzen.
+         */
+        this.$('vmZoomIn').addEventListener('click', () => this.changeZoom(0.15));
+        this.$('vmZoomOut').addEventListener('click', () => this.changeZoom(-0.15));
+
+        this.$('vmReset').addEventListener('click', () => {
+            if (!this.visualModel) return;
+
+            this.visualModel.resetZoom();
+            this.$('vmZoomLabel').textContent = '100 %';
+            this.$('visualViewport').scrollTop = 0;
+            this.$('visualViewport').scrollLeft = 0;
+        });
+
+        // Feature: Vergrößern und verkleinern
+        if (this.expandButton && this.editorCard) {
+            this.expandButton.addEventListener('click', () => {
+                const expanded =
+                    this.editorCard.classList.contains('pm-editor-expanded');
+
+                this.setEditorExpanded(!expanded);
             });
-            const example = () => ({
-              source:'exampledata_timeseries_1week', period:'7 Tage', script:'normalize_values.py',
-              scriptType:'predefined', jobId:null, description:'Werte aufbereiten',
-              parameter:'threshold=0.95', target:'ergebnis_tabelle',
-              consolidation: blankConsolidation('exampledata_timeseries_1week')
+
+            // Mit Escape den vergrößerten Editor schließen.
+            document.addEventListener('keydown', event => {
+                if (
+                    event.key === 'Escape' &&
+                    this.editorCard.classList.contains('pm-editor-expanded')
+                ) {
+                    this.setEditorExpanded(false);
+                }
             });
-            // Mehrere unabhängige Pipeline-Bäume, nur im Browserspeicher.
-            const pipelineTrees = [{ id: 1, name: 'Messdaten aufbereiten', data: example(), isDraft: false }];
-            let activeTreeId = 1;
-            let nextTreeId = 2;
-            let pipeline = pipelineTrees[0].data;
-            let currentStep = 'script';
-            let newDraft = false;
-            let visualModel = null;
-            const graphSource = 'PmTreeNode';
-            const graphHeight = 685;
-            const graphColumn = 375;
-            let scriptMode = 'existing';
-            const $ = id => root.querySelector('#' + id);
-            const labels = {
-              source:'Quelle', consolidation:'Konsolidierung', filter:'Filter',
-              script:'Skript / Job', target:'Ziel'
-            };
+        }
+        // Ende der Vergrößerungsfunktion
 
-            // Tabellen werden über die bestehende SmartData REST API gelesen.
-            // Die Datenbank wird niemals direkt vom Browser angesprochen.
-            let availableTables = null;  // null = Anfrage läuft
-            let tablesError = null;
-            const consolidationColumns = { a: null, b: null };
-            const consolidationRequestNumbers = { a: 0, b: 0 };
+        // Dieser Code registriert Klick-Ereignisse für alle Pipeline-Bausteine mit der
+        // CSS-Klasse .pm-node
+        this.root.querySelectorAll('.pm-node').forEach(node => {
+            node.addEventListener('click', () => {
+                this.selectStep(node.dataset.step);
+            });
+        });
 
-            // Bestehende Jobs und deren Parameter werden ausschließlich lesend geladen.
-            // Wichtig: Diese Oberfläche startet keine Jobs und speichert keine Änderungen.
-            let availableJobs = null; // null = wird geladen
-            let jobsError = null;
-            let jobParams = null;
-            let jobParamsError = null;
-            let actionDescriptions = null;
-            let actionDescriptionsError = null;
+        /*
+         * Registriert den Submit-Handler für das Detailformular und verarbeitet
+         * die Einstellungen des aktuell ausgewählten Pipeline-Schritts.
+         *
+         * Liest die Formulareingaben aus, validiert sie und übernimmt die
+         * Konfiguration für Datenquelle, Filter, Konsolidierung, Skript oder
+         * Ausgabeziel in das Pipeline-Datenobjekt.
+         *
+         * Aktualisiert anschließend die Pipeline-Vorschau und zeigt
+         * entsprechende Erfolgs- oder Fehlermeldungen an.
+         *
+         * Die Einstellungen werden zunächst lokal im Browser gespeichert.
+         * Eine tatsächliche Datenverarbeitung oder Serverspeicherung erfolgt
+         * durch diesen Handler nicht.
+         */
+        this.$('detailsForm').addEventListener('submit', event => {
+            event.preventDefault();
 
-            async function fetchRecords(url, responseKey) {
-              const response = await fetch(url, {
-                method: 'GET',
-                headers: { 'Accept': 'application/json' }
-              });
-              if (!response.ok) throw new Error(`HTTP ${response.status} (${url})`);
-              const data = await response.json();
-              if (!data || !Array.isArray(data[responseKey])) {
-                throw new Error(`Unerwartetes JSON: ${responseKey} fehlt (${url})`);
-              }
-              return data[responseKey];
+            if (this.currentStep === 'source') {
+                const sourceField = this.$('fieldSource');
+                const nextSource = sourceField ? sourceField.value : '';
+
+                if (nextSource && nextSource !== this.pipeline.source) {
+                    this.pipeline.source = nextSource;
+                    this.pipeline.consolidation ||= {};
+                    this.pipeline.consolidation.source_a = nextSource;
+                    this.pipeline.consolidation.timestamp_column_a = '';
+                    this.pipeline.consolidation.configured = false;
+                }
             }
 
-            function findJob(id) {
-              return (availableJobs || []).find(job => String(job.id) === String(id));
+            if (this.currentStep === 'filter') {
+                const colField = this.$('fieldFilterColumn');
+                const valField = this.$('fieldFilterValue');
+                const opField = this.$('fieldFilterOperator');
+                const periodField = this.$('fieldPeriod');
+
+                const column = colField ? colField.value.trim() : '';
+                const value = valField ? valField.value.trim() : '';
+                const operator = opField ? opField.value : 'gt';
+
+                if ((column && !value) || (!column && value)) {
+                    this.showMessage?.('Für einen Filter bitte sowohl Spaltenname als auch Vergleichswert eingeben.');
+                    return;
+                }
+
+                this.pipeline.period = periodField ? periodField.value : '7 Tage';
+                this.pipeline.filter = {
+                    column,
+                    operator,
+                    value,
+                    enabled: Boolean(column && value)
+                };
             }
 
-            function updateJobOptions() {
-              const select = $('fieldJob');
-              if (!select) return; // Panel ist aktuell nicht sichtbar.
-              const selectedBefore = select.value ||
-                (pipeline.scriptType === 'job' ? String(pipeline.jobId || '') : '');
-              select.replaceChildren();
-              if (jobsError) {
-                select.add(new Option('Jobs konnten nicht geladen werden', ''));
-                select.disabled = true;
-              } else if (availableJobs === null) {
-                select.add(new Option('Jobs werden geladen ...', ''));
-                select.disabled = true;
-              } else if (!availableJobs.length) {
-                select.add(new Option('Keine Jobs gefunden', ''));
-                select.disabled = true;
-              } else {
-                select.disabled = false;
-                select.add(new Option('Bitte Job auswählen', ''));
-                availableJobs.forEach(job => {
-                  select.add(new Option(`${job.name || 'Job'} (ID ${job.id})`, String(job.id)));
-                });
-                select.value = findJob(selectedBefore) ? selectedBefore : '';
-              }
-              const help = $('jobHelp');
-              if (help) {
-                help.textContent = jobsError
-                  ? 'SmartData nicht erreichbar. Payara und Browser-Konsole prüfen.'
-                  : availableJobs === null
+            if (this.currentStep === 'consolidation') {
+                const config = typeof this.readConsolidationConfiguration === 'function'
+                    ? this.readConsolidationConfiguration()
+                    : {};
+
+                const error = typeof this.validateConsolidation === 'function'
+                    ? this.validateConsolidation(config)
+                    : null;
+
+                if (error) {
+                    this.showMessage?.(error);
+                    return;
+                }
+
+                this.pipeline.consolidation = {
+                    ...config,
+                    configured: true
+                };
+
+                this.pipeline.source = config.source_a;
+
+                const jsonEl = this.$('consolidationJson');
+                if (jsonEl) jsonEl.textContent = JSON.stringify(config, null, 2);
+
+                const hintEl = this.$('conPreviewHint');
+                if (hintEl) hintEl.textContent = 'Konfiguration übernommen (nur im Browser).';
+
+                this.renderFlow?.();
+
+                this.showMessage?.(
+                    'Konsolidierung konfiguriert. Noch keine Daten zusammengeführt oder gespeichert.'
+                );
+
+                return;
+            }
+
+            if (this.currentStep === 'script') {
+                if (this.scriptMode === 'job') {
+                    const jobField = this.$('fieldJob');
+                    const jobName = jobField ? jobField.value : '';
+                    const job = typeof this.findJob === 'function' ? this.findJob(jobName) : null;
+
+                    if (!job) {
+                        this.showMessage?.('Bitte zuerst einen vorhandenen Job auswählen.');
+                        return;
+                    }
+
+                    this.pipeline.jobId = job.id;
+                    this.pipeline.script = job.name;
+                    this.pipeline.scriptType = 'job';
+                    this.pipeline.description = job.desc || '';
+                    this.pipeline.parameter = '';
+
+                    this.renderFlow?.();
+
+                    this.showMessage?.(
+                        `Job „${job.name}“ ausgewählt. Eine Job-Ausführung oder Speicherung findet noch nicht statt.`
+                    );
+
+                    return;
+                }
+
+                if (this.scriptMode === 'new') {
+                    const nameField = this.$('newScriptName');
+                    const codeField = this.$('newScriptCode');
+                    const descField = this.$('newScriptDescription');
+                    const paramField = this.$('newScriptParameter');
+
+                    const name = nameField ? nameField.value.trim() : '';
+                    const code = codeField ? codeField.value : '';
+
+                    if (!/^[A-Za-z0-9_.-]+\.py$/i.test(name)) {
+                        this.showMessage?.('Bitte einen gültigen Dateinamen wie mein_skript.py eingeben.');
+                        return;
+                    }
+
+                    if (!code.trim()) {
+                        this.showMessage?.('Bitte Python-Code eingeben oder eine .py-Datei importieren.');
+                        return;
+                    }
+
+                    // Syntax-Bug behoben: Code-Größenprüfung auf max. 100 KB (100 * 1024 Bytes)
+                    if (code.length > 100 * 1024) {
+                        this.showMessage?.('Der Python-Code darf maximal 100 KB groß sein.');
+                        return;
+                    }
+
+                    const predefinedScripts = this.predefinedScripts || [];
+                    if (predefinedScripts.some(script => script.name === name)) {
+                        this.showMessage?.('Dieser Skriptname ist bereits vergeben. Bitte einen anderen Namen wählen.');
+                        return;
+                    }
+
+                    const custom = {
+                        name,
+                        code,
+                        description: descField ? descField.value.trim() : '',
+                        parameter: paramField ? paramField.value.trim() : ''
+                    };
+
+                    this.ownScripts ||= [];
+                    const existingIndex = this.ownScripts.findIndex(script => script.name === name);
+
+                    if (existingIndex >= 0) {
+                        this.ownScripts[existingIndex] = custom;
+                    } else {
+                        this.ownScripts.push(custom);
+                    }
+
+                    this.pipeline.script = name;
+                    this.pipeline.jobId = null;
+                    this.pipeline.scriptType = 'custom';
+                    this.pipeline.description = custom.description;
+                    this.pipeline.parameter = custom.parameter;
+
+                    this.scriptMode = 'existing';
+
+                    this.renderFlow?.();
+                    this.renderDetails?.();
+
+                    this.showMessage?.(`Eigenes Skript „${name}“ wurde zur Skriptliste hinzugefügt.`);
+                    return;
+                }
+
+                const scriptField = this.$('fieldScript');
+                const descField = this.$('fieldDescription');
+                const paramField = this.$('fieldParameter');
+
+                this.pipeline.script = scriptField ? scriptField.value : '';
+                this.pipeline.jobId = null;
+
+                const ownScripts = this.ownScripts || [];
+                this.pipeline.scriptType = ownScripts.some(
+                    script => script.name === this.pipeline.script
+                ) ? 'custom' : 'predefined';
+
+                this.pipeline.description = descField ? descField.value : '';
+                this.pipeline.parameter = paramField ? paramField.value : '';
+            }
+
+            if (this.currentStep === 'target') {
+                const targetField = this.$('fieldTarget');
+                const formatField = this.$('fieldTargetFormat');
+                const writeModeField = this.$('fieldTargetWriteMode');
+                const timestampField = this.$('fieldTargetTimestamp');
+
+                const target = targetField ? targetField.value.trim() : '';
+                if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(target)) {
+                    this.showMessage?.('Bitte einen gültigen Tabellennamen eingeben (Buchstaben, Zahlen und Unterstriche).');
+                    return;
+                }
+
+                this.pipeline.target = target;
+                this.pipeline.targetConfig = {
+                    format: formatField ? formatField.value : 'table',
+                    writeMode: writeModeField ? writeModeField.value : 'replace',
+                    includeTimestamp: timestampField ? timestampField.checked : true
+                };
+            }
+
+            this.renderFlow?.();
+            this.showMessage?.('Einstellungen übernommen.');
+        });
+
+        /*
+         * Registriert den Klick-Handler zum Erstellen eines neuen Pipeline-Baums.
+         * Erzeugt eine neue Pipeline mit eindeutiger ID und initialisiert
+         * alle Pipeline-Schritte mit ihren Standardwerten.
+         * Fügt den neuen Baum der Pipeline-Liste hinzu, aktiviert ihn
+         * und wechselt zum ersten Bearbeitungsschritt.
+         * Der neue Pipeline-Baum wird zunächst nur lokal im Browser angelegt.
+         */
+        const newPipelineBtn = this.$('newPipeline');
+        if (newPipelineBtn) {
+            newPipelineBtn.addEventListener('click', () => {
+                this.nextTreeId ??= 1;
+                const id = this.nextTreeId++;
+
+                const tree = {
+                    id,
+                    name: `Pipeline ${id}`,
+                    data: {
+                        source: '',
+                        period: '7 Tage',
+                        filter: { column: '', operator: 'gt', value: '', enabled: false },
+                        script: '',
+                        scriptType: 'predefined',
+                        jobId: null,
+                        description: '',
+                        parameter: '',
+                        target: '',
+                        targetConfig: { format: 'table', writeMode: 'replace', includeTimestamp: true },
+                        consolidation: typeof this.blankConsolidation === 'function'
+                            ? this.blankConsolidation()
+                            : {}
+                    },
+                    isDraft: true
+                };
+
+                this.pipelineTrees ||= [];
+                this.pipelineTrees.push(tree);
+
+                this.activateTree?.(id, 'source');
+                this.showMessage?.(`Neuer Pipeline-Baum ${id} angelegt (nur lokal im Browser).`);
+            });
+        }
+
+        /*
+         * Registriert den Klick-Handler für die Schaltfläche zum Speichern
+         * der Pipeline.
+         * Zeigt einen Hinweis an, dass die dauerhafte Speicherung
+         * derzeit noch nicht implementiert ist.
+         */
+        const savePipelineBtn = this.$('savePipeline');
+        if (savePipelineBtn) {
+            savePipelineBtn.addEventListener('click', () => {
+                this.showMessage?.('Die dauerhafte Speicherung ist noch nicht angebunden.');
+            });
+        }
+    }
+
+    async loadData() {
+        await this.loadAvailableTables();
+        await this.loadExistingJobs();
+        await this.loadJobParams();
+        await this.loadActionDescriptions();
+        await this.initializeVisualModel();
+    }
+
+    /**
+     * Die Funktion <code>findJob(id)</code> sucht einen bestimmten Job in der Liste <code>availableJobs</code>
+     * und gibt den passenden Job zurück.
+     * @param id Die ID des Jobs, nach dem gesucht werden soll.
+     * @returns {*} Gibt den gefundenen Job zurück.
+     */
+    findJob(id) {
+        return (this.availableJobs || []).find(
+            job => String(job.id) === String(id)
+        );
+    }
+
+    /**
+     * Die Methode <code>updateJobOptions()</code> aktualisiert ein Dropdown-Menü in PipelineEditor.
+     * In diesem Dropdown werden die verfügbaren Jobs aus SmartData angezeigt.
+     * Sie prüft außerdem, ob die Jobs geladen wurden, ob Fehler aufgetreten sind und ob bereits ein Job ausgewählt war.
+     */
+    updateJobOptions() {
+        // Hier wird das HTML-Element mit der ID fieldJob gesucht. Mit der Hilfsmethode $(id).
+        const select = this.$('fieldJob');
+        if (!select) return; // existiert der Dropdown nicht, wird die Methode sofort beendet.
+
+        // Bisherige Auswahl speichern
+        const selectedBefore = select.value ||
+            (this.pipeline?.scriptType === 'job' ? String(this.pipeline.jobId || '') : '');
+
+        // Alte Dropdown Einträge entfernen.
+        select.replaceChildren();
+
+        // Prüfen, in welchem Zustand sich die Jobs befinden.
+        let message = '';
+        let isDisabled = true;
+
+        // 2. Zustand ermitteln (Guard Clauses / Variablen-Zuweisung)
+        if (this.jobsError) {
+            message = 'Jobs konnten nicht geladen werden';
+        } else if (this.availableJobs === null) {
+            message = 'Jobs werden geladen ...';
+        } else if (!this.availableJobs.length) {
+            message = 'Keine Jobs gefunden';
+        } else {
+            isDisabled = false;
+            message = 'Bitte Job auswählen';
+        }
+
+        // 3. Dropdown-Status und Standard-Option setzen
+        select.disabled = isDisabled;
+        select.add(new Option(message, ''));
+
+        // 4. Nur wenn Jobs da sind, diese hinzufügen und den Wert setzen
+        if (!isDisabled) {
+            for (const job of this.availableJobs) {
+                select.add(new Option(
+                    `${job.name || 'Job'} (ID ${job.id})`,
+                    String(job.id)
+                ));
+            }
+
+            select.value = this.findJob(selectedBefore) ? selectedBefore : '';
+        }
+
+        // Hilfetext aktualisieren
+        const help = this.$('jobHelp');
+
+        if (help) {
+            help.textContent = this.jobsError
+                ? 'SmartData nicht erreichbar. Payara und Browser-Konsole prüfen.'
+                : this.availableJobs === null
                     ? 'Bestehende Jobs werden aus SmartData geladen.'
-                    : `${availableJobs.length} vorhandene Jobs aus SmartData. Auswahl führt keinen Job aus.`;
-              }
-              renderJobDetails();
+                    : `${this.availableJobs.length} vorhandene Jobs aus SmartData. Auswahl führt keinen Job aus.`;
+        }
+
+        // Job Details anzeigen
+        this.renderJobDetails();
+    }
+
+    /**
+     * Die Funktion <code>appendJobText()</code> erstellt ein HTML-Element und fügt es einem anderen Element hinzu.
+     * Dabei wird bewusst <code>textContent</code> statt innerHTML verwendet.
+     * Das ist besonders wichtig, wenn der Text aus einer API wie SmartData kommt.
+     *
+     * @param container Das HTML-Element, in das der neue Absatz eingefügt werden soll.
+     * @param text Der Text, der angezeigt werden soll.
+     * @param className Die CSS-Klasse des neuen Absatzes. Standardmäßig wird <code>pm-field-help</code> verwendet. (Optional)
+     * @returns {HTMLParagraphElement} Diese Funktion gibt das neu erstellte HTML-Element zurück.
+     */
+    appendJobText(container, text, className = 'pm-field-help') {
+        const element = document.createElement('p');
+        element.className = className;
+        element.textContent = text;
+        container.appendChild(element);
+        return element;
+    }
+
+    /**
+     * Die Funktion <code>appendJobField()</code> erstellt ein Feld zur Anzeige von Job-Informationen.
+     * Sie fügt dabei ein Label und einen dazugehörigen Wert in einen Container ein.
+     * Besonders interessant ist, dass die Funktion selbst entscheidet, wie der Wert dargestellt wird:
+     * als normales Textfeld, als mehrzeiliges Textfeld oder ausgeblendet, wenn es sich um sensible Daten handelt.
+     * @param container Das HTML-Element, in das das neue Feld eingefügt wird.
+     * @param label Die Bezeichnung des Feldes, zum Beispiel "Job-ID" oder "Beschreibung".
+     * @param value Der dazugehörige Wert, zum Beispiel "123" oder "Daten verarbeiten".
+     */
+    appendJobField(container, label, value) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'pm-field';
+
+        const title = document.createElement('label');
+        title.textContent = label;
+        wrapper.appendChild(title);
+
+        const isSensitive = /(password|passwd|pwd|secret|token|api.?key)/i.test(label);
+        const valueString = value == null ? '' : String(value);
+        const isMultiline = !isSensitive && (valueString.length > 110 || valueString.includes('\n'));
+
+        // Element einmalig erstellen (Entweder textarea oder input)
+        const field = document.createElement(isMultiline ? 'textarea' : 'input');
+        field.readOnly = true;
+        field.value = isSensitive ? '[Wert aus Sicherheitsgründen ausgeblendet]' : valueString;
+
+        // Spezifische Eigenschaften je nach Typ setzen
+        if (isMultiline) {
+            field.rows = 5;
+            field.style.maxHeight = '220px';
+        } else if (!isSensitive) {
+            field.type = 'text';
+        }
+
+        wrapper.appendChild(field);
+        container.appendChild(wrapper);
+    }
+
+
+    /**
+     * Die Methode <code>updateSourceOptions()</code> aktualisiert das Quelltabellen-Dropdown in PipelineEditor.
+     * Sie prüft, ob Tabellen geladen wurden, ob ein Fehler aufgetreten ist und ob Tabellen zur Auswahl stehen.
+     * Anschließend aktualisiert sie den Hilfetext.
+     */
+    updateSourceOptions() {
+        const select = this.$('fieldSource');
+        if (!select) return;
+
+        select.replaceChildren();
+
+        let message = '';
+        let isDisabled = true;
+
+        // 1. Zustand ermitteln
+        if (this.tablesError) {
+            message = 'Tabellen konnten nicht geladen werden';
+        } else if (this.availableTables === null) {
+            message = 'Tabellen werden geladen ...';
+        } else if (!this.availableTables.length) {
+            message = 'Keine Tabellen gefunden';
+        } else {
+            isDisabled = false;
+            message = 'Bitte auswählen';
+        }
+
+        // 2. Dropdown-Zustand und Standard-Option setzen
+        select.disabled = isDisabled;
+        select.add(new Option(message, ''));
+
+        // 3. Wenn Tabellen vorhanden sind, diese hinzufügen
+        if (!isDisabled) {
+            for (const name of this.availableTables) {
+                select.add(new Option(name, name));
             }
+            select.value = this.availableTables.includes(this.pipeline?.source) ? this.pipeline?.source : '';
+        }
 
-            // DOM-Elemente statt HTML-Strings: Werte aus API-Antworten nicht als HTML ausführen.
-            function appendJobText(container, text, className = 'pm-field-help') {
-              const element = document.createElement('p');
-              element.className = className;
-              element.textContent = text;
-              container.appendChild(element);
-              return element;
-            }
-
-            function appendJobField(container, label, value) {
-              const wrapper = document.createElement('div');
-              wrapper.className = 'pm-field';
-              const title = document.createElement('label');
-              title.textContent = label;
-              wrapper.appendChild(title);
-              const valueString = value == null ? '' : String(value);
-              if (/(password|passwd|pwd|secret|token|api.?key)/i.test(label)) {
-                const hidden = document.createElement('input');
-                hidden.type = 'text';
-                hidden.readOnly = true;
-                hidden.value = '[Wert aus Sicherheitsgründen ausgeblendet]';
-                wrapper.appendChild(hidden);
-              } else if (valueString.length > 110 || valueString.includes('\n')) {
-                const area = document.createElement('textarea');
-                area.readOnly = true;
-                area.rows = 5;
-                area.value = valueString;
-                area.style.maxHeight = '220px';
-                wrapper.appendChild(area);
-              } else {
-                const input = document.createElement('input');
-                input.type = 'text';
-                input.readOnly = true;
-                input.value = valueString;
-                wrapper.appendChild(input);
-              }
-              container.appendChild(wrapper);
-            }
-
-            function renderJobDetails() {
-              const details = $('jobDetails');
-              const selected = $('fieldJob');
-              if (!details || !selected) return;
-              details.replaceChildren();
-              const job = findJob(selected.value);
-              if (!job) return;
-
-              appendJobField(details, 'Action / Job-Art', job.action || 'Keine Angabe');
-              appendJobField(details, 'Beschreibung', job.desc || 'Keine Beschreibung vorhanden');
-              appendJobText(details, `Status: ${job.active ? 'aktiv' : 'inaktiv'} · Job-ID: ${job.id}`);
-
-              const heading = document.createElement('h3');
-              heading.className = 'pm-script-subheading';
-              heading.textContent = 'Gespeicherte Job-Parameter (nur lesbar)';
-              details.appendChild(heading);
-
-              if (jobParamsError) {
-                appendJobText(details, 'Die Job-Parameter konnten nicht geladen werden.');
-              } else if (jobParams === null) {
-                appendJobText(details, 'Job-Parameter werden geladen ...');
-              } else {
-                const params = jobParams.filter(param => String(param.datajob_id) === String(job.id));
-                if (params.length === 0) {
-                  appendJobText(details, 'Für diesen Job sind keine Parameter gespeichert.');
-                }
-                params.forEach(param => {
-                  appendJobField(details, `${param.key || 'Parameter'} (${param.type || 'unbekannter Typ'})`, param.value);
-                });
-              }
-
-              const actionHeading = document.createElement('h3');
-              actionHeading.className = 'pm-script-subheading';
-              actionHeading.textContent = 'Action-Beschreibung (SmartDataJobs)';
-              details.appendChild(actionHeading);
-              if (actionDescriptionsError) {
-                appendJobText(details, 'getActionsDescription konnte nicht geladen werden.');
-              } else if (actionDescriptions === null) {
-                appendJobText(details, 'Action-Beschreibungen werden geladen ...');
-              } else {
-                // In datajobs steht z. B. "CheckNet", in der Dokumentation "CheckNetAction".
-                const action = actionDescriptions.find(item =>
-                  String(item.name || '').replace(/Action$/i, '').toLowerCase() ===
-                  String(job.action || '').replace(/Action$/i, '').toLowerCase()
-                );
-                if (!action) {
-                  appendJobText(details, `Für "${job.action || 'unbekannt'}" liefert getActionsDescription derzeit keine Beschreibung.`);
-                } else {
-                  appendJobText(details, `Dokumentierte Action: ${action.name}`);
-                  (Array.isArray(action.params) ? action.params : []).forEach(param => {
-                    const mandatory = param.optional === false ? 'Pflichtfeld' : 'optional';
-                    const dataType = param.type ? ` · Typ: ${param.type}` : '';
-                    appendJobText(details,
-                      `${param.name}: ${mandatory}${dataType}${param.description ? ' — ' + param.description : ''}`);
-                  });
-                }
-              }
-            }
-
-            async function loadExistingJobs() {
-              try {
-                availableJobs = await fetchRecords(
-                  '/SmartData/smartdata/records/datajobs?storage=smartmonitoring', 'records'
-                );
-                availableJobs = availableJobs.filter(job => job && job.id != null)
-                  .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
-                jobsError = null;
-              } catch (error) {
-                jobsError = error;
-                availableJobs = [];
-                console.error('PipelineEditor: Jobs konnten nicht geladen werden:', error);
-              }
-              updateJobOptions();
-            }
-
-            async function loadJobParams() {
-              try {
-                jobParams = await fetchRecords(
-                  '/SmartData/smartdata/records/datajobs_params?storage=smartmonitoring', 'records'
-                );
-                jobParamsError = null;
-              } catch (error) {
-                jobParams = [];
-                jobParamsError = error;
-                console.error('PipelineEditor: Job-Parameter konnten nicht geladen werden:', error);
-              }
-              renderJobDetails();
-            }
-
-            async function loadActionDescriptions() {
-              try {
-                actionDescriptions = await fetchRecords(
-                  '/SmartDataJobs/smartdatajobs/jobexecution/getActionsDescription', 'list'
-                );
-                actionDescriptionsError = null;
-              } catch (error) {
-                actionDescriptions = [];
-                actionDescriptionsError = error;
-                console.error('PipelineEditor: Action-Beschreibungen konnten nicht geladen werden:', error);
-              }
-              renderJobDetails();
-            }
-
-            function updateSourceOptions() {
-              const select = $('fieldSource');
-              if (!select) return; // Quelle ist derzeit nicht ausgewählt.
-
-              select.replaceChildren();
-              if (tablesError) {
-                select.add(new Option('Tabellen konnten nicht geladen werden', ''));
-                select.disabled = true;
-              } else if (availableTables === null) {
-                select.add(new Option('Tabellen werden geladen ...', ''));
-                select.disabled = true;
-              } else if (availableTables.length === 0) {
-                select.add(new Option('Keine Tabellen gefunden', ''));
-                select.disabled = true;
-              } else {
-                select.disabled = false;
-                select.add(new Option('Bitte auswählen', ''));
-                for (const name of availableTables) {
-                  select.add(new Option(name, name));
-                }
-                select.value = availableTables.includes(pipeline.source) ? pipeline.source : '';
-              }
-              const help = $('sourceHelp');
-              if (help) {
-                help.textContent = tablesError
-                  ? 'SmartData-API nicht erreichbar. Prüfe Payara und die Browser-Konsole.'
-                  : availableTables === null
+        // 4. Hilfetext aktualisieren
+        const help = this.$('sourceHelp');
+        if (help) {
+            help.textContent = this.tablesError
+                ? 'SmartData-API nicht erreichbar. Prüfe Payara und die Browser-Konsole.'
+                : this.availableTables === null
                     ? 'Die Tabellen werden aus SmartData geladen.'
                     : 'Echte Tabellen aus dem Schema smartmonitoring.';
-              }
-            }
+        }
+    }
 
-            async function loadAvailableTables() {
-              try {
-                const response = await fetch('/SmartData/smartdata/storage/getCollections?name=smartmonitoring', {
-                  method: 'GET',
-                  headers: { 'Accept': 'application/json' }
+    /**
+     * Die Methode <code>renderJobDetails()</code> ist dafür zuständig,
+     * die Detailinformationen eines ausgewählten Jobs auf der Benutzeroberfläche anzuzeigen.
+     */
+    renderJobDetails() {
+        const details = this.$('jobDetails');
+        const selected = this.$('fieldJob');
+        if (!details || !selected) return;
+
+        details.replaceChildren(); // Alte Inhalte entfernen
+
+        const job = this.findJob(selected.value);
+        if (!job) return;
+
+        // Lokaler Helfer für Überschriften
+        const addHeading = text => {
+            const h = document.createElement('h3');
+            h.className = 'pm-script-subheading';
+            h.textContent = text;
+            details.appendChild(h);
+        };
+
+        // 1. Grundlegende Job-Infos
+        this.appendJobField(details, 'Action / Job-Art', job.action || 'Keine Angabe');
+        this.appendJobField(details, 'Beschreibung', job.desc || 'Keine Beschreibung vorhanden');
+        this.appendJobText(details, `Status: ${job.active ? 'aktiv' : 'inaktiv'} · Job-ID: ${job.id}`);
+
+        // 2. Job-Parameter Sektion
+        addHeading('Gespeicherte Job-Parameter (nur lesbar)');
+        if (this.jobParamsError) {
+            this.appendJobText(details, 'Die Job-Parameter konnten nicht geladen werden.');
+        } else if (this.jobParams === null) {
+            this.appendJobText(details, 'Job-Parameter werden geladen ...');
+        } else {
+            const params = this.jobParams.filter(p => String(p.datajob_id) === String(job.id));
+            if (!params.length) this.appendJobText(details, 'Für diesen Job sind keine Parameter gespeichert.');
+
+            params.forEach(p => this.appendJobField(
+                details,
+                `${p.key || 'Parameter'} (${p.type || 'unbekannter Typ'})`,
+                p.value
+            ));
+        }
+
+        // 3. Action-Beschreibung Sektion
+        addHeading('Action-Beschreibung (SmartDataJobs)');
+        if (this.actionDescriptionsError) {
+            this.appendJobText(details, 'getActionsDescription konnte nicht geladen werden.');
+        } else if (this.actionDescriptions === null) {
+            this.appendJobText(details, 'Action-Beschreibungen werden geladen ...');
+        } else {
+            const cleanName = str => String(str || '').replace(/Action$/i, '').toLowerCase();
+            const action = this.actionDescriptions.find(item => cleanName(item.name) === cleanName(job.action));
+
+            if (!action) {
+                this.appendJobText(details, `Für "${job.action || 'unbekannt'}" liefert getActionsDescription derzeit keine Beschreibung.`);
+            } else {
+                this.appendJobText(details, `Dokumentierte Action: ${action.name}`);
+
+                (action.params || []).forEach(p => {
+                    const mandatory = p.optional === false ? 'Pflichtfeld' : 'optional';
+                    const dataType = p.type ? ` · Typ: ${p.type}` : '';
+                    this.appendJobText(details, `${p.name}: ${mandatory}${dataType}${p.description ? ' — ' + p.description : ''}`);
                 });
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                const json = await response.json();
-                if (!json || !Array.isArray(json.list)) {
-                  throw new Error('Unerwartetes Antwortformat der SmartData-API');
-                }
-                availableTables = [...new Set(json.list
-                  .map(item => item && item.name)
-                  .filter(name => typeof name === 'string' && name.length > 0))]
-                  .sort((a, b) => a.localeCompare(b));
-                tablesError = null;
-              } catch (error) {
-                tablesError = error;
-                availableTables = [];
-                console.error('PipelineEditor: Tabellen konnten nicht geladen werden:', error);
-              }
-              updateSourceOptions();
-              updateConsolidationTableOptions();
+            }
+        }
+    }
+
+
+    /**
+     * Die Methode <code>loadAvailableTables()</code> lädt die verfügbaren Tabellen aus der SmartData-API.
+     * Anschließend bereitet sie die Tabellennamen auf, entfernt doppelte und ungültige Einträge
+     * und aktualisiert zwei Dropdown-Menüs in PipelineEditor.
+     */
+    async loadAvailableTables() {
+        try {
+            const response = await fetch(
+                '/SmartData/smartdata/storage/getCollections?name=smartmonitoring',
+                { headers: { 'Accept': 'application/json' } }
+            );
+
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+            const json = await response.json();
+            if (!Array.isArray(json?.list)) {
+                throw new Error('Unerwartetes Antwortformat der SmartData-API');
             }
 
-            function showMessage(message) {
-              $('feedback').textContent = message;
-              $('feedback').hidden = false;
-            }
-            function clearMessage() { $('feedback').hidden = true; }
-            function findScript(name) {
-              return [...predefinedScripts, ...ownScripts].find(s => s.name === name);
-            }
-            function renderFlow() {
-              $('sourcePreview').textContent = pipeline.source || 'Bitte auswählen';
-              $('filterPreview').textContent = 'Zeitraum: ' + pipeline.period;
-              const consolidation = pipeline.consolidation;
-              $('consolidationPreview').textContent = consolidation.configured
-                ? `${consolidation.source_a} + ${consolidation.source_b} · ${consolidation.matching_mode}`
-                : 'Noch nicht konfiguriert';
-              $('scriptPreview').textContent = pipeline.script
-                ? pipeline.script
-                : 'Bitte auswählen';
-              $('targetPreview').textContent = pipeline.target || 'Bitte eingeben';
-              root.querySelectorAll('.pm-node').forEach(node => {
-                node.setAttribute('aria-pressed', String(node.dataset.step === currentStep));
-              });
-              const tree = pipelineTrees.find(item => item.id === activeTreeId);
-              $('pipelineLabel').textContent = `${tree.name}${tree.isDraft ? ' · Entwurf' : ''} · ${pipelineTrees.length} ${pipelineTrees.length === 1 ? 'Baum' : 'Bäume'}`;
-              $('currentStep').textContent = 'Ausgewählter Baustein: ' + labels[currentStep];
-              renderTreeList();
-              try {
-                renderVisualTree();
-              } catch (error) {
-                console.error('PipelineEditor: Fehler beim Zeichnen des Pipeline-Baums:', error);
-                const message = $('visualModelMessage');
+            this.availableTables = [...new Set(
+                json.list
+                    .map(item => item?.name)
+                    .filter(name => typeof name === 'string' && name.length > 0)
+            )].sort((a, b) => a.localeCompare(b));
+
+            this.tablesError = null;
+        } catch (error) {
+            this.tablesError = error;
+            this.availableTables = [];
+            console.error('PipelineEditor: Tabellen konnten nicht geladen werden:', error);
+        } finally {
+            // Wird garantiert ausgeführt – egal ob Erfolg oder Fehler
+            this.updateSourceOptions();
+            this.updateConsolidationTableOptions();
+        }
+    }
+
+    /**
+     * Aktualisiert die Vorschau aller Pipeline-Schritte und markiert den
+     * aktuell ausgewählten Baustein.
+     * Zeigt die Metadaten des aktiven Pipeline-Baums an und zeichnet
+     * anschließend die visuelle Baumansicht.
+     * Behandelt mögliche Fehler beim Zeichnen der Baumansicht.
+     */
+    renderFlow() {
+        const p = this.pipeline || {};
+
+        // 1. Vorschauen für die einzelnen Schritte aktualisieren
+        this.$('sourcePreview').textContent = p.source || 'Bitte auswählen';
+
+        const filter = p.filter || { column: '', operator: 'gt', value: '', enabled: false };
+        this.$('filterPreview').textContent = filter.enabled
+            ? `${p.period} · ${filter.column} ${filter.operator} ${filter.value}`
+            : `Zeitraum: ${p.period || ''}`;
+
+        const cons = p.consolidation || {};
+        this.$('consolidationPreview').textContent = cons.configured
+            ? `${cons.source_a} + ${cons.source_b} · ${cons.matching_mode}`
+            : 'Noch nicht konfiguriert';
+
+        this.$('scriptPreview').textContent = p.script || 'Bitte auswählen';
+
+        const targetConfig = p.targetConfig || { format: 'table', writeMode: 'replace' };
+        this.$('targetPreview').textContent = p.target
+            ? `${p.target} · ${targetConfig.format || 'table'} · ${targetConfig.writeMode || 'replace'}`
+            : 'Bitte eingeben';
+
+        // 2. Aktive Nodes / UI-Zustand markieren
+        this.root.querySelectorAll('.pm-node').forEach(node => {
+            node.setAttribute('aria-pressed', String(node.dataset.step === this.currentStep));
+        });
+
+        // 3. Baum-Metadaten sicher anzeigen
+        const trees = this.pipelineTrees || [];
+        const tree = trees.find(item => item.id === this.activeTreeId);
+
+        if (tree) {
+            this.$('pipelineLabel').textContent =
+                `${tree.name}${tree.isDraft ? ' · Entwurf' : ''} · ${trees.length} ${trees.length === 1 ? 'Baum' : 'Bäume'}`;
+        }
+
+        this.$('currentStep').textContent =
+            'Ausgewählter Baustein: ' + (this.labels?.[this.currentStep] || '');
+
+        this.renderTreeList();
+
+        // 4. Visuellen Baum mit Fallback/Fehlerbehandlung rendern
+        try {
+            this.renderVisualTree();
+        } catch (error) {
+            console.error('PipelineEditor: Fehler beim Zeichnen des Pipeline-Baums:', error);
+
+            const message = this.$('visualModelMessage');
+            if (message) {
                 message.textContent = `Baumansicht konnte nicht gezeichnet werden: ${error.message}. Details siehe F12 → Console.`;
                 message.hidden = false;
-              }
             }
+        }
+    }
 
-            function renderTreeList() {
-              const container = $('pipelineTreeList');
-              container.replaceChildren();
-              for (const tree of pipelineTrees) {
-                const button = document.createElement('button');
-                button.type = 'button';
-                button.className = 'pm-sidebar-btn pm-tree-entry';
-                button.setAttribute('aria-current', String(tree.id === activeTreeId));
-                const title = document.createElement('strong');
-                title.textContent = tree.name;
-                const status = document.createElement('span');
-                status.className = 'pm-tree-status';
-                status.textContent = `${tree.isDraft ? 'Entwurf · ' : ''}5 Schritte · Baum ${tree.id}`;
-                button.append(title, status);
-                button.addEventListener('click', () => activateTree(tree.id));
-                container.appendChild(button);
-              }
-            }
+    /**
+     * Erstellt die Liste aller vorhandenen Pipeline-Bäume in der Seitenleiste.
+     * Zeigt für jeden Baum den Namen, den Entwurfsstatus und die Baum-ID an.
+     * Markiert den aktiven Baum und ermöglicht durch Klick den Wechsel
+     * zu einem anderen Pipeline-Baum.
+     */
+    renderTreeList() {
+        const container = this.$('pipelineTreeList');
+        if (!container) return;
 
-            function activateTree(id, step) {
-              const tree = pipelineTrees.find(item => item.id === id);
-              if (!tree) return;
-              activeTreeId = tree.id;
-              pipeline = tree.data;
-              newDraft = tree.isDraft;
-              scriptMode = pipeline.scriptType === 'job' ? 'job' : 'existing';
-              selectStep(step || (tree.isDraft ? 'source' : 'script'));
-              const index = pipelineTrees.findIndex(item => item.id === id);
-              const viewport = $('visualViewport');
-              if (viewport && index >= 0) viewport.scrollLeft = Math.max(0, index * graphColumn - 85);
-            }
+        container.replaceChildren();
 
-            // VisualModel nutzt die vorhandene SWAC-View Visualmodel und Konva.
-            // Die Darstellung wird ausschließlich aus unseren lokalen Pipeline-Daten erzeugt.
-            async function loadKonva() {
-              if (window.Konva) return;
-              let lastError;
-              for (const rel of ['../VisualModel/libs/konva.min.js', '../Visualmodel/libs/konva.min.js']) {
-                try {
-                  await new Promise((resolve, reject) => {
-                    const script = document.createElement('script');
-                    script.src = new URL(rel, import.meta.url).href;
-                    script.onload = resolve;
-                    script.onerror = () => { script.remove(); reject(new Error(`Konva nicht gefunden: ${rel}`)); };
-                    document.head.appendChild(script);
-                  });
-                  if (window.Konva) return;
-                } catch (error) { lastError = error; }
-              }
-              throw lastError || new Error('Konva konnte nicht geladen werden.');
-            }
+        const trees = this.pipelineTrees || [];
 
-            async function loadVisualModelClass() {
-              let lastError;
-              for (const rel of ['../VisualModel/Visualmodel.js', '../Visualmodel/Visualmodel.js']) {
-                try { return (await import(rel)).default; }
-                catch (error) { lastError = error; }
-              }
-              throw lastError || new Error('Visualmodel.js nicht gefunden.');
-            }
+        for (const tree of trees) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'pm-sidebar-btn pm-tree-entry';
+            button.setAttribute('aria-current', String(tree.id === this.activeTreeId));
 
-            async function initializeVisualModel() {
-              try {
-                await loadKonva();
-                const Visualmodel = await loadVisualModelClass();
-                const instance = new Visualmodel({
-                  showMenue: false,
-                  showScenegraph: false,
-                  plugins: new Map(),
-                  allowZoom: false, // Mausrad scrollt, Zoom über die Toolbar.
-                  stageWidth: 760,
-                  stageHeight: graphHeight,
-                  autosave: false
-                });
-                instance.requestor = $('visualModelHost');
-                const general = instance.options.attributeDefaults.get('VisualmodelGeneral');
-                instance.options.attributeDefaults.set(graphSource, {
-                  ...general,
-                  dragmode: 'none', // Nur die gesamte Ansicht wird verschoben.
-                  onClick: event => {
-                    const set = event.target && event.target.attrs.swac_set;
-                    if (set && set.pmTreeId && set.pmStep) activateTree(set.pmTreeId, set.pmStep);
-                  }
-                });
-                await instance.init();
-                visualModel = instance;
-                $('visualModelMessage').hidden = true;
-                renderVisualTree();
-              } catch (error) {
-                console.error('PipelineEditor: VisualModel-Initialisierung fehlgeschlagen:', error);
-                $('visualModelMessage').textContent =
-                  `VisualModel konnte nicht geladen werden: ${error.message}. Die Bausteine unten bleiben bedienbar. Prüfe F12 → Console.`;
-                $('visualModelMessage').hidden = false;
-              }
-            }
+            const title = document.createElement('strong');
+            title.textContent = tree.name;
 
-            // VisualModel provides the SWAC canvas (stage/layer). Draw the pipeline
-            // directly with Konva shapes on that canvas. This does not require a
-            // SmartData data source or Visualmodel's getMainSourceData() metadata.
-            function renderVisualTree() {
-              if (!visualModel || !visualModel.stage || !visualModel.layer || !window.Konva) return;
-              const vm = visualModel;
-              const K = window.Konva;
-              const canvasWidth = Math.max(760, pipelineTrees.length * graphColumn + 70);
-              const nodeWidth = 170;
-              const nodeHeight = 65;
-              const rows = { source: 80, consolidation: 192, filter: 304, script: 416, target: 528 };
-              const colors = { source:'#138b70', consolidation:'#8057c4', filter:'#2c7cbe', script:'#bc852d', target:'#c65e80' };
-              vm.requestor.style.width = `${canvasWidth}px`;
-              vm.stage.width(canvasWidth);
-              vm.stage.height(graphHeight);
-              vm.layer.destroyChildren();
+            const status = document.createElement('span');
+            status.className = 'pm-tree-status';
+            status.textContent = `${tree.isDraft ? 'Entwurf · ' : ''}5 Schritte · Baum ${tree.id}`;
 
-              function addArrow(ax, ay, bx, by) {
-                vm.layer.add(new K.Arrow({
-                  points: [ax, ay, bx, by],
-                  stroke: '#91a4b9', fill: '#91a4b9', strokeWidth: 2,
-                  pointerLength: 8, pointerWidth: 8,
-                  listening: false
-                }));
-              }
+            button.append(title, status);
+            button.addEventListener('click', () => this.activateTree(tree.id));
 
-              function addNode(tree, x, y, step, title, subtitle) {
-                const selected = tree.id === activeTreeId && currentStep === step;
-                const group = new K.Group({x, y, listening:true});
-                group.add(new K.Rect({
-                  x:0, y:0, width:nodeWidth, height:nodeHeight,
-                  fill:selected ? '#e6f3ff' : '#ffffff',
-                  stroke:selected ? '#1769aa' : colors[step],
-                  strokeWidth:selected ? 2.8 : 1.5, cornerRadius:9,
-                  shadowColor:'#304960', shadowBlur:3, shadowOpacity:0.09
-                }));
-                group.add(new K.Text({
-                  x:10,y:11,width:nodeWidth-20,height:20,text:title,
-                  fontSize:13,fontStyle:'bold',fill:'#203854',listening:false
-                }));
-                group.add(new K.Text({
-                  x:10,y:35,width:nodeWidth-20,height:24,text:String(subtitle || ''),
-                  fontSize:10.5,fill:'#697d91',wrap:'none',ellipsis:true,listening:false
-                }));
-                group.on('mouseenter', () => {
-                  vm.stage.draggable(false);
-                  vm.stage.container().style.cursor = 'pointer';
-                });
-                group.on('mouseleave', () => {
-                  vm.stage.draggable(true);
-                  vm.stage.container().style.cursor = 'grab';
-                });
-                group.on('click tap', event => {
-                  event.cancelBubble = true;
-                  activateTree(tree.id, step);
-                });
-                vm.layer.add(group);
-              }
+            container.appendChild(button);
+        }
+    }
 
-              for (let index=0; index<pipelineTrees.length; index++) {
-                const tree = pipelineTrees[index];
-                const base = index * graphColumn + 34;
-                const centralX = base + 91;
-                const leftX = base;
-                const rightX = base + 183;
-                const con = tree.data.consolidation;
-                const hasB = Boolean(con.source_b);
-                const center = x => x + nodeWidth / 2;
-                // Connections are drawn before nodes so arrows stay behind boxes.
-                addArrow(center(hasB ? leftX : centralX), rows.source+nodeHeight, center(centralX), rows.consolidation);
-                if (hasB) addArrow(center(rightX), rows.source+nodeHeight, center(centralX), rows.consolidation);
-                for (const [from,to] of [
-                  ['consolidation','filter'], ['filter','script'], ['script','target']
-                ]) addArrow(center(centralX), rows[from]+nodeHeight, center(centralX), rows[to]);
-                vm.layer.add(new K.Text({
-                  x:base,y:28,width:nodeWidth*2+12,
-                  text:`${tree.name}${tree.isDraft ? ' · Entwurf' : ''}`,
-                  fill:tree.id === activeTreeId ? '#1769aa' : '#465d75',
-                  fontStyle:'bold',fontSize:16,listening:false
-                }));
-                addNode(tree, hasB ? leftX : centralX, rows.source,'source',
-                  hasB ? 'Quelle A':'Quelle',tree.data.source || 'Keine Tabelle gewählt');
-                if (hasB) addNode(tree,rightX,rows.source,'consolidation','Quelle B',con.source_b);
-                addNode(tree,centralX,rows.consolidation,'consolidation','Konsolidierung',
-                  con.configured ? `${con.matching_mode} · ${con.tolerance_seconds}s` : 'Noch nicht konfiguriert');
-                addNode(tree,centralX,rows.filter,'filter','Filter',tree.data.period);
-                // Never show Python source code inside the tree.
-                addNode(tree,centralX,rows.script,'script','Skript / Job',
-                  tree.data.scriptType === 'job' ? 'Job konfiguriert' : 'Skriptschritt');
-                addNode(tree,centralX,rows.target,'target','Ziel',tree.data.target || 'Kein Ziel gewählt');
-              }
-              vm.stage.draggable(true);
-              vm.layer.batchDraw();
-            }
+    /**
+     * Aktiviert einen Pipeline-Baum anhand seiner ID.
+     * Übernimmt dessen Daten und Entwurfsstatus, bestimmt den Skriptmodus
+     * und wählt den gewünschten oder standardmäßigen Bearbeitungsschritt aus.
+     * Scrollt anschließend zur Position des ausgewählten Baums in der visuellen Ansicht.
+     *
+     * @param {number} id - ID des zu aktivierenden Pipeline-Baums.
+     * @param {string} [step] - Optionaler Bearbeitungsschritt.
+     */
+    activateTree(id, step) {
+        const trees = this.pipelineTrees || [];
+        const tree = trees.find(item => item.id === id);
+        if (!tree) return;
 
-            function changeZoom(delta) {
-              if (!visualModel) return;
-              const next = Math.max(0.5, Math.min(1.6, Math.round((visualModel.stage.scaleX() + delta) * 100) / 100));
-              visualModel.zoom(next);
-              $('vmZoomLabel').textContent = `${Math.round(next * 100)} %`;
-            }
-            $('vmZoomIn').addEventListener('click', () => changeZoom(0.15));
-            $('vmZoomOut').addEventListener('click', () => changeZoom(-0.15));
-            $('vmReset').addEventListener('click', () => {
-              if (!visualModel) return;
-              visualModel.resetZoom();
-              $('vmZoomLabel').textContent = '100 %';
-              $('visualViewport').scrollTop = 0;
-              $('visualViewport').scrollLeft = 0;
+        this.activeTreeId = tree.id;
+        this.pipeline = tree.data;
+        this.newDraft = tree.isDraft;
+        this.scriptMode = this.pipeline?.scriptType === 'job' ? 'job' : 'existing';
+
+        // Klassenkontext: this.selectStep aufrufen
+        if (typeof this.selectStep === 'function') {
+            this.selectStep(step || (tree.isDraft ? 'source' : 'script'));
+        }
+
+        // Viewport-Scrollen korrigieren und absichern
+        const index = trees.findIndex(item => item.id === id);
+        const viewport = this.$('visualViewport');
+
+        if (viewport && index >= 0) {
+            // Multiplikation mit der Spaltenbreite (Fallback auf 85px, falls graphColumn nicht existiert)
+            const columnWidth = this.graphColumn || 85;
+            viewport.scrollLeft = Math.max(0, index * columnWidth);
+        }
+    }
+
+    /**
+     * Zeichnet alle vorhandenen Pipeline-Bäume mit Konva in der VisualModel-Ansicht.
+     * Erstellt die Pipeline-Bausteine, Verbindungspfeile und Überschriften.
+     * Hebt den aktiven Pipeline-Baum und den ausgewählten Bearbeitungsschritt hervor.
+     * Ermöglicht die Auswahl von Pipeline-Schritten durch Klick auf die Bausteine.
+     * Aktualisiert anschließend die grafische Darstellung.
+     */
+    renderVisualTree() {
+        if (!this.visualModel?.stage || !this.visualModel?.layer || !window.Konva) {
+            return;
+        }
+
+        const vm = this.visualModel;
+        const K = window.Konva;
+        const trees = this.pipelineTrees || [];
+        const columnWidth = this.graphColumn || 220; // Fallback, falls graphColumn nicht definiert
+
+        const canvasWidth = Math.max(
+            760,
+            trees.length * columnWidth + 70
+        );
+
+        const nodeWidth = 170;
+        const nodeHeight = 65;
+
+        const rows = {
+            source: 80,
+            consolidation: 192,
+            filter: 304,
+            script: 416,
+            target: 528
+        };
+
+        const colors = {
+            source: '#138b70',
+            consolidation: '#8057c4',
+            filter: '#2c7cbe',
+            script: '#bc852d',
+            target: '#c65e80'
+        };
+
+        vm.requestor.style.width = `${canvasWidth}px`;
+        vm.stage.width(canvasWidth);
+        vm.stage.height(this.graphHeight || 650);
+        vm.layer.destroyChildren();
+
+        const addArrow = (ax, ay, bx, by) => {
+            vm.layer.add(new K.Arrow({
+                points: [ax, ay, bx, by],
+                stroke: '#91a4b9',
+                fill: '#91a4b9',
+                strokeWidth: 2,
+                pointerLength: 8,
+                pointerWidth: 8,
+                listening: false
+            }));
+        };
+
+        const addNode = (tree, x, y, step, title, subtitle) => {
+            const selected = tree.id === this.activeTreeId && this.currentStep === step;
+
+            const group = new K.Group({ x, y, listening: true });
+
+            group.add(new K.Rect({
+                x: 0,
+                y: 0,
+                width: nodeWidth,
+                height: nodeHeight,
+                fill: selected ? '#e6f3ff' : '#ffffff',
+                stroke: selected ? '#1769aa' : colors[step],
+                strokeWidth: selected ? 2.8 : 1.5,
+                cornerRadius: 9,
+                shadowColor: '#304960',
+                shadowBlur: 3,
+                shadowOpacity: 0.09
+            }));
+
+            group.add(new K.Text({
+                x: 10,
+                y: 11,
+                width: nodeWidth - 20,
+                height: 20,
+                text: title,
+                fontSize: 13,
+                fontStyle: 'bold',
+                fill: '#203854',
+                listening: false
+            }));
+
+            group.add(new K.Text({
+                x: 10,
+                y: 35,
+                width: nodeWidth - 20,
+                height: 24,
+                text: String(subtitle || ''),
+                fontSize: 10.5,
+                fill: '#697d91',
+                wrap: 'none',
+                ellipsis: true,
+                listening: false
+            }));
+
+            group.on('mouseenter', () => {
+                vm.stage.draggable(false);
+                vm.stage.container().style.cursor = 'pointer';
             });
 
-            const forms = {
-              source: `
-                <div class="pm-field"><label for="fieldSource">Datenquelle / Tabelle auswählen</label>
-                  <select id="fieldSource" name="source" disabled>
-                    <option value="">Tabellen werden geladen ...</option>
-                  </select>
-                  <span id="sourceHelp" class="pm-field-help">Die Tabellen werden aus SmartData geladen.</span>
-                </div>`,
-              filter: `
-                <div class="pm-field"><label for="fieldPeriod">Zeitraum auswählen</label>
-                  <select id="fieldPeriod" name="period">
-                    <option>24 Stunden</option><option>7 Tage</option><option>30 Tage</option><option>Alle Daten</option>
-                  </select>
-                  <span class="pm-field-help">Zeitbereich für die ausgewählten Messdaten festlegen.</span>
-                </div>`,
-              consolidation: `
-                <p class="pm-field-help pm-con-intro">Zeitbasiertes Matching aus dem Datenkonsolidierungs-Mockup. Tabelle A wird mit dem Schritt „Quelle“ synchronisiert.</p>
-                <div class="pm-field">
-                  <label for="fieldConSourceA">Tabelle A (Quelle)</label>
-                  <select id="fieldConSourceA" disabled required><option value="">Tabellen werden geladen ...</option></select>
-                </div>
-                <div class="pm-field">
-                  <label for="fieldConSourceB">Tabelle B (zweite Datenquelle)</label>
-                  <select id="fieldConSourceB" disabled required><option value="">Tabellen werden geladen ...</option></select>
-                </div>
-                <div class="pm-field">
-                  <label for="fieldConTimeA">Zeitstempel-Spalte A</label>
-                  <select id="fieldConTimeA" required disabled><option value="">Zuerst Tabelle A auswählen</option></select>
-                  <span id="conTimeHintA" class="pm-field-help"></span>
-                </div>
-                <div class="pm-field">
-                  <label for="fieldConTimeB">Zeitstempel-Spalte B</label>
-                  <select id="fieldConTimeB" required disabled><option value="">Zuerst Tabelle B auswählen</option></select>
-                  <span id="conTimeHintB" class="pm-field-help"></span>
-                </div>
-                <div class="pm-field">
-                  <label for="fieldConMode">Matching-Modus</label>
-                  <select id="fieldConMode">
-                    <option value="intersection">Intersection – nur passende Zeitpunkte</option>
-                    <option value="union">Union – auch nicht passende Datensätze</option>
-                  </select>
-                </div>
-                <div class="pm-field">
-                  <label for="fieldConTolerance">Zeitliche Toleranz (Sekunden)</label>
-                  <input id="fieldConTolerance" type="number" min="0" max="86400" step="1" required>
-                </div>
-                <div class="pm-field">
-                  <label for="fieldConTarget">Gewünschte Konsolidierungs-Zieltabelle</label>
-                  <input id="fieldConTarget" type="text" required placeholder="consolidated_timeseries">
-                </div>
-                <div class="pm-con-preview">
-                  <strong>JSON-Konfigurationsvorschau</strong>
-                  <p id="conPreviewHint" class="pm-field-help">Noch keine Konfiguration übernommen.</p>
-                  <pre id="consolidationJson" aria-live="polite">Noch keine Konfiguration erzeugt.</pre>
-                  <p class="pm-field-help">Nur Frontend-Konfiguration: Es werden keine Daten zusammengeführt, keine Jobs gestartet und keine Daten gespeichert. Das JSON ist kein bestätigter Backend-Vertrag.</p>
-                </div>`,
-              script: `
-                <div class="pm-script-modes" role="group" aria-label="Skript oder Job auswählen" style="grid-template-columns:repeat(3,minmax(0,1fr))">
-                  <button type="button" class="pm-mode-btn" data-script-mode="existing" aria-pressed="true">Skript</button>
-                  <button type="button" class="pm-mode-btn" data-script-mode="new" aria-pressed="false">Eigenes Skript</button>
-                  <button type="button" class="pm-mode-btn" data-script-mode="job" aria-pressed="false">Job</button>
-                </div>
-                <div id="existingJobPanel" class="pm-script-panel" hidden>
-                  <div class="pm-script-subheading">Vorhandenen Job auswählen</div>
-                  <div class="pm-field"><label for="fieldJob">Job</label>
-                    <select id="fieldJob" name="job" disabled>
-                      <option value="">Jobs werden geladen ...</option>
-                    </select>
-                    <span class="pm-field-help" id="jobHelp">Bestehende Jobs werden aus SmartData geladen.</span>
-                  </div>
-                  <div id="jobDetails" aria-live="polite"></div>
-                </div>
-                <div id="existingScriptPanel" class="pm-script-panel">
-                  <div class="pm-script-subheading">Skript aus der Liste auswählen</div>
-                  <div class="pm-field"><label for="fieldScript">Skript auswählen</label>
-                    <select id="fieldScript" name="script"></select>
-                    <span class="pm-field-help">Vorhandenes oder selbst erstelltes Skript auswählen.</span>
-                  </div>
-                  <div class="pm-field"><label for="fieldDescription">Beschreibung</label>
-                    <textarea id="fieldDescription" name="description" rows="3"></textarea>
-                  </div>
-                  <div class="pm-field"><label for="fieldParameter">Parameter</label>
-                    <input id="fieldParameter" name="parameter" type="text" placeholder="z. B. threshold=0.95">
-                    <span class="pm-field-help">Parameter für das ausgewählte Skript festlegen.</span>
-                  </div>
-                  <div class="pm-field" id="ownCodePreviewWrapper" hidden>
-                    <label>Quellcode des eigenen Skripts</label>
-                    <pre class="pm-custom-code-preview" id="ownCodePreview"></pre>
-                  </div>
-                </div>
-                <div id="newScriptPanel" class="pm-script-panel" hidden>
-                  <div class="pm-script-subheading">Neuen Python-Baustein erstellen</div>
-                  <div class="pm-field"><label for="newScriptName">Skriptname</label>
-                    <input id="newScriptName" name="newScriptName" type="text" autocomplete="off" placeholder="z. B. meine_auswertung.py">
-                  </div>
-                  <div class="pm-field"><label for="newScriptDescription">Beschreibung</label>
-                    <textarea id="newScriptDescription" name="newScriptDescription" rows="2" placeholder="Was macht das Skript?"></textarea>
-                  </div>
-                  <div class="pm-field"><label for="newScriptParameter">Parameter (optional)</label>
-                    <input id="newScriptParameter" name="newScriptParameter" type="text" placeholder="z. B. faktor=2">
-                  </div>
-                  <div class="pm-field"><label for="newScriptCode">Python-Code</label>
-                    <textarea class="pm-code-editor" id="newScriptCode" name="newScriptCode" spellcheck="false" placeholder="def process(values):\n    return [x * 2 for x in values]"></textarea>
-                    <span class="pm-field-help">Python-Code eingeben oder aus einer .py-Datei übernehmen.</span>
-                  </div>
-                  <div class="pm-field"><label for="newScriptFile">Vorhandene .py-Datei importieren (optional)</label>
-                    <input id="newScriptFile" name="newScriptFile" type="file" accept=".py,text/x-python">
-                    <span class="pm-field-help">Dateigröße maximal 100 KB.</span>
-                  </div>
-                </div>`,
-              target: `
-                <div class="pm-field"><label for="fieldTarget">Zieltabelle</label>
-                  <input id="fieldTarget" name="target" type="text" placeholder="z. B. ergebnis_tabelle">
-                  <span class="pm-field-help">Tabelle für die Ausgabe der Verarbeitung festlegen.</span>
-                </div>`
+            group.on('mouseleave', () => {
+                vm.stage.draggable(true);
+                vm.stage.container().style.cursor = 'grab';
+            });
+
+            group.on('click tap', event => {
+                event.cancelBubble = true;
+                this.activateTree(tree.id, step);
+            });
+
+            vm.layer.add(group);
+        };
+
+        trees.forEach((tree, index) => {
+            const base = index * columnWidth + 34;
+            const centralX = base + 91;
+            const leftX = base;
+            const rightX = base + 183;
+
+            const con = tree.data?.consolidation || {};
+            const hasB = Boolean(con.source_b);
+
+            const center = x => x + nodeWidth / 2;
+
+            addArrow(
+                center(hasB ? leftX : centralX),
+                rows.source + nodeHeight,
+                center(centralX),
+                rows.consolidation
+            );
+
+            if (hasB) {
+                addArrow(
+                    center(rightX),
+                    rows.source + nodeHeight,
+                    center(centralX),
+                    rows.consolidation
+                );
+            }
+
+            for (const [from, to] of [
+                ['consolidation', 'filter'],
+                ['filter', 'script'],
+                ['script', 'target']
+            ]) {
+                addArrow(
+                    center(centralX),
+                    rows[from] + nodeHeight,
+                    center(centralX),
+                    rows[to]
+                );
+            }
+
+            vm.layer.add(new K.Text({
+                x: base,
+                y: 28,
+                width: nodeWidth * 2 + 12,
+                text: `${tree.name}${tree.isDraft ? ' · Entwurf' : ''}`,
+                fill: tree.id === this.activeTreeId ? '#1769aa' : '#465d75',
+                fontStyle: 'bold',
+                fontSize: 16,
+                listening: false
+            }));
+
+            addNode(
+                tree,
+                hasB ? leftX : centralX,
+                rows.source,
+                'source',
+                hasB ? 'Quelle A' : 'Quelle',
+                tree.data?.source || 'Keine Tabelle gewählt'
+            );
+
+            if (hasB) {
+                addNode(
+                    tree,
+                    rightX,
+                    rows.source,
+                    'consolidation',
+                    'Quelle B',
+                    con.source_b
+                );
+            }
+
+            addNode(
+                tree,
+                centralX,
+                rows.consolidation,
+                'consolidation',
+                'Konsolidierung',
+                con.configured
+                    ? `${con.matching_mode} · ${con.tolerance_seconds}s`
+                    : 'Noch nicht konfiguriert'
+            );
+
+            addNode(
+                tree,
+                centralX,
+                rows.filter,
+                'filter',
+                'Filter',
+                tree.data?.period
+            );
+
+            addNode(
+                tree,
+                centralX,
+                rows.script,
+                'script',
+                'Skript / Job',
+                tree.data?.scriptType === 'job'
+                    ? 'Job konfiguriert'
+                    : 'Skriptschritt'
+            );
+
+            addNode(
+                tree,
+                centralX,
+                rows.target,
+                'target',
+                'Ziel',
+                tree.data?.target || 'Kein Ziel gewählt'
+            );
+        });
+
+        vm.stage.draggable(true);
+        vm.layer.batchDraw();
+    }
+
+    /**
+     * Rendert das Eingabeformular für den aktuell ausgewählten Pipeline-Schritt.
+     * Fügt das passende HTML-Formular in den Detailbereich ein und stellt
+     * die gespeicherten Pipeline-Einstellungen wieder her.
+     * Initialisiert abhängig vom ausgewählten Schritt die zugehörigen
+     * Formulare, Dropdowns und Ereignis-Listener.
+     */
+    renderDetails() {
+        const detailsForm = this.$('detailsForm');
+        if (!detailsForm) return;
+
+        const step = this.currentStep;
+        const forms = this.forms || {};
+        const formHtml = forms[step] || '';
+
+        detailsForm.innerHTML =
+            formHtml +
+            '<button id="submitSettings" type="submit" class="pm-btn pm-btn-primary">Änderungen übernehmen</button>';
+
+        const p = this.pipeline || {};
+
+        if (step === 'source') {
+            this.updateSourceOptions?.();
+        }
+
+        if (step === 'filter') {
+            const filter = p.filter || { column: '', operator: 'gt', value: '', enabled: false };
+
+            const periodField = this.$('fieldPeriod');
+            if (periodField) periodField.value = p.period || '7 Tage';
+
+            const colField = this.$('fieldFilterColumn');
+            if (colField) colField.value = filter.column || '';
+
+            const opField = this.$('fieldFilterOperator');
+            if (opField) opField.value = filter.operator || 'gt';
+
+            const valField = this.$('fieldFilterValue');
+            if (valField) valField.value = filter.value == null ? '' : String(filter.value);
+        }
+
+        if (step === 'consolidation') {
+            const submitBtn = this.$('submitSettings');
+            if (submitBtn) {
+                submitBtn.textContent = 'Konsolidierung übernehmen';
+            }
+
+            this.setupConsolidationPanel?.();
+        }
+
+        if (step === 'script') {
+            this.setupScriptPanel?.();
+        }
+
+        if (step === 'target') {
+            const targetConfig = p.targetConfig || {
+                format: 'table',
+                writeMode: 'replace',
+                includeTimestamp: true
             };
 
-            // Konsolidierung als zusätzlicher Pipeline-Schritt.
-            // Die vorhandenen SmartData-REST-Endpunkte werden nur lesend verwendet.
-            function isTimestampCandidate(attribute) {
-              const type = String(attribute.type || '').toLowerCase();
-              const name = String(attribute.name || '').toLowerCase();
-              return /(timestamp|timestamptz|datetime|date|time)/i.test(type) ||
-                /^(ts|timestamp|time|datetime|recorded_at|measured_at|acquiretime|created_at|updated_at)$/.test(name);
-            }
+            const targetField = this.$('fieldTarget');
+            if (targetField) targetField.value = p.target || '';
 
-            function isTimestampType(attribute) {
-              // Nicht jede Spalte mit einem passenden Namen enthält tatsächlich Zeitwerte.
-              return /(timestamp|timestamptz|datetime|date|time)/i.test(String(attribute.type || ''));
-            }
+            const formatField = this.$('fieldTargetFormat');
+            if (formatField) formatField.value = targetConfig.format || 'table';
 
-            function updateConsolidationTableOptions() {
-              const sourceA = $('fieldConSourceA');
-              const sourceB = $('fieldConSourceB');
-              if (!sourceA || !sourceB) return;
-              const previousA = sourceA.value || pipeline.consolidation.source_a || pipeline.source;
-              const previousB = sourceB.value || pipeline.consolidation.source_b;
-              for (const select of [sourceA, sourceB]) {
-                select.replaceChildren();
-                if (tablesError) {
-                  select.add(new Option('SmartData nicht erreichbar', ''));
-                  select.disabled = true;
-                } else if (availableTables === null) {
-                  select.add(new Option('Tabellen werden geladen ...', ''));
-                  select.disabled = true;
-                } else if (!availableTables.length) {
-                  select.add(new Option('Keine Tabellen vorhanden', ''));
-                  select.disabled = true;
-                } else {
-                  select.add(new Option('Bitte Tabelle auswählen', ''));
-                  availableTables.forEach(name => select.add(new Option(name, name)));
-                  select.disabled = false;
+            const writeModeField = this.$('fieldTargetWriteMode');
+            if (writeModeField) writeModeField.value = targetConfig.writeMode || 'replace';
+
+            const timestampField = this.$('fieldTargetTimestamp');
+            if (timestampField) timestampField.checked = targetConfig.includeTimestamp !== false;
+        }
+    }
+
+    /**
+     * Vergrößert oder verkleinert den Pipeline-Editor.
+     * Passt die CSS-Klassen und die Beschriftungen der Erweiterungsschaltfläche
+     * entsprechend dem aktuellen Zustand an.
+     * Aktualisiert die Accessibility-Attribute für Screenreader.
+     * Zeichnet die VisualModel-Ansicht nach der Größenänderung neu.
+     *
+     * @param {boolean} expanded - Gibt an, ob der Editor vergrößert dargestellt werden soll.
+     */
+    setEditorExpanded(expanded) {
+        if (!this.editorCard || !this.expandButton) return;
+
+        this.editorCard.classList.toggle('pm-editor-expanded', this.expanded);
+        document.body.classList.toggle('pm-editor-open', this.expanded);
+
+        this.expandButton.setAttribute(
+            'aria-pressed',
+            String(expanded)
+        );
+
+        this.expandButton.setAttribute(
+            'aria-label',
+            expanded ? 'Editor verkleinern' : 'Editor vergrößern'
+        );
+
+        this.expandButton.title = expanded
+            ? 'Editor verkleinern'
+            : 'Editor vergrößern';
+
+        if (this.expandLabel) {
+            this.expandLabel.textContent = expanded
+                ? '⛶ Verkleinern'
+                : '⛶ Vergrößern';
+        }
+
+        // VisualModel nach Größenänderung neu zeichnen.
+        requestAnimationFrame(() => {
+            if (this.visualModel) {
+                this.renderVisualTree();
+            }
+        });
+    }
+
+    /**
+     * Aktualisiert die Dropdown-Menüs für die beiden Datenquellen
+     * der Datenkonsolidierung.
+     * Berücksichtigt Ladezustände und Fehler beim Abrufen der Tabellen,
+     * stellt gültige vorherige Auswahlen wieder her und lädt anschließend
+     * die zugehörigen Zeitstempel-Spalten für beide Tabellen.
+     */
+    updateConsolidationTableOptions() {
+        const sourceA = this.$('fieldConSourceA');
+        const sourceB = this.$('fieldConSourceB');
+        if (!sourceA || !sourceB) return;
+
+        const p = this.pipeline || {};
+        const con = p.consolidation || {};
+
+        const previousA = sourceA.value || con.source_a || p.source;
+        const previousB = sourceB.value || con.source_b;
+
+        const tables = this.availableTables;
+        let message = '';
+        let isDisabled = true;
+
+        // 1. Status einmalig für beide Dropdowns ermitteln
+        if (this.tablesError) {
+            message = 'SmartData nicht erreichbar';
+        } else if (tables === null) {
+            message = 'Tabellen werden geladen ...';
+        } else if (!tables.length) {
+            message = 'Keine Tabellen vorhanden';
+        } else {
+            isDisabled = false;
+            message = 'Bitte Tabelle auswählen';
+        }
+
+        // 2. Beide Select-Elemente in einer Schleife befüllen
+        for (const select of [sourceA, sourceB]) {
+            select.replaceChildren();
+            select.disabled = isDisabled;
+            select.add(new Option(message, ''));
+
+            if (!isDisabled) {
+                for (const name of tables) {
+                    select.add(new Option(name, name));
                 }
-              }
-              if (availableTables && availableTables.length) {
-                sourceA.value = availableTables.includes(previousA) ? previousA : '';
-                sourceB.value = availableTables.includes(previousB) ? previousB : '';
-                loadConsolidationColumns('a', pipeline.consolidation.timestamp_column_a);
-                loadConsolidationColumns('b', pipeline.consolidation.timestamp_column_b);
-              }
+            }
+        }
+
+        // 3. Ausgewählte Werte setzen und Spalten laden, falls Tabellen existieren
+        if (tables?.length) {
+            sourceA.value = tables.includes(previousA) ? previousA : '';
+            sourceB.value = tables.includes(previousB) ? previousB : '';
+
+            this.loadConsolidationColumns('a', con.timestamp_column_a);
+            this.loadConsolidationColumns('b', con.timestamp_column_b);
+        }
+    }
+
+    /**
+     * Liest die aktuellen Einstellungen des Konsolidierungsformulars aus.
+     * Erfasst die beiden Quelltabellen, deren Zeitstempel-Spalten,
+     * den Matching-Modus, die zeitliche Toleranz und die Zieltabelle.
+     * Wandelt die Toleranz in einen numerischen Wert um und entfernt
+     * überflüssige Leerzeichen aus dem Namen der Zieltabelle.
+     *
+     * @returns {Object} Die aktuelle Konsolidierungskonfiguration.
+     */
+    readConsolidationConfiguration() {
+        const modeEl = this.$('fieldConMode');
+        let rawMode = modeEl ? modeEl.value.trim().toLowerCase() : '';
+
+        // Fallback: Falls der Text statt des Value-Attributes ausgelesen wird
+        let matchingMode = 'intersection';
+        if (rawMode.includes('union') || rawMode.includes('nicht passende')) {
+            matchingMode = 'union';
+        } else if (rawMode.includes('intersection') || rawMode.includes('passende')) {
+            matchingMode = 'intersection';
+        } else if (rawMode === 'union' || rawMode === 'intersection') {
+            matchingMode = rawMode;
+        }
+
+        return {
+            source_a: this.$('fieldConSourceA')?.value || '',
+            source_b: this.$('fieldConSourceB')?.value || '',
+            timestamp_column_a: this.$('fieldConTimeA')?.value || '',
+            timestamp_column_b: this.$('fieldConTimeB')?.value || '',
+            matching_mode: matchingMode,
+            tolerance_seconds: Number(this.$('fieldConTolerance')?.value || 0),
+            target_table: (this.$('fieldConTarget')?.value || '').trim()
+        };
+    }
+
+    /**
+     * Überprüft die Konsolidierungskonfiguration auf Vollständigkeit und Gültigkeit.
+     * Kontrolliert die Quelltabellen, die ausgewählten Zeitstempel-Spalten,
+     * deren Datentypen, den Matching-Modus, die zeitliche Toleranz
+     * und den Namen der Zieltabelle.
+     *
+     * Gibt beim ersten gefundenen Fehler eine entsprechende Fehlermeldung zurück.
+     *
+     * @param {Object} config - Die zu überprüfende Konsolidierungskonfiguration.
+     * @returns {string|null} Fehlermeldung bei ungültiger Konfiguration,
+     *                        andernfalls null.
+     */
+    validateConsolidation(config) {
+        const tables = this.availableTables || [];
+        const cols = this.consolidationColumns || {};
+
+        if (!config?.source_a || !config?.source_b) {
+            return 'Bitte zwei Tabellen auswählen.';
+        }
+
+        if (config.source_a === config.source_b) {
+            return 'Bitte zwei unterschiedliche Tabellen auswählen.';
+        }
+
+        if (!tables.includes(config.source_a) || !tables.includes(config.source_b)) {
+            return 'Bitte nur vorhandene SmartData-Tabellen verwenden.';
+        }
+
+        for (const side of ['a', 'b']) {
+            const columnName = config[`timestamp_column_${side}`];
+            const column = (cols[side] || []).find(item => item.name === columnName);
+
+            if (!column) {
+                return `Bitte eine vorhandene Zeitspalte für Tabelle ${side.toUpperCase()} auswählen.`;
             }
 
-            async function loadConsolidationColumns(side, preferredColumn = '') {
-              const tableSelect = $('fieldConSource' + side.toUpperCase());
-              const timeSelect = $('fieldConTime' + side.toUpperCase());
-              const hint = $('conTimeHint' + side.toUpperCase());
-              if (!tableSelect || !timeSelect || !hint) return;
-              const requestNumber = ++consolidationRequestNumbers[side];
-              const table = tableSelect.value;
-              consolidationColumns[side] = null;
-              timeSelect.disabled = true;
-              timeSelect.replaceChildren(new Option(table ? 'Spalten werden geladen ...' : 'Zuerst Tabelle auswählen', ''));
-              hint.textContent = table ? `Lade Spalten für ${table} ...` : 'Bitte zuerst eine Quelltabelle auswählen.';
-              if (!table) return;
-              try {
-                const url = `/SmartData/smartdata/collection/${encodeURIComponent(table)}?storage=smartmonitoring`;
-                const response = await fetch(url, { method: 'GET', headers: { 'Accept': 'application/json' } });
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                const data = await response.json();
-                if (!data || !Array.isArray(data.attributes)) throw new Error('Spaltendefinition fehlt');
-                if (requestNumber !== consolidationRequestNumbers[side] || !root.contains(timeSelect)) return;
-                const attributes = data.attributes
-                  .filter(item => item && typeof item.name === 'string' && item.name.trim())
-                  .map(item => ({name:item.name, type:String(item.type || 'unbekannt')}));
-                consolidationColumns[side] = attributes;
-                const sorted = [...attributes].sort((a, b) =>
-                  Number(isTimestampCandidate(b)) - Number(isTimestampCandidate(a)) || a.name.localeCompare(b.name));
-                timeSelect.replaceChildren(new Option('Zeitstempel-Spalte auswählen', ''));
-                sorted.forEach(item => timeSelect.add(new Option(`${item.name} (${item.type})`, item.name)));
-                timeSelect.disabled = !sorted.length;
-                timeSelect.value = sorted.some(item => item.name === preferredColumn) ? preferredColumn : '';
-                const candidates = sorted.filter(isTimestampType).map(item => item.name);
-                hint.textContent = candidates.length
-                  ? `Mögliche Zeitspalten: ${candidates.join(', ')}. Datentyp prüfen.`
-                  : 'Keine Timestamp-Spalte erkannt. Für dieses zeitbasierte Matching ist eine echte Zeitspalte nötig.';
-              } catch (error) {
-                if (requestNumber !== consolidationRequestNumbers[side] || !root.contains(timeSelect)) return;
-                timeSelect.replaceChildren(new Option('Spalten nicht verfügbar', ''));
-                hint.textContent = `SmartData-Spalten konnten nicht geladen werden: ${error.message}`;
-                console.error('PipelineEditor: Konsolidierungs-Spalten konnten nicht geladen werden:', error);
-              }
+            if (!this.isTimestampType?.(column)) {
+                return `Spalte „${column.name}“ in Tabelle ${side.toUpperCase()} hat keinen geeigneten Zeit-Datentyp.`;
             }
+        }
 
-            function readConsolidationConfiguration() {
-              return {
-                source_a: $('fieldConSourceA').value,
-                source_b: $('fieldConSourceB').value,
-                timestamp_column_a: $('fieldConTimeA').value,
-                timestamp_column_b: $('fieldConTimeB').value,
-                matching_mode: $('fieldConMode').value,
-                tolerance_seconds: Number($('fieldConTolerance').value),
-                target_table: $('fieldConTarget').value.trim()
-              };
-            }
+        // Sicherer Vergleich nach Normalisierung
+        const mode = String(config.matching_mode || '').toLowerCase().trim();
+        if (!['intersection', 'union'].includes(mode)) {
+            return `Ungültiger Matching-Modus (Erhalten: "${config.matching_mode}").`;
+        }
 
-            function validateConsolidation(config) {
-              if (!config.source_a || !config.source_b) return 'Bitte zwei Tabellen auswählen.';
-              if (config.source_a === config.source_b) return 'Bitte zwei unterschiedliche Tabellen auswählen.';
-              if (!availableTables || !availableTables.includes(config.source_a) || !availableTables.includes(config.source_b)) {
-                return 'Bitte nur vorhandene SmartData-Tabellen verwenden.';
-              }
-              for (const side of ['a', 'b']) {
-                const column = (consolidationColumns[side] || []).find(item => item.name === config['timestamp_column_' + side]);
-                if (!column) return `Bitte eine vorhandene Zeitspalte für Tabelle ${side.toUpperCase()} auswählen.`;
-                if (!isTimestampType(column)) return `Spalte „${column.name}“ in Tabelle ${side.toUpperCase()} hat keinen geeigneten Zeit-Datentyp.`;
-              }
-              if (!['intersection','union'].includes(config.matching_mode)) return 'Ungültiger Matching-Modus.';
-              if (!Number.isInteger(config.tolerance_seconds) || config.tolerance_seconds < 0 || config.tolerance_seconds > 86400) {
-                return 'Die Toleranz muss zwischen 0 und 86400 Sekunden liegen.';
-              }
-              if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(config.target_table)) {
-                return 'Bitte einen gültigen Namen für die Zieltabelle eingeben.';
-              }
-              return null;
-            }
+        if (
+            !Number.isInteger(config.tolerance_seconds) ||
+            config.tolerance_seconds < 0 ||
+            config.tolerance_seconds > 86400
+        ) {
+            return 'Die Toleranz muss zwischen 0 und 86400 Sekunden liegen.';
+        }
 
-            function setupConsolidationPanel() {
-              const c = pipeline.consolidation;
-              $('fieldConMode').value = c.matching_mode;
-              $('fieldConTolerance').value = c.tolerance_seconds;
-              $('fieldConTarget').value = c.target_table;
-              const updatePreview = () => {
-                $('consolidationJson').textContent = 'Einstellungen verändert – bitte Konsolidierung übernehmen.';
-                $('conPreviewHint').textContent = 'Noch nicht übernommen. Es werden keine Daten verarbeitet.';
-              };
-              root.querySelectorAll('#detailsForm input, #detailsForm select').forEach(field => {
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(config.target_table)) {
+            return 'Bitte einen gültigen Namen für die Zieltabelle eingeben.';
+        }
+
+        return null;
+    }
+
+    /**
+     * Initialisiert das Konsolidierungsformular und übernimmt vorhandene Einstellungen.
+     * Befüllt die Formularfelder mit den gespeicherten Konfigurationswerten,
+     * registriert Ereignis-Listener für Änderungen und aktualisiert die
+     * Dropdown-Menüs der beiden Quelltabellen.
+     * Zeigt eine bereits übernommene Konsolidierungskonfiguration
+     * als formatierte JSON-Vorschau an.
+     */
+    setupConsolidationPanel() {
+        const p = this.pipeline || {};
+        const c = p.consolidation || {};
+
+        const modeEl = this.$('fieldConMode');
+        const toleranceEl = this.$('fieldConTolerance');
+        const targetEl = this.$('fieldConTarget');
+        const jsonEl = this.$('consolidationJson');
+        const hintEl = this.$('conPreviewHint');
+
+        if (modeEl) modeEl.value = c.matching_mode || '';
+        if (toleranceEl) toleranceEl.value = c.tolerance_seconds ?? '';
+        if (targetEl) targetEl.value = c.target_table || '';
+
+        const updatePreview = () => {
+            if (jsonEl) jsonEl.textContent = 'Einstellungen verändert – bitte Konsolidierung übernehmen.';
+            if (hintEl) hintEl.textContent = 'Noch nicht übernommen. Es werden keine Daten verarbeitet.';
+        };
+
+        // Event-Listener sicher anbinden, falls root existiert
+        if (this.root) {
+            this.root.querySelectorAll('#detailsForm input, #detailsForm select').forEach(field => {
                 field.addEventListener('input', updatePreview);
-              });
-              $('fieldConSourceA').addEventListener('change', () => loadConsolidationColumns('a'));
-              $('fieldConSourceB').addEventListener('change', () => loadConsolidationColumns('b'));
-              updateConsolidationTableOptions();
-              if (c.configured) {
-                const { configured, ...config } = c;
-                $('consolidationJson').textContent = JSON.stringify(config, null, 2);
-                $('conPreviewHint').textContent = 'Zuletzt übernommene Konfiguration (nur lokal im Browser).';
-              }
+            });
+        }
+
+        const sourceA = this.$('fieldConSourceA');
+        if (sourceA) {
+            sourceA.addEventListener('change', () => this.loadConsolidationColumns('a'));
+        }
+
+        const sourceB = this.$('fieldConSourceB');
+        if (sourceB) {
+            sourceB.addEventListener('change', () => this.loadConsolidationColumns('b'));
+        }
+
+        // Tabellen-Optionen über die Instanz aktualisieren
+        this.updateConsolidationTableOptions();
+
+        // Vorhandene Konfiguration anzeigen, falls konfiguriert
+        if (c.configured && jsonEl && hintEl) {
+            const { configured, ...config } = c;
+            jsonEl.textContent = JSON.stringify(config, null, 2);
+            hintEl.textContent = 'Zuletzt übernommene Konfiguration (nur lokal im Browser).';
+        }
+    }
+
+    /**
+     * Befüllt das Skript-Dropdown mit den verfügbaren Skripten.
+     * Erstellt getrennte Gruppen für vordefinierte und eigene Skripte,
+     * berücksichtigt fehlende oder ungültige Einträge und stellt
+     * anschließend die bisherige Skriptauswahl aus der Pipeline wieder her.
+     * Bei ausgewähltem Job wird die Skriptauswahl geleert.
+     */
+    populateScriptList() {
+        const select = this.$('fieldScript');
+        if (!select) return;
+
+        select.replaceChildren();
+        select.add(new Option('Bitte auswählen', ''));
+
+        const createGroup = (title, scripts) => {
+            if (!Array.isArray(scripts) || !scripts.length) return;
+
+            const group = document.createElement('optgroup');
+            group.label = title;
+
+            for (const script of scripts) {
+                if (script?.name) {
+                    group.appendChild(new Option(script.name, script.name));
+                }
             }
 
-            function populateScriptList() {
-              const select = $('fieldScript');
-              select.replaceChildren();
-              const placeholder = new Option('Bitte auswählen', '');
-              select.add(placeholder);
-              const createGroup = (title, scripts) => {
-                const group = document.createElement('optgroup');
-                group.label = title;
-                scripts.forEach(script => group.appendChild(new Option(
-                  script.name,
-                  script.name
-                )));
-                select.add(group);
-              };
-              createGroup('Vorhandene Skripte', predefinedScripts);
-              if (ownScripts.length) createGroup('Eigene Skripte', ownScripts);
-              select.value = pipeline.scriptType === 'job' ? '' : pipeline.script;
-            }
-            function showSelectedScriptMetadata() {
-              const selected = findScript($('fieldScript').value);
-              $('fieldDescription').value = selected ? selected.description : '';
-              $('fieldParameter').value = selected ? selected.parameter : '';
-              const own = ownScripts.find(s => s.name === $('fieldScript').value);
-              $('ownCodePreviewWrapper').hidden = !own;
-              $('ownCodePreview').textContent = own ? own.code : '';
-            }
-            function setScriptMode(nextMode) {
-              scriptMode = nextMode;
-              $('existingScriptPanel').hidden = nextMode !== 'existing';
-              $('newScriptPanel').hidden = nextMode !== 'new';
-              $('existingJobPanel').hidden = nextMode !== 'job';
-              root.querySelectorAll('.pm-mode-btn').forEach(btn => {
-                btn.setAttribute('aria-pressed', String(btn.dataset.scriptMode === nextMode));
-              });
-              $('submitSettings').textContent = nextMode === 'new'
+            select.add(group);
+        };
+
+        const predefined = this.predefinedScripts || [];
+        const own = this.ownScripts || [];
+
+        createGroup('Vorhandene Skripte', predefined);
+        createGroup('Eigene Skripte', own);
+
+        const p = this.pipeline || {};
+        select.value = p.scriptType === 'job' ? '' : (p.script || '');
+    }
+
+    /**
+     * Zeigt die Metadaten des aktuell ausgewählten Skripts an.
+     * Übernimmt Beschreibung und Parameter in die entsprechenden Formularfelder.
+     * Prüft, ob es sich um ein eigenes Skript handelt, und zeigt gegebenenfalls
+     * dessen Quellcode in der Vorschau an.
+     * Blendet die Codevorschau bei vordefinierten Skripten aus.
+     */
+    showSelectedScriptMetadata() {
+        const scriptSelect = this.$('fieldScript');
+        if (!scriptSelect) return;
+
+        const scriptName = scriptSelect.value;
+        const selected = typeof this.findScript === 'function' ? this.findScript(scriptName) : null;
+
+        const descField = this.$('fieldDescription');
+        if (descField) {
+            descField.value = selected?.description || '';
+        }
+
+        const paramField = this.$('fieldParameter');
+        if (paramField) {
+            paramField.value = selected?.parameter || '';
+        }
+
+        const ownScripts = this.ownScripts || [];
+        const own = ownScripts.find(script => script.name === scriptName);
+
+        const previewWrapper = this.$('ownCodePreviewWrapper');
+        if (previewWrapper) {
+            previewWrapper.hidden = !own;
+        }
+
+        const previewCode = this.$('ownCodePreview');
+        if (previewCode) {
+            previewCode.textContent = own?.code || '';
+        }
+    }
+
+    /**
+     * Wechselt zwischen den verfügbaren Skript- und Job-Modi.
+     * Zeigt abhängig vom gewählten Modus das passende Formularpanel an
+     * und blendet die übrigen Bereiche aus.
+     * Aktualisiert die aktive Modus-Schaltfläche sowie die Beschriftung
+     * der Übernehmen-Schaltfläche und entfernt vorhandene Meldungen.
+     *
+     * @param {'existing'|'new'|'job'} nextMode - Der gewünschte Skriptmodus.
+     */
+    setScriptMode(nextMode) {
+        this.scriptMode = nextMode;
+
+        const existingScriptPanel = this.$('existingScriptPanel');
+        if (existingScriptPanel) {
+            existingScriptPanel.hidden = nextMode !== 'existing';
+        }
+
+        const newScriptPanel = this.$('newScriptPanel');
+        if (newScriptPanel) {
+            newScriptPanel.hidden = nextMode !== 'new';
+        }
+
+        const existingJobPanel = this.$('existingJobPanel');
+        if (existingJobPanel) {
+            existingJobPanel.hidden = nextMode !== 'job';
+        }
+
+        if (this.root) {
+            this.root.querySelectorAll('.pm-mode-btn').forEach(btn => {
+                btn.setAttribute(
+                    'aria-pressed',
+                    String(btn.dataset.scriptMode === nextMode)
+                );
+            });
+        }
+
+        const submitBtn = this.$('submitSettings');
+        if (submitBtn) {
+            submitBtn.textContent = nextMode === 'new'
                 ? 'Eigenes Skript übernehmen'
-                : nextMode === 'job' ? 'Job übernehmen' : 'Änderungen übernehmen';
-              clearMessage();
-            }
-            function setupScriptPanel() {
-              populateScriptList();
-              if (pipeline.script && pipeline.scriptType !== 'job') {
-                $('fieldDescription').value = pipeline.description;
-                $('fieldParameter').value = pipeline.parameter;
-                const own = ownScripts.find(s => s.name === pipeline.script);
-                $('ownCodePreviewWrapper').hidden = !own;
-                $('ownCodePreview').textContent = own ? own.code : '';
-              }
-              updateJobOptions();
-              $('fieldJob').addEventListener('change', renderJobDetails);
-              $('fieldScript').addEventListener('change', showSelectedScriptMetadata);
-              root.querySelectorAll('.pm-mode-btn').forEach(btn => {
-                btn.addEventListener('click', () => setScriptMode(btn.dataset.scriptMode));
-              });
-              $('newScriptFile').addEventListener('change', async event => {
-                const file = event.target.files && event.target.files[0];
-                if (!file) return;
-                if (!file.name.toLowerCase().endsWith('.py') || file.size > 100 * 1024) {
-                  showMessage('Bitte eine .py-Datei bis maximal 100 KB wählen.');
-                  event.target.value = '';
-                  return;
-                }
-                try {
-                  const code = await file.text();
-                  $('newScriptCode').value = code;
-                  $('newScriptName').value = file.name;
-                  showMessage('Python-Datei in den Editor geladen.');
-                } catch (error) {
-                  showMessage('Datei konnte nicht gelesen werden.');
-                }
-              });
-              setScriptMode(scriptMode);
-            }
-            function renderDetails() {
-              $('detailsForm').innerHTML = forms[currentStep] +
-                '<button id="submitSettings" type="submit" class="pm-btn pm-btn-primary">Änderungen übernehmen</button>';
-              if (currentStep === 'source') updateSourceOptions();
-              if (currentStep === 'filter') $('fieldPeriod').value = pipeline.period;
-              if (currentStep === 'consolidation') {
-                $('submitSettings').textContent = 'Konsolidierung übernehmen';
-                setupConsolidationPanel();
-              }
-              if (currentStep === 'script') setupScriptPanel();
-              if (currentStep === 'target') $('fieldTarget').value = pipeline.target;
-            }
-            function selectStep(step) {
-              currentStep = step;
-              clearMessage();
-              // Update the form first. A canvas error must not block the UI.
-              renderDetails();
-              renderFlow();
+                : nextMode === 'job'
+                    ? 'Job übernehmen'
+                    : 'Änderungen übernehmen';
+        }
+
+        if (typeof this.clearMessage === 'function') {
+            this.clearMessage();
+        }
+    }
+
+    /**
+     * Initialisiert den Skriptbereich des Pipeline-Editors.
+     * Befüllt die Skript- und Job-Dropdowns und stellt gespeicherte
+     * Skriptinformationen sowie eigene Skriptvorschauen wieder her.
+     * Registriert Ereignis-Listener für die Skript- und Job-Auswahl,
+     * die Modus-Schaltflächen und den Import von Python-Dateien.
+     * Aktiviert abschließend den aktuell ausgewählten Skriptmodus.
+     */
+    setupScriptPanel() {
+        this.populateScriptList();
+
+        const p = this.pipeline || {};
+        if (p.script && p.scriptType !== 'job') {
+            const descField = this.$('fieldDescription');
+            if (descField) {
+                descField.value = p.description || '';
             }
 
-            root.querySelectorAll('.pm-node').forEach(node => {
-              node.addEventListener('click', () => selectStep(node.dataset.step));
+            const paramField = this.$('fieldParameter');
+            if (paramField) {
+                paramField.value = p.parameter || '';
+            }
+
+            const ownScripts = this.ownScripts || [];
+            const own = ownScripts.find(script => script.name === p.script);
+
+            const previewWrapper = this.$('ownCodePreviewWrapper');
+            if (previewWrapper) {
+                previewWrapper.hidden = !own;
+            }
+
+            const previewCode = this.$('ownCodePreview');
+            if (previewCode) {
+                previewCode.textContent = own?.code || '';
+            }
+        }
+
+        this.updateJobOptions();
+
+        const jobField = this.$('fieldJob');
+        if (jobField) {
+            jobField.addEventListener('change', () => this.renderJobDetails());
+        }
+
+        const scriptField = this.$('fieldScript');
+        if (scriptField) {
+            scriptField.addEventListener('change', () => this.showSelectedScriptMetadata());
+        }
+
+        if (this.root) {
+            this.root.querySelectorAll('.pm-mode-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    this.setScriptMode(btn.dataset.scriptMode);
+                });
             });
-            $('detailsForm').addEventListener('submit', event => {
-              event.preventDefault();
-              if (currentStep === 'source') {
-                const nextSource = $('fieldSource').value;
-                if (nextSource !== pipeline.source) {
-                  pipeline.source = nextSource;
-                  pipeline.consolidation.source_a = nextSource;
-                  pipeline.consolidation.timestamp_column_a = '';
-                  pipeline.consolidation.configured = false;
+        }
+
+        const fileInput = this.$('newScriptFile');
+        if (fileInput) {
+            fileInput.addEventListener('change', async event => {
+                const file = event.target.files?.[0];
+                if (!file) return;
+
+                // Syntax-Bug behoben: Dateigrößen-Prüfung auf 100 KB (100 * 1024 Bytes)
+                if (!file.name.toLowerCase().endsWith('.py') || file.size > 100 * 1024) {
+                    this.showMessage?.('Bitte eine .py-Datei bis maximal 100 KB wählen.');
+                    event.target.value = '';
+                    return;
                 }
-              }
-              if (currentStep === 'filter') pipeline.period = $('fieldPeriod').value;
-              if (currentStep === 'consolidation') {
-                const config = readConsolidationConfiguration();
-                const error = validateConsolidation(config);
-                if (error) { showMessage(error); return; }
-                pipeline.consolidation = {...config, configured:true};
-                pipeline.source = config.source_a; // Quelle und Tabelle A bleiben konsistent.
-                $('consolidationJson').textContent = JSON.stringify(config, null, 2);
-                $('conPreviewHint').textContent = 'Konfiguration übernommen (nur im Browser).';
-                renderFlow();
-                showMessage('Konsolidierung konfiguriert. Noch keine Daten zusammengeführt oder gespeichert.');
+
+                try {
+                    const code = await file.text();
+
+                    const codeField = this.$('newScriptCode');
+                    if (codeField) codeField.value = code;
+
+                    const nameField = this.$('newScriptName');
+                    if (nameField) nameField.value = file.name;
+
+                    this.showMessage?.('Python-Datei in den Editor geladen.');
+                } catch (error) {
+                    this.showMessage?.('Datei konnte nicht gelesen werden.');
+                }
+            });
+        }
+
+        this.setScriptMode(this.scriptMode || 'existing');
+    }
+
+    /**
+     * Wechselt zum angegebenen Pipeline-Schritt.
+     * Speichert den neuen Schritt als aktuellen Bearbeitungsschritt,
+     * entfernt vorhandene Meldungen und aktualisiert anschließend
+     * das Detailformular sowie die Pipeline-Übersicht.
+     *
+     * @param {string} step - Der auszuwählende Pipeline-Schritt.
+     */
+    selectStep(step) {
+        if (!step) return;
+
+        this.currentStep = step;
+
+        if (typeof this.clearMessage === 'function') {
+            this.clearMessage();
+        }
+
+        // Details und Flow im neuen Schritt aktualisieren
+        this.renderDetails?.();
+        this.renderFlow?.();
+    }
+
+    /**
+     * Lädt die Konva-Bibliothek dynamisch, falls sie noch nicht verfügbar ist.
+     * Verwendet einen gemeinsamen Ladeprozess, um parallele Ladevorgänge zu vermeiden.
+     * Behandelt erfolgreiche Ladevorgänge und mögliche Ladefehler.
+     *
+     * @returns {Promise<Object>} Die geladene Konva-Bibliothek.
+     * @throws {Error} Wenn Konva nicht geladen werden kann oder nicht verfügbar ist.
+     */
+    async loadKonva() {
+        if (window.Konva) return window.Konva;
+
+        return window.__konvaLoading ||= new Promise((resolve, reject) => {
+            const konvaUrl = '/SWAC/swac/components/Visualmodel/libs/konva.min.js';
+            const script = document.createElement('script');
+
+            script.src = konvaUrl;
+            script.async = true;
+
+            script.onload = () => {
+                if (window.Konva) {
+                    console.log('Konva erfolgreich geladen:', window.Konva.version);
+                    resolve(window.Konva);
+                } else {
+                    window.__konvaLoading = null;
+                    reject(new Error('Konva geladen, aber window.Konva fehlt.'));
+                }
+            };
+
+            script.onerror = () => {
+                window.__konvaLoading = null;
+                reject(new Error('Konva konnte nicht geladen werden: ' + konvaUrl));
+            };
+
+            document.head.appendChild(script);
+        });
+    }
+
+    /**
+     * Lädt die VisualModel-Klasse dynamisch über einen Modulimport.
+     * Unterstützt Default- und benannte Exporte und speichert die
+     * geladene Klasse für spätere Aufrufe im globalen Cache.
+     *
+     * @returns {Promise<Function>} Die geladene VisualModel-Klasse.
+     * @throws {Error} Wenn das Modul nicht geladen werden kann oder
+     * keinen gültigen Klassenexport enthält.
+     */
+    async loadVisualModelClass() {
+        // Bereits geladene Klasse direkt zurückgeben (Caching)
+        if (window.__visualModelClass) return window.__visualModelClass;
+
+        const url = '/SWAC/swac/components/Visualmodel/Visualmodel.js';
+        console.log('Lade VisualModel:', url);
+
+        try {
+            const module = await import(url);
+            const VisualModelClass = module.default || module.VisualModel;
+
+            if (typeof VisualModelClass !== 'function') {
+                throw new Error('VisualModel enthält keinen gültigen Klassenexport.');
+            }
+
+            console.log('VisualModel erfolgreich geladen.');
+            // Klasse im globalen Cache speichern und zurückgeben
+            return (window.__visualModelClass = VisualModelClass);
+        } catch (error) {
+            console.error('Fehler beim Laden von VisualModel:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Initialisiert die VisualModel-Komponente für die grafische Darstellung
+     * der Pipeline.
+     * Lädt zunächst Konva und die VisualModel-Klasse, erzeugt und konfiguriert
+     * eine VisualModel-Instanz und bindet die Klickereignisse der Pipeline-Knoten.
+     * Speichert die initialisierte Instanz und zeichnet anschließend den Pipeline-Baum.
+     * Behandelt mögliche Initialisierungsfehler und zeigt diese in der Oberfläche an.
+     *
+     * @returns {Promise<void>}
+     */
+    async initializeVisualModel() {
+        const messageEl = this.$('visualModelMessage');
+
+        try {
+            await this.loadKonva();
+            const Visualmodel = await this.loadVisualModelClass();
+
+            const instance = new Visualmodel({
+                showMenue: false,
+                showScenegraph: false,
+                plugins: new Map(),
+                allowZoom: false,
+                stageWidth: 760,
+                stageHeight: this.graphHeight || 400, // Fallback, falls graphHeight nicht definiert
+                autosave: false
+            });
+
+            instance.requestor = this.$('visualModelHost');
+
+            const general = instance.options.attributeDefaults.get('VisualmodelGeneral');
+
+            instance.options.attributeDefaults.set(this.graphSource, {
+                ...general,
+                dragmode: 'none',
+                onClick: event => {
+                    const set = event.target?.attrs?.swac_set;
+                    if (set?.pmTreeId && set?.pmStep) {
+                        this.activateTree(set.pmTreeId, set.pmStep);
+                    }
+                }
+            });
+
+            await instance.init();
+
+            this.visualModel = instance;
+            if (messageEl) messageEl.hidden = true;
+
+            this.renderVisualTree();
+        } catch (error) {
+            console.error('PipelineEditor: VisualModel-Initialisierung fehlgeschlagen:', error);
+
+            if (messageEl) {
+                messageEl.textContent = `VisualModel konnte nicht geladen werden: ${error.message}. Die Bausteine unten bleiben bedienbar. Prüfe F12 → Console.`;
+                messageEl.hidden = false;
+            }
+        }
+    }
+
+    /**
+     * Die Methode <code>loadExistingJobs()</code> ist dafür zuständig,
+     * bereits vorhandene Jobs aus SmartData abzurufen, aufzubereiten und anschließend im Dropdown-Menü anzuzeigen.
+     */
+    async loadExistingJobs() {
+        try {
+            this.availableJobs = await this.fetchRecords(
+                '/SmartData/smartdata/records/datajobs?storage=smartmonitoring',
+                'records'
+            );
+
+            this.availableJobs = this.availableJobs
+                .filter(job => job && job.id != null)
+                .sort((a, b) =>
+                    String(a.name || '').localeCompare(String(b.name || ''))
+                );
+
+            this.jobsError = null;
+        } catch (error) {
+            this.jobsError = error;
+            this.availableJobs = [];
+            console.error(
+                'PipelineEditor: Jobs konnten nicht geladen werden:',
+                error
+            );
+        }
+
+        this.updateJobOptions();
+    }
+
+    /**
+     * Die Methode <code>loadJobParams()</code> ist dafür zuständig, die gespeicherten Parameter der vorhandenen
+     * Jobs aus SmartData abzurufen und anschließend die Job-Detailansicht zu aktualisieren.
+     */
+    async loadJobParams() {
+        try {
+            this.jobParams = await this.fetchRecords(
+                '/SmartData/smartdata/records/datajobs_params?storage=smartmonitoring',
+                'records'
+            );
+            this.jobParamsError = null;
+        } catch (error) {
+            this.jobParams = [];
+            this.jobParamsError = error;
+            console.error(
+                'PipelineEditor: Job-Parameter konnten nicht geladen werden:',
+                error
+            );
+        }
+
+        this.renderJobDetails();
+    }
+
+    /**
+     * Die Methode <code>loadActionDescriptions()</code> lädt die Beschreibungen der verfügbaren Actions aus SmartDataJobs,
+     * speichert sie und aktualisiert anschließend die Anzeige der Job-Details.
+     */
+    async loadActionDescriptions() {
+        try {
+            this.actionDescriptions = await this.fetchRecords(
+                '/SmartDataJobs/smartdatajobs/jobexecution/getActionsDescription',
+                'list'
+            );
+            this.actionDescriptionsError = null;
+        } catch (error) {
+            this.actionDescriptions = [];
+            this.actionDescriptionsError = error;
+            console.error(
+                'PipelineEditor: Action-Beschreibungen konnten nicht geladen werden:',
+                error
+            );
+        }
+
+        this.renderJobDetails();
+    }
+
+    /**
+     * Lädt die Spalten einer ausgewählten Quelltabelle aus der SmartData-API.
+     * Bereinigt und sortiert die Spalten anhand möglicher Zeitstempel-Datentypen
+     * und befüllt das zugehörige Dropdown für die Zeitstempel-Auswahl.
+     * Stellt eine gültige vorherige Spaltenauswahl wieder her und zeigt
+     * erkannte Zeitspalten oder mögliche Ladefehler an.
+     * Verhindert durch Request-Zähler, dass veraltete Anfragen die aktuelle
+     * Benutzeroberfläche überschreiben.
+     *
+     * @param {string} side - Kennzeichnet die Datenquelle ('a' oder 'b').
+     * @param {string} [preferredColumn=''] - Bevorzugte Zeitstempel-Spalte.
+     * @returns {Promise<void>}
+     */
+    async loadConsolidationColumns(side, preferredColumn = '') {
+        const sideKey = side.toUpperCase();
+        const tableSelect = this.$('fieldConSource' + sideKey);
+        const timeSelect = this.$('fieldConTime' + sideKey);
+        const hint = this.$('conTimeHint' + sideKey);
+
+        if (!tableSelect || !timeSelect || !hint) return;
+
+        // Instanzvariablen absichern und Request-Zähler erhöhen
+        this.consolidationRequestNumbers ||= {};
+        this.consolidationRequestNumbers[side] = (this.consolidationRequestNumbers[side] || 0) + 1;
+        const requestNumber = this.consolidationRequestNumbers[side];
+
+        const table = tableSelect.value;
+        this.consolidationColumns ||= {};
+        this.consolidationColumns[side] = null;
+        timeSelect.disabled = true;
+
+        timeSelect.replaceChildren(
+            new Option(table ? 'Spalten werden geladen ...' : 'Zuerst Tabelle auswählen', '')
+        );
+
+        hint.textContent = table
+            ? `Lade Spalten für ${table} ...`
+            : 'Bitte zuerst eine Quelltabelle auswählen.';
+
+        if (!table) return;
+
+        try {
+            const url = `/SmartData/smartdata/collection/${encodeURIComponent(table)}?storage=smartmonitoring`;
+            const response = await fetch(url, { headers: { 'Accept': 'application/json' } });
+
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+            const data = await response.json();
+            if (!Array.isArray(data?.attributes)) {
+                throw new Error('Spaltendefinition fehlt');
+            }
+
+            // Race-Condition-Guard (Prüfung, ob der Request noch aktuell ist und das Element existiert)
+            if (
+                requestNumber !== this.consolidationRequestNumbers[side] ||
+                (this.root && !this.root.contains(timeSelect))
+            ) {
                 return;
-              }
-              if (currentStep === 'script') {
-                if (scriptMode === 'job') {
-                  const job = findJob($('fieldJob').value);
-                  if (!job) {
-                    showMessage('Bitte zuerst einen vorhandenen Job auswählen.');
-                    return;
-                  }
-                  pipeline.jobId = job.id;
-                  pipeline.script = job.name;
-                  pipeline.scriptType = 'job';
-                  pipeline.description = job.desc || '';
-                  pipeline.parameter = '';
-                  renderFlow();
-                  showMessage(`Job „${job.name}“ ausgewählt. Eine Job-Ausführung oder Speicherung findet noch nicht statt.`);
-                  return;
-                }
-                if (scriptMode === 'new') {
-                  const name = $('newScriptName').value.trim();
-                  const code = $('newScriptCode').value;
-                  if (!/^[A-Za-z0-9_.-]+\.py$/i.test(name)) {
-                    showMessage('Bitte einen gültigen Dateinamen wie mein_skript.py eingeben.');
-                    return;
-                  }
-                  if (!code.trim()) {
-                    showMessage('Bitte Python-Code eingeben oder eine .py-Datei importieren.');
-                    return;
-                  }
-                  if (code.length > 100 * 1024) {
-                    showMessage('Der Python-Code darf maximal 100 KB groß sein.');
-                    return;
-                  }
-                  if (predefinedScripts.some(s => s.name === name)) {
-                    showMessage('Dieser Skriptname ist bereits vergeben. Bitte einen anderen Namen wählen.');
-                    return;
-                  }
-                  const custom = {
-                    name, code,
-                    description:$('newScriptDescription').value.trim(),
-                    parameter:$('newScriptParameter').value.trim()
-                  };
-                  const existingIndex = ownScripts.findIndex(s => s.name === name);
-                  if (existingIndex >= 0) ownScripts[existingIndex] = custom;
-                  else ownScripts.push(custom);
-                  pipeline.script = name;
-                  pipeline.jobId = null;
-                  pipeline.scriptType = 'custom';
-                  pipeline.description = custom.description;
-                  pipeline.parameter = custom.parameter;
-                  scriptMode = 'existing';
-                  renderFlow();
-                  renderDetails();
-                  showMessage('Eigenes Skript „' + name + '“ wurde zur Skriptliste hinzugefügt.');
-                  return;
-                }
-                pipeline.script = $('fieldScript').value;
-                pipeline.jobId = null;
-                pipeline.scriptType = ownScripts.some(s => s.name === pipeline.script) ? 'custom' : 'predefined';
-                pipeline.description = $('fieldDescription').value;
-                pipeline.parameter = $('fieldParameter').value;
-              }
-              if (currentStep === 'target') pipeline.target = $('fieldTarget').value.trim();
-              renderFlow();
-              showMessage('Einstellungen übernommen.');
+            }
+
+            const attributes = data.attributes
+                .filter(item => item && typeof item.name === 'string' && item.name.trim())
+                .map(item => ({
+                    name: item.name,
+                    type: String(item.type || 'unbekannt')
+                }));
+
+            this.consolidationColumns[side] = attributes;
+
+            // Sortierung mit sicherem Aufruf der Klassenmethoden
+            const sorted = [...attributes].sort((a, b) =>
+                Number(this.isTimestampCandidate?.(b) || false) -
+                Number(this.isTimestampCandidate?.(a) || false) ||
+                a.name.localeCompare(b.name)
+            );
+
+            timeSelect.replaceChildren(new Option('Zeitstempel-Spalte auswählen', ''));
+
+            sorted.forEach(item => {
+                timeSelect.add(new Option(`${item.name} (${item.type})`, item.name));
             });
-            $('newPipeline').addEventListener('click', () => {
-              const id = nextTreeId++;
-              const tree = {
-                id, name: `Pipeline ${id}`,
-                data: {source:'', period:'7 Tage', script:'',scriptType:'predefined', jobId:null,
-                  description:'', parameter:'', target:'', consolidation:blankConsolidation()},
-                isDraft:true
-              };
-              pipelineTrees.push(tree);
-              activateTree(id, 'source');
-              showMessage(`Neuer Pipeline-Baum ${id} angelegt (nur lokal im Browser).`);
-            });
-            $('savePipeline').addEventListener('click', () => {
-              showMessage('Die dauerhafte Speicherung ist noch nicht angebunden.');
-            });
-            renderFlow();
-            renderDetails();
-            loadAvailableTables();
-            // Drei reine Lesezugriffe: Jobs, gespeicherte Parameter, Action-Dokumentation.
-            loadExistingJobs();
-            loadJobParams();
-            loadActionDescriptions();
-            initializeVisualModel();
-          })();
+
+            timeSelect.disabled = !sorted.length;
+            timeSelect.value = sorted.some(item => item.name === preferredColumn) ? preferredColumn : '';
+
+            const candidates = sorted
+                .filter(item => this.isTimestampType?.(item) ?? false)
+                .map(item => item.name);
+
+            hint.textContent = candidates.length
+                ? `Mögliche Zeitspalten: ${candidates.join(', ')}. Datentyp prüfen.`
+                : 'Keine Timestamp-Spalte erkannt. Für dieses zeitbasierte Matching ist eine echte Zeitspalte nötig.';
+        } catch (error) {
+            if (
+                requestNumber !== this.consolidationRequestNumbers[side] ||
+                (this.root && !this.root.contains(timeSelect))
+            ) {
+                return;
+            }
+
+            timeSelect.replaceChildren(new Option('Spalten nicht verfügbar', ''));
+            hint.textContent = `SmartData-Spalten konnten nicht geladen werden: ${error.message}`;
+
+            console.error('PipelineEditor: Konsolidierungs-Spalten konnten nicht geladen werden:', error);
+        }
+    }
+
+    /**
+     * Die Methode <code>fetchRecords()</code> lädt Daten von einer URL (z.B. von einer API), überprüft,
+     * ob die Antwort gültig ist und gibt anschließend die gewünschte Daten zurück.
+     * @param url Die Adresse, von der die Daten geladen werden sollen.
+     * @param responseKey Der Name der Eigenschaft im JSON-Objekt, die es zurückbekommt.
+     * @returns {Promise<*>} Die gewünschte Daten zurückgeben.
+     */
+    async fetchRecords(url, responseKey) {
+        // Daten von Server laden
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' }
+        });
+
+        // Überprüfen, ob die Anfrage erfolgreich war
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status} (${url})`);
+        }
+
+        // JSON-Daten auslesen
+        const data = await response.json();
+
+        // Daten überprüfen, ob die es vorhanden sind.
+        if (!data || !Array.isArray(data[responseKey])) {
+            throw new Error(`Unerwartetes JSON: ${responseKey} fehlt (${url})`);
+        }
+
+        // Gewünschte Daten zurückgeben.
+        return data[responseKey];
+    }
+
+
+    //Hilfsfunktionen
+    /**
+     * Zeigt eine Nachricht im Feedback-Bereich an.
+     *
+     * @param {string} message - Der anzuzeigende Nachrichtentext.
+     */
+    showMessage(message) {
+        this.$('feedback').textContent = message;
+        this.$('feedback').hidden = false;
+    }
+
+    /**
+     * Diese Methode blendet den Feedback-Bereich wieder aus.
+     */
+    clearMessage() {
+        this.$('feedback').hidden = true;
+    }
+
+    /**
+     * Sucht ein Skript anhand seines Namens in den vordefinierten
+     * und eigenen Skripten.
+     *
+     * @param {string} name - Name des gesuchten Skripts.
+     * @returns {Object|undefined} Das gefundene Skript oder undefined,
+     * wenn kein passendes Skript existiert.
+     */
+    findScript(name) {
+        return [...this.predefinedScripts, ...this.ownScripts].find(
+            script => script.name === name
+        );
+    }
+
+    /**
+     * Verändert die Zoomstufe der grafischen Pipeline-Ansicht.
+     * Begrenzt den Zoom auf einen Bereich von 50 % bis 160 %
+     * und aktualisiert anschließend die Zoomanzeige.
+     *
+     * @param {number} delta - Veränderung des Zoomfaktors.
+     *                         Positive Werte vergrößern, negative verkleinern.
+     */
+    changeZoom(delta) {
+        if (!this.visualModel) return;
+
+        const next = Math.max(
+            0.5,
+            Math.min(
+                1.6,
+                Math.round((this.visualModel.stage.scaleX() + delta) * 100) / 100
+            )
+        );
+
+        this.visualModel.zoom(next);
+
+        const label = this.$('vmZoomLabel');
+        if (label) {
+            label.textContent = `${Math.round(next * 100)} %`;
+        }
+    }
+
+    /**
+     * Prüft, ob ein Datenbankattribut anhand seines Datentyps oder
+     * Spaltennamens als mögliche Zeitstempel-Spalte erkannt werden kann.
+     * Berücksichtigt typische Datentypen und bekannte Bezeichnungen
+     * für Zeitstempel- und Datumsfelder.
+     *
+     * @param {Object} attribute - Datenbankattribut mit Name und Datentyp.
+     * @returns {boolean} true, wenn das Attribut als Zeitstempel-Kandidat erkannt wird, sonst false.
+     */
+    isTimestampCandidate(attribute) {
+        const type = String(attribute.type || '').toLowerCase();
+        const name = String(attribute.name || '').toLowerCase();
+
+        return /(timestamp|timestamptz|datetime|date|time)/i.test(type) ||
+            /^(ts|timestamp|time|datetime|recorded_at|measured_at|acquiretime|created_at|updated_at)$/.test(name);
+    }
+
+    /**
+     * Prüft, ob der Datentyp eines Datenbankattributs einem Datums-
+     * oder Zeitformat entspricht.
+     * Berücksichtigt typische Typbezeichnungen wie TIMESTAMP,
+     * TIMESTAMPTZ, DATETIME, DATE und TIME.
+     *
+     * @param {Object} attribute - Datenbankattribut mit Datentyp.
+     * @returns {boolean} true, wenn der Datentyp ein Zeitformat erkennen lässt, sonst false.
+     */
+    isTimestampType(attribute) {
+        return /(timestamp|timestamptz|datetime|date|time)/i.test(
+            String(attribute.type || '')
+        );
     }
 }
-
