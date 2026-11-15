@@ -2117,7 +2117,7 @@ DEFINTION of SET:\n\
             }
         }
     }
-    function calculateSamplingRate(sets) {
+    calculateSamplingRate(sets) {
     let times = sets
         .map(getTimeValue)
         .filter(Number.isFinite)
