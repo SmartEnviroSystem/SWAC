@@ -3,6 +3,18 @@ import View from '../../View.js';
 import Msg from '../../Msg.js';
 import Model from '../../Model.js';
 
+// Period preset when showPeriod is active
+const DEFAULT_PERIOD_DAYS = 30;
+
+/**
+ * Formats a date as value for an input of type datetime-local (local time).
+ */
+function toInputValue(date) {
+    let pad = number => String(number).padStart(2, '0');
+    return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate())
+            + 'T' + pad(date.getHours()) + ':' + pad(date.getMinutes());
+}
+
 /**
  * Selects a dataset (e.g. a device) and an attribute of the collection that
  * dataset references (e.g. a measured value).
@@ -46,6 +58,14 @@ export default class Dataselect extends View {
         this.desc.optPerTpl[2] = {
             selc: '.swac_dataselect_timearea',
             desc: 'Area around the time attribute selection, only shown when the collection has no attribute named like defaultTimeAttr.'
+        };
+        this.desc.optPerTpl[3] = {
+            selc: '.swac_dataselect_from, .swac_dataselect_to',
+            desc: 'Inputs (datetime-local) for the period, used when showPeriod is true.'
+        };
+        this.desc.optPerTpl[4] = {
+            selc: '.swac_dataselect_periodarea',
+            desc: 'Areas around the period inputs, shown when showPeriod is true.'
         };
         this.desc.reqPerSet[0] = {
             name: 'id',
@@ -97,12 +117,18 @@ export default class Dataselect extends View {
         };
         if (typeof options.attributeRequired === 'undefined')
             this.options.attributeRequired = false;
+        this.desc.opts[6] = {
+            name: 'showPeriod',
+            desc: 'If true the user also selects a period (from and till, preset to the last ' + DEFAULT_PERIOD_DAYS + ' days). Both are required and from has to be before till.'
+        };
+        if (typeof options.showPeriod === 'undefined')
+            this.options.showPeriod = false;
 
         this.desc.funcs[0] = {
             name: 'getSelection',
             desc: 'Gets the current selection.',
             returns: {
-                desc: 'Object with id, set, name, collection, attribute and timeAttr or null if no dataset is selected.',
+                desc: 'Object with id, set, name, collection, attribute, timeAttr, from and to (from and to as local datetime strings like 2026-10-01T00:00, null without showPeriod) or null if no dataset is selected.',
                 type: 'Object'
             }
         };
@@ -121,8 +147,8 @@ export default class Dataselect extends View {
 
         this.desc.events[0] = {
             name: 'swac_REQUESTOR_ID_dataselect_changed',
-            desc: 'Fired when the dataset, the attribute or the time attribute changed. When the dataset changed, the event is fired after its attributes are loaded.',
-            data: 'Delivers the new selection (in selection, see getSelection()) and what changed (in changed: set, attribute or timeattr).'
+            desc: 'Fired when the dataset, the attribute, the time attribute or the period changed. When the dataset changed, the event is fired after its attributes are loaded.',
+            data: 'Delivers the new selection (in selection, see getSelection()) and what changed (in changed: set, attribute, timeattr or period).'
         };
 
         // Internal attributes
@@ -158,6 +184,11 @@ export default class Dataselect extends View {
             if (this.timeSelect)
                 this.timeSelect.addEventListener('change', this.notifyChange.bind(this, 'timeattr'));
 
+            this.fromInput = this.requestor.querySelector('.swac_dataselect_from');
+            this.toInput = this.requestor.querySelector('.swac_dataselect_to');
+            if (this.options.showPeriod && this.fromInput && this.toInput)
+                this.initPeriod();
+
             // Preselect after the datasets are loaded
             let thisRef = this;
             window.swac.reactions.addReaction(function () {
@@ -177,6 +208,42 @@ export default class Dataselect extends View {
     afterAddSet(set, repeateds) {
         this.sets.set(String(set.id), set);
         super.afterAddSet(set, repeateds);
+    }
+
+    /**
+     * Shows the period inputs, presets the last days and registers the checks.
+     */
+    initPeriod() {
+        for (let curArea of this.requestor.querySelectorAll('.swac_dataselect_periodarea'))
+            curArea.hidden = false;
+        let to = new Date();
+        let from = new Date(to.getTime() - DEFAULT_PERIOD_DAYS * 24 * 60 * 60 * 1000);
+        // defaultValue is what a form reset restores
+        this.fromInput.defaultValue = this.fromInput.value = toInputValue(from);
+        this.toInput.defaultValue = this.toInput.value = toInputValue(to);
+        this.fromInput.required = true;
+        this.toInput.required = true;
+
+        for (let curInput of [this.fromInput, this.toInput]) {
+            curInput.addEventListener('change', () => {
+                this.checkPeriod();
+                this.notifyChange('period');
+            });
+        }
+        // A form reset restores the inputs without firing change
+        let form = this.requestor.closest('form');
+        if (form)
+            form.addEventListener('reset', () => setTimeout(() => this.checkPeriod(), 0));
+    }
+
+    /**
+     * Lets the browser block form submits while from is not before to.
+     */
+    checkPeriod() {
+        let from = this.fromInput.value;
+        let to = this.toInput.value;
+        let invalid = from && to && from >= to;
+        this.toInput.setCustomValidity(invalid ? this.getText('periodinvalid', 'The start must be before the end.') : '');
     }
 
     getText(key, fallback) {
@@ -343,7 +410,9 @@ export default class Dataselect extends View {
             name: set.name,
             collection: set.data_collection,
             attribute: this.attrSelect.value || null,
-            timeAttr: (this.timeSelect && this.timeSelect.value) || null
+            timeAttr: (this.timeSelect && this.timeSelect.value) || null,
+            from: (this.options.showPeriod && this.fromInput && this.fromInput.value) || null,
+            to: (this.options.showPeriod && this.toInput && this.toInput.value) || null
         };
     }
 
