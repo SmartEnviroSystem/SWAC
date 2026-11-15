@@ -1,0 +1,128 @@
+import Present from '../Present/Present.js';
+import SWAC from '../../swac.js';
+
+export default class Heatmap extends Present {
+
+    constructor(options = {}) {
+        let heatmapOptions = Object.assign({}, options);
+        // Present's component-specific plugins are not located in Heatmap/plugins.
+        if (!heatmapOptions.plugins)
+            heatmapOptions.plugins = new Map();
+        super(heatmapOptions);
+
+        this.name = 'Heatmap';
+        this.desc.text = 'Displays datasets as a coloured table using a Datadescription legend.';
+        this.desc.templates = [];
+        this.desc.templates[0] = {
+            name: 'heatmap',
+            url: SWAC.config.swac_root + 'components/Present/table_for_all_datasets.html',
+            desc: 'Table with coloured values.'
+        };
+        this.options.datadescription = options.datadescription || '';
+    }
+
+    init() {
+        if (!this.options.datadescription) {
+            return Promise.reject(new Error('Heatmap requires options.datadescription: the ID of a Datadescription component.'));
+        }
+        let thisRef = this;
+        return super.init().then(function () {
+            window.swac.reactions.addReaction(function () {
+                thisRef.renderColors();
+            }, thisRef.requestor.id, thisRef.options.datadescription);
+        });
+    }
+
+    renderColors() {
+        let element = document.getElementById(this.options.datadescription);
+        if (!element || !element.swac_comp)
+            return;
+        let legend = element.swac_comp;
+        legend.options.backgroundColor = true;
+        if (this.options.autoLegend)
+            this.updateLegend(legend);
+        let source = legend.data[legend.options.activeSource];
+        if (!source)
+            return;
+        legend.formatDataElementBackground(this.requestor);
+    }
+
+    getMin(list) {
+        if (list.length === 0)
+            return null;
+        return Math.min(...list);
+    }
+
+    getMedian(list) {
+        if (list.length === 0)
+            return null;
+        let sorted = list.slice().sort(function (first, second) {
+            return first - second;
+        });
+        let middle = Math.floor(sorted.length / 2);
+        return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+    }
+
+    getMax(list) {
+        if (list.length === 0)
+            return null;
+        return Math.max(...list);
+    }
+
+    updateLegend(legend) {
+        let definitions = {id: 1};
+        for (let column of this.requestor.querySelectorAll('.swac_repeatedForAttribute[swac_attrname]')) {
+            let attribute = column.getAttribute('swac_attrname');
+            let values = [];
+            for (let source in this.data) {
+                for (let set of this.data[source].getSets()) {
+                    if (set && Number.isFinite(set[attribute]))
+                        values.push(set[attribute]);
+                }
+            }
+            if (values.length > 0) {
+                let min = this.getMin(values);
+                let median = this.getMedian(values);
+                let max = this.getMax(values);
+                let limits = {minValue: (min + median) / 2,
+                    medianValue: (max + median) / 2, maxValue: max};
+                let definition = {txt_title: attribute, txt_desc: min + ' – ' + max, visualise: true,
+                    minValue: min, medianValue: median, maxValue: max,
+                    calcmode: '<', includeMax: true, values: {}};
+                for (let field of legend.requestor.querySelectorAll('[data-statistic]')) {
+                    let statistic = field.getAttribute('data-statistic');
+                    if (min === max && statistic !== 'minValue')
+                        continue;
+                    let value = limits[statistic];
+                    let key = value.toExponential();
+                    if (!definition.values[key])
+                        definition.values[key] = {col: field.getAttribute('data-color'),
+                            txt: field.getAttribute('data-label')};
+                }
+                definitions[attribute] = definition;
+            }
+        }
+        legend.removeAllData();
+        legend.options.activeSource = null;
+        legend.options.activeSet = null;
+        if (Object.keys(definitions).length > 1)
+            legend.addData(this.requestor.id + '_legend', [definitions]);
+        for (let element of legend.requestor.querySelectorAll('.swac_repeatedForLegend'))
+            element.remove();
+        let template = legend.requestor.querySelector('.swac_repeatForLegend');
+        for (let attribute in definitions) {
+            if (attribute !== 'id')
+                legend.addNewAttributeElementToLegend(template, definitions, attribute);
+        }
+    }
+
+    delete() {
+        window.swac.loadedComponents.delete(this.requestor.id);
+        let element = document.getElementById(this.options.datadescription);
+        if (element && element.swac_comp) {
+            element.swac_comp.formatedDataElements = element.swac_comp.formatedDataElements.filter(
+                    element => element !== this.requestor);
+        }
+        super.delete();
+    }
+}
