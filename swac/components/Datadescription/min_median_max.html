@@ -1,5 +1,42 @@
 <h2 class="swac_datadescription_legendtitle" swac_lang="Datadescription.legendtitle"></h2>
 <ul uk-accordion class="uk-accordion-default" animation="false" multiple="true" style="width: max-content">
+    <li class="uk-open swac_repeatedForLegend swac_datadescription_empty_legend">
+        <input class="uk-checkbox swac_datadescription_datacheck" type="checkbox" checked>
+        <div class="swac_datadescription_wrapper_title">
+            <input class="swac_datadescription_datatitle input_nostyle" value="Messwert" readonly style="width: 8ch;" />
+            <input class="swac_datadescription_attribute_border_color" type="color" />
+            <span class="swac_datadescription_attribute_delete" uk-icon="icon: trash; ratio: 1" uk-toggle="target: .swac_datadescription_delete_modal"></span>
+        </div>
+        <a class="uk-accordion-title"></a>
+        <div class="swac_datadescription_wrapper_datadesc">
+        <input class="swac_datadescription_datadesc input_nostyle" value="—" readonly style="width: 1ch;" />
+        </div>
+        <div class="swac_datadescription_wrapper_attribution uk-accordion-content">
+            <div class="swac_datadescription_attribution">
+                <div style="display: flex; margin-bottom: 10px;">
+                    <input class="swac_datadescription_value_col" type="color" value="#00ff00" style="--color: #00ff00;" data-statistic="minValue" data-color="#00ff00" data-label="Minimum" />
+                    <input class="input_nostyle swac_datadescription_value_txt" value="Minimum" readonly style="margin-left: 10px; width: 7ch;" />
+                    <input class="input_nostyle swac_datadescription_value_value" placeholder="—" style="margin-left: 10px; width: 12ch;" readonly />
+                    <span uk-icon="icon: trash; ratio: 1" class="swac_datadescription_removebutton"></span>
+                </div>
+                <div style="display: flex; margin-bottom: 10px;">
+                    <input class="swac_datadescription_value_col" type="color" value="#ffff00" style="--color: #ffff00;" data-statistic="medianValue" data-color="#ffff00" data-label="Median" />
+                    <input class="input_nostyle swac_datadescription_value_txt" value="Median" readonly style="margin-left: 10px; width: 6ch;" />
+                    <input class="input_nostyle swac_datadescription_value_value" placeholder="—" style="margin-left: 10px; width: 12ch;" readonly />
+                    <span uk-icon="icon: trash; ratio: 1" class="swac_datadescription_removebutton"></span>
+                </div>
+                <div style="display: flex; margin-bottom: 10px;">
+                    <input class="swac_datadescription_value_col" type="color" value="#ff0000" style="--color: #ff0000;" data-statistic="maxValue" data-color="#ff0000" data-label="Maximum" />
+                    <input class="input_nostyle swac_datadescription_value_txt" value="Maximum" readonly style="margin-left: 10px; width: 7ch;" />
+                    <input class="input_nostyle swac_datadescription_value_value" placeholder="—" style="margin-left: 10px; width: 12ch;" readonly />
+                    <span uk-icon="icon: trash; ratio: 1" class="swac_datadescription_removebutton"></span>
+                </div>
+            </div>
+            <div class="swac_datadescription_wrapper_button">
+                <button class="uk-button uk-button-small uk-button-default swac_datadescription_addbutton" type="button" disabled swac_lang="Datadescription.addButton"></button>
+            </div>
+        </div>
+    </li>
     <li class="swac_repeatForLegend uk-open">
         <input class="uk-checkbox swac_datadescription_datacheck" type="checkbox">
         <div class="swac_datadescription_wrapper_title">
@@ -41,9 +78,4 @@
             <input class="uk-button uk-button-primary swac_datadescription_new_attribute_button" type="button" value="Datadescription.saveButton" />
         </p>
     </div>
-</div>
-<div hidden>
-    <span data-statistic="minValue" data-color="#00ff00" data-label="Minimum"></span>
-    <span data-statistic="medianValue" data-color="#ffff00" data-label="Median"></span>
-    <span data-statistic="maxValue" data-color="#ff0000" data-label="Maximum"></span>
 </div>

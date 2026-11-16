@@ -28,6 +28,13 @@ export default class Heatmap extends Present {
         }
         let thisRef = this;
         return super.init().then(function () {
+            let legend = document.getElementById(thisRef.options.datadescription);
+            thisRef.legendChangeHandler = function (event) {
+                if (event.target.matches('.swac_datadescription_datacheck')
+                        || event.target.closest('.swac_datadescription_empty_legend'))
+                    thisRef.renderColors();
+            };
+            legend.addEventListener('change', thisRef.legendChangeHandler);
             window.swac.reactions.addReaction(function () {
                 thisRef.renderColors();
             }, thisRef.requestor.id, thisRef.options.datadescription);
@@ -60,6 +67,10 @@ export default class Heatmap extends Present {
 
     updateLegend(legend) {
         let definitions = {id: 1};
+        let previousSource = legend.data[legend.options.activeSource];
+        let previous = previousSource ? previousSource.getSet(legend.options.activeSet) : {};
+        let emptyLegend = legend.requestor.querySelector('.swac_datadescription_empty_legend');
+        let defaultCheck = emptyLegend && emptyLegend.querySelector('.swac_datadescription_datacheck');
         for (let column of this.requestor.querySelectorAll('.swac_repeatedForAttribute[swac_attrname]')) {
             let attribute = column.getAttribute('swac_attrname');
             let values = [];
@@ -68,6 +79,33 @@ export default class Heatmap extends Present {
                     if (set && Number.isFinite(set[attribute]))
                         values.push(set[attribute]);
                 }
+            }
+            if (values.length === 0)
+                continue;
+            let oldDefinition = previous[attribute];
+            if (oldDefinition && oldDefinition.autoCalculate === false) {
+                definitions[attribute] = oldDefinition;
+                continue;
+            }
+            let automatic = oldDefinition ? oldDefinition.autoCalculate !== false : !defaultCheck || defaultCheck.checked;
+            if (!automatic) {
+                let manual = {txt_title: attribute, txt_desc: '', visualise: true,
+                    autoCalculate: false, calcmode: '<', includeMax: true, values: {}};
+                let valid = true;
+                for (let field of legend.requestor.querySelectorAll('[data-statistic]')) {
+                    let input = field.parentNode.querySelector('.swac_datadescription_value_value');
+                    if (!input || input.value.trim() === '' || !Number.isFinite(Number(input.value))) {
+                        valid = false;
+                        break;
+                    }
+                    manual.values[Number(input.value).toExponential()] = {
+                        col: field.value || field.getAttribute('data-color'),
+                        txt: field.getAttribute('data-label')
+                    };
+                }
+                if (valid && Object.keys(manual.values).length > 0)
+                    definitions[attribute] = manual;
+                continue;
             }
             if (values.length > 0) {
                 let min = Math.min(...values);
@@ -82,6 +120,7 @@ export default class Heatmap extends Present {
                     txt_title: attribute,
                     txt_desc: min + ' - ' + max,
                     visualise: true,
+                    autoCalculate: true,
                     minValue: min,
                     medianValue: median,
                     maxValue: max,
@@ -97,7 +136,7 @@ export default class Heatmap extends Present {
                     let key = value.toExponential();
                     if (!definition.values[key]) {
                         definition.values[key] = {
-                            col: field.getAttribute('data-color'),
+                            col: field.value || field.getAttribute('data-color'),
                             txt: field.getAttribute('data-label')
                         };
                     }
@@ -110,18 +149,22 @@ export default class Heatmap extends Present {
         legend.options.activeSet = null;
         if (Object.keys(definitions).length > 1)
             legend.addData(this.requestor.id + '_legend', [definitions]);
-        for (let element of legend.requestor.querySelectorAll('.swac_repeatedForLegend'))
+        for (let element of legend.requestor.querySelectorAll('.swac_repeatedForLegend:not(.swac_datadescription_empty_legend)'))
             element.remove();
         let template = legend.requestor.querySelector('.swac_repeatForLegend');
         for (let attribute in definitions) {
             if (attribute !== 'id')
                 legend.addNewAttributeElementToLegend(template, definitions, attribute);
         }
+        if (Object.keys(definitions).length === 1 && legend.options.showWhenNoData)
+            legend.getLegend();
     }
 
     delete() {
         window.swac.loadedComponents.delete(this.requestor.id);
         let element = document.getElementById(this.options.datadescription);
+        if (element && this.legendChangeHandler)
+            element.removeEventListener('change', this.legendChangeHandler);
         if (element && element.swac_comp) {
             let thisRef = this;
             element.swac_comp.formatedDataElements = element.swac_comp.formatedDataElements.filter(function (curElement) {
