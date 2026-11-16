@@ -11,6 +11,7 @@ export default class Heatmap extends Present {
         super(heatmapOptions);
 
         this.name = 'Heatmap';
+
         this.desc.text = 'Displays datasets as a coloured table using a Datadescription legend.';
         this.desc.templates = [];
         this.desc.templates[0] = {
@@ -18,8 +19,12 @@ export default class Heatmap extends Present {
             url: SWAC.config.swac_root + 'components/Present/table_for_all_datasets.html',
             desc: 'Table with coloured values.'
         };
-        if (!options.datadescription)
-            this.options.datadescription = '';
+        this.desc.opts[1] = {
+            name: 'datadescription',
+            desc: 'ID of the Datadescription component used for the heatmap legend and cell background colours. Required; specify the ID without #.',
+            example: 'heatmap_legend'
+        };
+        
     }
 
     init() {
