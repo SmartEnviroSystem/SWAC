@@ -18,7 +18,8 @@ export default class Heatmap extends Present {
             url: SWAC.config.swac_root + 'components/Present/table_for_all_datasets.html',
             desc: 'Table with coloured values.'
         };
-        this.options.datadescription = options.datadescription || '';
+        if (!options.datadescription)
+            this.options.datadescription = '';
     }
 
     init() {
@@ -47,12 +48,6 @@ export default class Heatmap extends Present {
         legend.formatDataElementBackground(this.requestor);
     }
 
-    getMin(list) {
-        if (list.length === 0)
-            return null;
-        return Math.min(...list);
-    }
-
     getMedian(list) {
         if (list.length === 0)
             return null;
@@ -61,12 +56,6 @@ export default class Heatmap extends Present {
         });
         let middle = Math.floor(sorted.length / 2);
         return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
-    }
-
-    getMax(list) {
-        if (list.length === 0)
-            return null;
-        return Math.max(...list);
     }
 
     updateLegend(legend) {
@@ -81,23 +70,37 @@ export default class Heatmap extends Present {
                 }
             }
             if (values.length > 0) {
-                let min = this.getMin(values);
+                let min = Math.min(...values);
                 let median = this.getMedian(values);
-                let max = this.getMax(values);
-                let limits = {minValue: (min + median) / 2,
-                    medianValue: (max + median) / 2, maxValue: max};
-                let definition = {txt_title: attribute, txt_desc: min + ' – ' + max, visualise: true,
-                    minValue: min, medianValue: median, maxValue: max,
-                    calcmode: '<', includeMax: true, values: {}};
+                let max = Math.max(...values);
+                let limits = {
+                    minValue: (min + median) / 2,
+                    medianValue: (max + median) / 2,
+                    maxValue: max
+                };
+                let definition = {
+                    txt_title: attribute,
+                    txt_desc: min + ' - ' + max,
+                    visualise: true,
+                    minValue: min,
+                    medianValue: median,
+                    maxValue: max,
+                    calcmode: '<',
+                    includeMax: true,
+                    values: {}
+                };
                 for (let field of legend.requestor.querySelectorAll('[data-statistic]')) {
                     let statistic = field.getAttribute('data-statistic');
                     if (min === max && statistic !== 'minValue')
                         continue;
                     let value = limits[statistic];
                     let key = value.toExponential();
-                    if (!definition.values[key])
-                        definition.values[key] = {col: field.getAttribute('data-color'),
-                            txt: field.getAttribute('data-label')};
+                    if (!definition.values[key]) {
+                        definition.values[key] = {
+                            col: field.getAttribute('data-color'),
+                            txt: field.getAttribute('data-label')
+                        };
+                    }
                 }
                 definitions[attribute] = definition;
             }
@@ -120,8 +123,10 @@ export default class Heatmap extends Present {
         window.swac.loadedComponents.delete(this.requestor.id);
         let element = document.getElementById(this.options.datadescription);
         if (element && element.swac_comp) {
-            element.swac_comp.formatedDataElements = element.swac_comp.formatedDataElements.filter(
-                    element => element !== this.requestor);
+            let thisRef = this;
+            element.swac_comp.formatedDataElements = element.swac_comp.formatedDataElements.filter(function (curElement) {
+                return curElement !== thisRef.requestor;
+            });
         }
         super.delete();
     }
