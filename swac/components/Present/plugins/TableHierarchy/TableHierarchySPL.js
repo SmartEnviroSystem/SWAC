@@ -11,7 +11,8 @@ export default class TableHierarchySPL extends Plugin {
         this.desc.opts.push(
             {name: 'relations', desc: 'Array of {parentId, childId} relationships.'},
             {name: 'loadRelations', desc: 'Optional async function returning relations; receives the Present component.'},
-            {name: 'linear', desc: 'If true, branching components stay flat with a warning.'}
+            {name: 'linear', desc: 'If true, branching components stay flat with a warning.'},
+            {name: 'expandWhen', desc: 'Optional dataset predicate that keeps a group expanded.'}
         );
         this.entries = new Map();
         this.tables = new Set();
@@ -191,7 +192,9 @@ export default class TableHierarchySPL extends Plugin {
                 const hasChildren = group.members.length > 1;
                 const filtered = filters.length > 0;
                 const visible = !filtered || group.members.some(member => matches(byId.get(member.id)));
-                const expanded = filtered || this.expanded.has(root);
+                const automatic = typeof this.settings.expandWhen === 'function'
+                    && group.members.some(member => this.settings.expandWhen(this.entries.get(byId.get(member.id)).set));
+                const expanded = filtered || automatic || this.expanded.has(root);
                 for (const member of group.members) {
                     const row = byId.get(member.id);
                     const cell = row.querySelector('.swac_tablehierarchy_cell');
@@ -214,7 +217,7 @@ export default class TableHierarchySPL extends Plugin {
                         button.setAttribute('aria-label', button.title);
                         button.setAttribute('aria-expanded', String(expanded));
                         button.setAttribute('aria-controls', group.members.slice(1).map(child => byId.get(child.id).id).join(' '));
-                        button.disabled = filtered;
+                        button.disabled = filtered || automatic;
                     } else {
                         cell.textContent = member.depth ? '↳' : '';
                     }
