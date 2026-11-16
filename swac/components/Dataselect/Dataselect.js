@@ -60,10 +60,14 @@ export default class Dataselect extends View {
             desc: 'Area around the time attribute selection, only shown when the collection has no attribute named like defaultTimeAttr.'
         };
         this.desc.optPerTpl[3] = {
-            selc: '.swac_dataselect_from, .swac_dataselect_to',
-            desc: 'Inputs (datetime-local) for the period, used when showPeriod is true.'
+            selc: '.swac_dataselect_from',
+            desc: 'Input (datetime-local) for the start of the period, used when showPeriod is true.'
         };
         this.desc.optPerTpl[4] = {
+            selc: '.swac_dataselect_to',
+            desc: 'Input (datetime-local) for the end of the period, used when showPeriod is true.'
+        };
+        this.desc.optPerTpl[5] = {
             selc: '.swac_dataselect_periodarea',
             desc: 'Areas around the period inputs, shown when showPeriod is true.'
         };
