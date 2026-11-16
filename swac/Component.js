@@ -608,6 +608,14 @@ DEFINTION of SET:\n\
             }
         }
 
+        this.desc.funcs[1027] = {
+            name: 'calculateSamplingRate',
+            desc: 'Adds swac_sampling_interval_ms and swac_sampling_median_ms to the supplied datasets without saving them to the datasource. Uses ts by default; duplicate timestamps are excluded from the median.',
+            params: [{name: 'sets', type: 'WatchableSet[]', desc: 'Datasets to calculate.'},
+                {name: 'timeAttribute', type: 'string', desc: 'Timestamp attribute; defaults to ts.'}],
+            returns: {type: 'number|null', desc: 'Median positive interval in milliseconds, or null when no positive interval exists.'}
+        };
+
         // Documentation for events
         this.desc.events[1000] = {
             name: 'swac_Component_REQUESTOR.ID_lastSetFromRequestAdded',
@@ -2117,26 +2125,41 @@ DEFINTION of SET:\n\
             }
         }
     }
-    calculateSamplingRate(sets) {
-    let times = sets
-        .map(getTimeValue)
-        .filter(Number.isFinite)
-        .sort((a, b) => a - b);
+    calculateSamplingRate(sets, timeAttribute = 'ts') {
+        let timedSets = [];
+        for (let set of sets) {
+            if (!set)
+                continue;
+            set.swac_sampling_interval_ms = null;
+            set.swac_sampling_median_ms = null;
+            let value = set[timeAttribute];
+            if (value === null || typeof value === 'undefined' || value === '')
+                continue;
+            let time = new Date(value).getTime();
+            if (Number.isFinite(time))
+                timedSets.push({set: set, time: time});
+        }
+        timedSets.sort(function (first, second) {
+            return first.time - second.time;
+        });
 
-    if (times.length < 2)
-        return null;
-
-    let differences = [];
-
-    for (let i = 1; i < times.length; i++) {
-        let diff = times[i] - times[i - 1];
-
-        if (diff > 0)
-            differences.push(diff);
+        let differences = [];
+        for (let i = 1; i < timedSets.length; i++) {
+            let difference = timedSets[i].time - timedSets[i - 1].time;
+            timedSets[i].set.swac_sampling_interval_ms = difference;
+            if (difference > 0)
+                differences.push(difference);
+        }
+        if (differences.length === 0)
+            return null;
+        differences.sort(function (first, second) {
+            return first - second;
+        });
+        let middle = Math.floor(differences.length / 2);
+        let median = differences.length % 2 ? differences[middle]
+                : Math.round((differences[middle - 1] + differences[middle]) / 2);
+        for (let entry of timedSets)
+            entry.set.swac_sampling_median_ms = median;
+        return median;
     }
-
-    return differences.length ? getMedian(differences) : null;
-    }
-
-
 }
