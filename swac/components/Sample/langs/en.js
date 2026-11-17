@@ -1,4 +1,4 @@
-var Sample_de = {
+var Sample_en = {
     languagemark: 'Languagemark'
 };
-export default Sample_de;
+export default Sample_en;
