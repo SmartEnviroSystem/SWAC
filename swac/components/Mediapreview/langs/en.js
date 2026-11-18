@@ -4,6 +4,16 @@ var Mediapreview_en = {
   filternone: 'Show all',
   filterwithout: 'Without this',
   edit: 'edit',
-  couldnotgetfull: 'The medium could not be loaded.'
+  couldnotgetfull: 'The medium could not be loaded.',
+  firstpage: 'First page',
+  prevpage: 'Previous page',
+  nextpage: 'Next page',
+  lastpage: 'Last page',
+  withoutts: 'Without timestamp',
+  number: 'No.',
+  of: 'of',
+  media: 'media',
+  loading: 'Loading media …',
+  nomedia: 'No media available'
 };
 export default Mediapreview_en;

@@ -2,6 +2,7 @@ import SWAC from '../../swac.js';
 import View from '../../View.js';
 import Msg from '../../Msg.js';
 import Mediacode from '../Mediaplayer/Mediacode.js';
+import MediaNavigator from './MediaNavigator.js';
 
 export default class Mediapreview extends View {
 
@@ -41,6 +42,34 @@ export default class Mediapreview extends View {
         this.desc.optPerTpl[0] = {
             selc: '.swac_mediapreview_editbutton',
             desc: 'Button that opens the media editor. Automatically is hidden, when the option.mediaeditor is not set.'
+        };
+        this.desc.optPerTpl[1] = {
+            selc: '.swac_mediapreview_nav',
+            desc: 'Area with the page navigation. Shown when the option navigation is active.'
+        };
+        this.desc.optPerTpl[2] = {
+            selc: '.swac_mediapreview_first',
+            desc: 'Button that shows the first page.'
+        };
+        this.desc.optPerTpl[3] = {
+            selc: '.swac_mediapreview_prev',
+            desc: 'Button that shows the previous page.'
+        };
+        this.desc.optPerTpl[4] = {
+            selc: '.swac_mediapreview_next',
+            desc: 'Button that shows the next page.'
+        };
+        this.desc.optPerTpl[5] = {
+            selc: '.swac_mediapreview_last',
+            desc: 'Button that shows the last page.'
+        };
+        this.desc.optPerTpl[6] = {
+            selc: '.swac_mediapreview_pageinfo',
+            desc: 'Element where the range of the shown page is displayed.'
+        };
+        this.desc.optPerTpl[7] = {
+            selc: '.swac_mediapreview_withoutts',
+            desc: 'Button that switches to the media without timestamp. Only shown if some media have a timestamp and some not.'
         };
         this.desc.reqPerSet[0] = {
             name: 'id',
@@ -90,7 +119,7 @@ export default class Mediapreview extends View {
             name: "filteractive",
             desc: "Sets if the filter function should be active or not."
         };
-        if (!options.filteractive)
+        if (options.filteractive === undefined)
             this.options.filteractive = true;
         this.desc.opts[2] = {
             name: "docroot",
@@ -104,8 +133,86 @@ export default class Mediapreview extends View {
         };
         if (!options.hrefToMediaeditor)
             this.options.hrefToMediaeditor = '';
+        this.desc.opts[4] = {
+            name: "navigation",
+            desc: "If true, a navigation below the media allows to show the previous and next pages of media."
+        };
+        if (options.navigation === undefined)
+            this.options.navigation = true;
+        this.desc.opts[5] = {
+            name: "pageSize",
+            desc: "Number of media per page. Default is the size given in the WHERE clause, otherwise 25."
+        };
+        if (!options.pageSize)
+            this.options.pageSize = null;
+        this.desc.opts[6] = {
+            name: "tsAttr",
+            desc: "Name of the attribute that contains the timestamp of the media."
+        };
+        if (!options.tsAttr)
+            this.options.tsAttr = 'ts';
+        this.desc.opts[7] = {
+            name: "orderAttr",
+            desc: "Attribute the navigation goes by. 'auto' uses the timestamp if the media have one, otherwise the id. "
+                    + "If some media have a timestamp and some not, the media without timestamp can be shown separately."
+        };
+        if (!options.orderAttr)
+            this.options.orderAttr = 'auto';
+        this.desc.opts[8] = {
+            name: "showWithoutTs",
+            desc: "If true and some media have a timestamp and some not, a button switches to the media without timestamp."
+        };
+        if (options.showWithoutTs === undefined)
+            this.options.showWithoutTs = true;
+        this.desc.opts[9] = {
+            name: "pathAttr",
+            desc: "Name of the attribute that contains the path, URL or data URL of the media."
+        };
+        if (!options.pathAttr)
+            this.options.pathAttr = 'path';
+        // The required path attribute is the configured one
+        this.desc.reqPerSet[2].name = this.options.pathAttr;
 
-
+        this.desc.funcs[0] = {
+            name: 'firstPage',
+            desc: 'Shows the first page of media.',
+            returns: {
+                desc: 'Promise that resolves when the page is shown.',
+                type: 'Promise'
+            }
+        };
+        this.desc.funcs[1] = {
+            name: 'prevPage',
+            desc: 'Shows the page before the shown media.',
+            returns: {
+                desc: 'Promise that resolves when the page is shown.',
+                type: 'Promise'
+            }
+        };
+        this.desc.funcs[2] = {
+            name: 'nextPage',
+            desc: 'Shows the page after the shown media.',
+            returns: {
+                desc: 'Promise that resolves when the page is shown.',
+                type: 'Promise'
+            }
+        };
+        this.desc.funcs[3] = {
+            name: 'lastPage',
+            desc: 'Shows the last page of media.',
+            returns: {
+                desc: 'Promise that resolves when the page is shown.',
+                type: 'Promise'
+            }
+        };
+        this.desc.funcs[4] = {
+            name: 'toggleWithoutTs',
+            desc: 'Switches between the media with timestamp and the media without timestamp.',
+            returns: {
+                desc: 'Promise that resolves when the page is shown.',
+                type: 'Promise'
+            }
+        };
 
         // Load language file for mediacode
         SWAC.lang.loadTranslationFile('../swac/components/Mediaplayer/langs/mediacode', 'Mediacode');
@@ -128,15 +235,31 @@ export default class Mediapreview extends View {
         this.lastBinFile = null;
         this.lastGlTFFile = null;
         this.lastGlTFFileContent = '';
+        // Navigation
+        this.navigator = null;
+        this.shownSets = [];        // Sets of the shown page in display order
+        this.descending = false;    // Media are shown from the newest / highest to the lowest
+        this.hasPrev = false;
+        this.hasNext = false;
+        this.navLoading = false;
     }
 
     init() {
         return new Promise((resolve, reject) => {
             this.toggleMediaEditorButtons();
-
+            if (this.options.navigation)
+                this.initNavigation();
             resolve();
 
         });
+    }
+
+    //Inheritted
+    checkAcceptSet(set) {
+        // When the navigation shows the pages, sets are only added by showSets()
+        if (this.navigator && this.navigator.mode)
+            return false;
+        return super.checkAcceptSet(set);
     }
 
     //Inheritted
@@ -145,12 +268,260 @@ export default class Mediapreview extends View {
     }
 
     /**
-     *  Activate or deactivates mediaeditor button depending on the mediaeditor option.
-     *  
+     * Creates the navigation, detects if the media have timestamps and shows the first page.
+     *
+     * @returns {Promise} Resolves when the first page is shown
+     */
+    async initNavigation() {
+        let nav = this.requestor.querySelector('.swac_mediapreview_nav');
+        if (!nav) {
+            Msg.warn('Mediapreview', 'The template has no element .swac_mediapreview_nav. Navigation is not available.', this.requestor);
+            return;
+        }
+        // The WHERE clause from the declaration, before loading changes it
+        let fromWheres = this.firstDatasource ? this.firstDatasource.fromWheres : this.requestor.fromWheres;
+        fromWheres = Object.assign({}, fromWheres);
+        let order = fromWheres.order ? fromWheres.order.toLowerCase() : '';
+        this.descending = order.endsWith(',desc');
+        let pageSize = this.options.pageSize || parseInt(fromWheres.size) || 25;
+        this.navigator = new MediaNavigator(this, {
+            tsAttr: this.options.tsAttr,
+            orderAttr: this.options.orderAttr,
+            pageSize: pageSize,
+            fromWheres: fromWheres
+        });
+
+        let buttons = {
+            first: this.firstPage,
+            prev: this.prevPage,
+            next: this.nextPage,
+            last: this.lastPage,
+            withoutts: this.toggleWithoutTs
+        };
+        for (let curName in buttons) {
+            let button = nav.querySelector('.swac_mediapreview_' + curName);
+            if (button)
+                button.addEventListener('click', buttons[curName].bind(this));
+        }
+
+        try {
+            await this.navigator.detect();
+        } catch (e) {
+            Msg.error('Mediapreview', 'Could not detect navigation mode: ' + e, this.requestor);
+            this.navigator.mode = null;
+            return;
+        }
+        nav.classList.remove('swac_dontdisplay');
+        await this.firstPage();
+    }
+
+    /**
+     * Shows the first page of media
+     *
+     * @returns {Promise} Resolves when the page is shown
+     */
+    firstPage() {
+        return this.showPage('first');
+    }
+
+    /**
+     * Shows the page before the shown media
+     *
+     * @returns {Promise} Resolves when the page is shown
+     */
+    prevPage() {
+        return this.showPage('prev');
+    }
+
+    /**
+     * Shows the page after the shown media
+     *
+     * @returns {Promise} Resolves when the page is shown
+     */
+    nextPage() {
+        return this.showPage('next');
+    }
+
+    /**
+     * Shows the last page of media
+     *
+     * @returns {Promise} Resolves when the page is shown
+     */
+    lastPage() {
+        return this.showPage('last');
+    }
+
+    /**
+     * Switches between the media with timestamp and the media without timestamp
+     *
+     * @returns {Promise} Resolves when the page is shown
+     */
+    toggleWithoutTs() {
+        if (!this.navigator || this.navigator.mode !== 'mixed')
+            return Promise.resolve();
+        this.navigator.withoutTs = !this.navigator.withoutTs;
+        this.navigator.total = null;
+        return this.showPage('first');
+    }
+
+    /**
+     * Loads and shows a page of media
+     *
+     * @param {String} which first, prev, next or last
+     * @returns {Promise} Resolves when the page is shown
+     */
+    async showPage(which) {
+        if (!this.navigator || !this.navigator.mode || this.navLoading)
+            return;
+        // Forward in the display goes back in the order when media are shown descending
+        let forward = which === 'first' || which === 'next';
+        let direction = forward !== this.descending ? 1 : -1;
+        let refSet = null;
+        if (which === 'next')
+            refSet = this.shownSets[this.shownSets.length - 1];
+        else if (which === 'prev')
+            refSet = this.shownSets[0];
+        if ((which === 'next' || which === 'prev') && !refSet)
+            return;
+
+        this.navLoading = true;
+        try {
+            this.updateNavigation();
+            let page = await this.navigator.loadPage(direction, refSet);
+            if (page.sets.length > 0) {
+                if (which === 'first' || which === 'last') {
+                    this.hasPrev = which === 'last' && page.more;
+                    this.hasNext = which === 'first' && page.more;
+                } else {
+                    this.hasPrev = which === 'next' || page.more;
+                    this.hasNext = which === 'prev' || page.more;
+                }
+                let sets = this.descending ? page.sets.reverse() : page.sets;
+                this.showSets(sets);
+            } else if (which === 'next') {
+                this.hasNext = false;
+            } else if (which === 'prev') {
+                this.hasPrev = false;
+            }
+        } catch (e) {
+            Msg.error('Mediapreview', 'Could not load page: ' + e, this.requestor);
+        } finally {
+            this.navLoading = false;
+            this.updateNavigation();
+        }
+    }
+
+    /**
+     * Replaces the shown media
+     *
+     * @param {WatchableSet[]} sets Sets to show in display order
      * @returns {undefined}
      */
-    toggleMediaEditorButtons() {
-        let mediaeditorButtons = this.requestor.querySelectorAll('.swac_mediapreview_editbutton');
+    showSets(sets) {
+        let fromName = this.requestor.fromName;
+        // removeData() resets the WHERE clause, but it is needed when sets are checked
+        let fromWheres = this.requestor.fromWheres;
+        if (this.data[fromName])
+            this.removeData(fromName);
+        this.requestor.fromWheres = fromWheres;
+        this.resetFilters();
+        this.shownSets = sets;
+        // Sets added this way are not checked by checkAcceptSet()
+        this.addData(fromName, sets);
+        for (let curRepeated of this.requestor.querySelectorAll('.swac_repeatedForSet')) {
+            this.toggleMediaEditorButtons(curRepeated);
+        }
+    }
+
+    /**
+     * Removes the filter controls of the shown media, they are built again for the new media
+     *
+     * @returns {undefined}
+     */
+    resetFilters() {
+        let filterarea = this.requestor.querySelector('.swac_mediapreview_filterarea');
+        if (filterarea) {
+            for (let curAttrElem of filterarea.querySelectorAll('.swac_mediapreview_filterattr:not(.swac_dontdisplay)')) {
+                curAttrElem.remove();
+            }
+        }
+        this.filters = {};
+        this.filtersBuildHistory = {};
+    }
+
+    /**
+     * Updates buttons and page information of the navigation
+     *
+     * @returns {undefined}
+     */
+    updateNavigation() {
+        let nav = this.requestor.querySelector('.swac_mediapreview_nav');
+        if (!nav || !this.navigator)
+            return;
+        let atStart = this.navLoading || !this.hasPrev;
+        let atEnd = this.navLoading || !this.hasNext;
+        let states = {first: atStart, prev: atStart, next: atEnd, last: atEnd};
+        for (let curName in states) {
+            let button = nav.querySelector('.swac_mediapreview_' + curName);
+            if (button)
+                button.disabled = states[curName];
+        }
+
+        let info = nav.querySelector('.swac_mediapreview_pageinfo');
+        if (info)
+            info.textContent = this.getPageInfo();
+
+        let withoutTs = nav.querySelector('.swac_mediapreview_withoutts');
+        if (withoutTs) {
+            let show = this.options.showWithoutTs && this.navigator.mode === 'mixed';
+            withoutTs.classList.toggle('swac_dontdisplay', !show);
+            withoutTs.classList.toggle('uk-button-primary', this.navigator.withoutTs);
+            withoutTs.disabled = this.navLoading;
+            let count = this.navigator.withoutTsCount;
+            withoutTs.textContent = SWAC.lang.dict.Mediapreview.withoutts + (count !== null ? ' (' + count + ')' : '');
+        }
+    }
+
+    /**
+     * Creates the description of the shown page
+     *
+     * @returns {String} Text like 15.06.2026, 00:00:06 – 00:03:57 · 24 of 201 media
+     */
+    getPageInfo() {
+        let dict = SWAC.lang.dict.Mediapreview;
+        if (this.navLoading)
+            return dict.loading;
+        if (this.shownSets.length === 0)
+            return dict.nomedia;
+        let first = this.shownSets[0];
+        let last = this.shownSets[this.shownSets.length - 1];
+        let range;
+        let firstDate = this.navigator.getDate(first);
+        let lastDate = this.navigator.getDate(last);
+        if (this.navigator.getAttr() === this.options.tsAttr && firstDate && lastDate) {
+            range = firstDate.toLocaleString();
+            if (firstDate.toDateString() === lastDate.toDateString())
+                range += ' – ' + lastDate.toLocaleTimeString();
+            else
+                range += ' – ' + lastDate.toLocaleString();
+        } else {
+            let attr = this.navigator.getAttr();
+            range = (attr === 'id' ? dict.number + ' ' : attr + ' ') + first[attr] + ' – ' + last[attr];
+        }
+        let count = this.shownSets.length;
+        if (this.navigator.total !== null)
+            count += ' ' + dict.of + ' ' + this.navigator.total;
+        return range + ' · ' + count + ' ' + dict.media;
+    }
+
+    /**
+     *  Activate or deactivates mediaeditor button depending on the mediaeditor option.
+     *
+     * @param {DOMElement} root Element that contains the buttons, default is the whole component
+     * @returns {undefined}
+     */
+    toggleMediaEditorButtons(root = this.requestor) {
+        let mediaeditorButtons = root.querySelectorAll('.swac_mediapreview_editbutton');
         if (this.options.onClickMediaEdit) {
             Msg.info('Mediapreview', 'Action for click on edit button is set. Activateing edit buttons.', this.requestor);
             for (let curMeButton of mediaeditorButtons) {
@@ -198,7 +569,7 @@ export default class Mediapreview extends View {
 
         // Use mediaEditor
 
-        let mediacode = new Mediacode(this.data, set, 'path', mimetype, this.options.docroot);
+        let mediacode = new Mediacode(this.data, set, this.options.pathAttr, mimetype, this.options.docroot);
 
 //        
 //        let mediacode;

@@ -4,3 +4,25 @@
     overflow-y: auto;
     overflow-x: hidden;
 }
+
+/* Page navigation below the media */
+.swac_mediapreview_nav {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.swac_mediapreview_nav .uk-button {
+    padding: 0 12px;
+}
+
+.swac_mediapreview_pageinfo {
+    padding: 0 8px;
+}
+
+.swac_mediapreview_withoutts {
+    margin-left: 16px;
+}
