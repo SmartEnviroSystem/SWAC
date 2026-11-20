@@ -1,0 +1,19 @@
+<div class="uk-grid-small uk-child-width-expand@s" uk-grid>
+    <div>
+        <label class="uk-form-label"><span swac_lang="Dataselect.set">Device</span> <span class="uk-text-muted" uk-icon="icon: info; ratio: 0.8" uk-tooltip="Dataselect.info_set" tabindex="0"></span></label>
+        <select class="uk-select swac_dataselect_set">
+            <option value="" swac_lang="Dataselect.chooseset">Select device</option>
+            <option value="{id}" class="swac_repeatForSet">{name}</option>
+        </select>
+    </div>
+    <div class="swac_dataselect_attrarea">
+        <label class="uk-form-label"><span swac_lang="Dataselect.attribute">Measured value</span> <span class="uk-text-muted" uk-icon="icon: info; ratio: 0.8" uk-tooltip="Dataselect.info_attribute" tabindex="0"></span></label>
+        <select class="uk-select swac_dataselect_attr" disabled>
+            <option value="" swac_lang="Dataselect.choosesetfirst">Select device first</option>
+        </select>
+    </div>
+    <div class="swac_dataselect_timearea">
+        <label class="uk-form-label"><span swac_lang="Dataselect.timeattr">Time attribute</span> <span class="uk-text-muted" uk-icon="icon: info; ratio: 0.8" uk-tooltip="Dataselect.info_timeattr" tabindex="0"></span></label>
+        <select class="uk-select swac_dataselect_time" disabled></select>
+    </div>
+</div>
