@@ -9,10 +9,6 @@ export default class Datadescription extends View {
             options.showWhenNoData = true;
         super(options);
 
-        this.options.borderColor = true;
-        this.options.backgroundColor = options.backgroundColor ?? false;
-
-
         this.name = 'Datadescription';
         this.desc.text = 'Describe your data with text and colors. This component makes it possible to describe data. So a simple analysis is possible.';
         this.desc.developers = 'Florian Fehring (HSBI)';
@@ -186,6 +182,23 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
                 }
             ]
         };
+
+        this.desc.opts[8] ={
+            name:'borderColor',
+            desc:'Colours the border of data elements. Default: true.',
+            example: true
+        }
+        
+        this.options.borderColor = true;
+
+        this.desc.opts[9] ={
+            name:'backgroundColor',
+            desc:'Colours the background of data elements. Default: false.',
+            example: false
+        }
+        
+        this.options.backgroundColor = false;
+
         this.desc.funcs[1] = {
             name: 'getValuesVisdata',
             desc: 'Gets a specific visdata (e.g. col, name, etc.) representing a value on a specified attribute.',
