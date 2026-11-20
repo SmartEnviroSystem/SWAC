@@ -56,6 +56,83 @@ export default class Datadescription extends View {
             desc: 'Element where to insert the attribution.'
         };
 
+        this.desc.optPerTpl[5] = {
+            selc: '.swac_datadescription_wrapper_title',
+            desc: 'Container for the attribute title and its controls.'
+        };
+        this.desc.optPerTpl[6] = {
+            selc: '.input_nostyle',
+            desc: 'Displays inputs without their default styling.'
+        };
+        this.desc.optPerTpl[7] = {
+            selc: '.swac_datadescription_attribute_border_color',
+            desc: 'Colour picker for the attribute border.'
+        };
+        this.desc.optPerTpl[8] = {
+            selc: '.swac_datadescription_attribute_delete',
+            desc: 'Control for opening the attribute deletion dialog.'
+        };
+        this.desc.optPerTpl[9] = {
+            selc: '.swac_datadescription_wrapper_datadesc',
+            desc: 'Container for the attribute description.'
+        };
+        this.desc.optPerTpl[10] = {
+            selc: '.swac_datadescription_wrapper_attribution',
+            desc: 'Expandable container for value definitions.'
+        };
+        this.desc.optPerTpl[11] = {
+            selc: '.swac_datadescription_wrapper_button',
+            desc: 'Container for the add button.'
+        };
+        this.desc.optPerTpl[12] = {
+            selc: '.swac_datadescription_addbutton',
+            desc: 'Button for adding a value definition.'
+        };
+        this.desc.optPerTpl[13] = {
+            selc: '.swac_datadescription_modal',
+            desc: 'Dialog for creating an attribute definition.'
+        };
+        this.desc.optPerTpl[14] = {
+            selc: '.swac_datadescription_modal_attribute_name',
+            desc: 'Input for the name of a new attribute.'
+        };
+        this.desc.optPerTpl[15] = {
+            selc: '.swac_datadescription_modal_border_col',
+            desc: 'Colour picker for the border of a new attribute.'
+        };
+        this.desc.optPerTpl[16] = {
+            selc: '.swac_datadescription_modal_visualise',
+            desc: 'Checkbox for enabling visualisation of a new attribute.'
+        };
+        this.desc.optPerTpl[17] = {
+            selc: '.swac_datadescription_new_attribute_button',
+            desc: 'Button for creating the configured attribute definition.'
+        };
+        this.desc.optPerTpl[18] = {
+            selc: '.swac_repeatedForLegend',
+            desc: 'Individual legend entry.'
+        };
+        this.desc.optPerTpl[19] = {
+            selc: '.swac_datadescription_empty_legend',
+            desc: 'Prepared legend shown without an active data source when showWhenNoData is enabled.'
+        };
+        this.desc.optPerTpl[20] = {
+            selc: '.swac_datadescription_value_col',
+            desc: 'Colour picker for a value definition.'
+        };
+        this.desc.optPerTpl[21] = {
+            selc: '.swac_datadescription_value_txt',
+            desc: 'Input for the label of a value definition.'
+        };
+        this.desc.optPerTpl[22] = {
+            selc: '.swac_datadescription_value_value',
+            desc: 'Input for the value or threshold of a value definition.'
+        };
+        this.desc.optPerTpl[23] = {
+            selc: '.swac_datadescription_removebutton',
+            desc: 'Control for removing a value definition.'
+        };
+
         this.desc.optPerSet[0] = {
             name: 'sourcename',
             desc: 'Name to display below the legend as attribution.'
@@ -108,6 +185,16 @@ export default class Datadescription extends View {
             name: 'ATTRIBUTENAME.values[VALUE].txt',
             desc: 'Text describing this value. Used in legend and as vocable in description texts.'
         };
+        this.desc.optPerSet[13] = {
+        name: 'txt_desc',
+        desc: 'Description text displayed in the legend.'
+        };
+        this.desc.optPerTpl[4] = {
+    selc: '.swac_datadescription_datacheck',
+    desc: 'Checkbox for enabling visualisation or automatic threshold calculation.'
+};
+
+
         this.desc.opts[0] = {
             name: 'visuDataset',
             desc: 'Name or id of the dataset that should be described. \n\
