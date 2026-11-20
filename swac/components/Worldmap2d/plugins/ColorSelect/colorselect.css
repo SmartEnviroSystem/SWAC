@@ -1,0 +1,71 @@
+.colorselect {
+    position: relative;
+}
+
+.colorselect-panel {
+    position: absolute;
+    top: 10px;
+    left: 56px;
+    z-index: 1003;
+    min-width: 220px;
+    max-width: 280px;
+    max-height: 60vh;
+    overflow: auto;
+    padding: 12px;
+    background: rgba(248, 248, 248, 0.97);
+    border-radius: 5px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    color: black;
+}
+
+.colorselect-title {
+    font-weight: bold;
+    margin-bottom: 8px;
+}
+
+.colorselect-label,
+.colorselect-info,
+.colorselect-legend {
+    font-size: 0.85rem;
+}
+
+.colorselect-info {
+    margin-top: 8px;
+}
+
+.colorselect-legend {
+    list-style: none;
+    padding: 0;
+    margin: 8px 0 0 0;
+}
+
+.colorselect-legend li {
+    display: flex;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.colorselect-legend li.colorselect-gradiententry {
+    flex-direction: column;
+    align-items: stretch;
+}
+
+.colorselect-swatch {
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+    margin-right: 8px;
+    border: 1px solid rgba(0, 0, 0, 0.3);
+    border-radius: 3px;
+}
+
+.colorselect-gradient {
+    height: 12px;
+    border: 1px solid rgba(0, 0, 0, 0.3);
+    border-radius: 3px;
+}
+
+.colorselect-gradient-labels {
+    display: flex;
+    justify-content: space-between;
+}
