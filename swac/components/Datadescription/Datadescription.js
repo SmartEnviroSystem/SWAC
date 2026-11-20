@@ -591,7 +591,9 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
             return legenddata[attr].values[value][visdataname];
         } else if (calcMode === '<') {
             // Get attributes into array
-            let vals = Object.keys(legenddata[attr].values);
+            let vals = Object.keys(legenddata[attr].values).sort(function (first, second) {
+                return Number(first) - Number(second);
+            });
             for (let curVal of vals) {
                 let curValNumber = new Number(curVal);
                 if (value >= curValNumber) {
@@ -640,8 +642,21 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
      * @returns {DOMElement} HTML DIV Element containing the legend
      */
     getLegend() {
-        if (this.options.showWhenNoData && !this.options.activeSource)
+        let emptyLegend = this.requestor.querySelector('.swac_datadescription_empty_legend');
+        if (emptyLegend)
+            emptyLegend.style.display = this.options.showWhenNoData && !this.options.activeSource ? '' : 'none';
+        if (this.options.showWhenNoData && !this.options.activeSource) {
+            if (emptyLegend) {
+                let check = emptyLegend.querySelector('.swac_datadescription_datacheck');
+                check.title = 'Schwellenwerte automatisch berechnen';
+                check.onchange = function () {
+                    for (let input of emptyLegend.querySelectorAll('.swac_datadescription_value_value'))
+                        input.readOnly = check.checked;
+                };
+                check.onchange();
+            }
             return;
+        }
 
         let requestor = this.requestor;
 
@@ -825,11 +840,20 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
             checkElem.setAttribute('checked', 'checked');
             legenddata[attribute].visualise = true;
         }
-        // Add eventlistener for visualisation changes
+        if (typeof desc.autoCalculate === 'boolean') {
+            checkElem.checked = desc.autoCalculate;
+            checkElem.title = 'Schwellenwerte automatisch berechnen';
+        }
         checkElem.addEventListener('change', () => {
-            legenddata[attribute].visualise = checkElem.checked;
+            if (typeof desc.autoCalculate === 'boolean') {
+                desc.autoCalculate = checkElem.checked;
+                for (let input of attributeElem.querySelectorAll('.swac_datadescription_value_value'))
+                    input.readOnly = checkElem.checked;
+            } else {
+                legenddata[attribute].visualise = checkElem.checked;
+            }
             this.renderFormatedDataElements();
-        })
+        });
 
         if (this.options.onLegendEntryClick !== null) {
             titleElem.addEventListener('click', this.options.onLegendEntryClick);
@@ -881,6 +905,9 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
                 acordCont.appendChild(valueElem);
             });
         }
+        let emptyLegend = requestor.querySelector('.swac_datadescription_empty_legend');
+        if (emptyLegend)
+            emptyLegend.style.display = 'none';
         attributeTemplate.parentNode.appendChild(attributeElem);
         this.formatAll();
     }
@@ -988,7 +1015,9 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
         valueData.classList.add('swac_datadescription_value_value');
         valueData.placeholder = 'Datadescription.valuePlaceholder';
         valueData.style.width = valueData.value.length > 0 ? valueData.value.length + 'ch' : valueData.placeholder.length + 'ch';
-        valueData.style.display = 'none';
+        let automaticLimits = typeof legenddata[attribute].autoCalculate === 'boolean';
+        valueData.readOnly = automaticLimits && legenddata[attribute].autoCalculate;
+        valueData.style.display = automaticLimits ? 'block' : 'none';
         valueElem.appendChild(valueData);
 
         // Remove button
@@ -1011,7 +1040,8 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
         });
         valueElem.addEventListener('mouseleave', () => {
             removeBtn.style.display = 'none';
-            valueData.style.display = 'none';
+            if (!automaticLimits)
+                valueData.style.display = 'none';
         });
 
         colorBtn.addEventListener('input', (e) => {
@@ -1063,6 +1093,13 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
             valueDataOld = valueData.value;
         });
         valueData.addEventListener('focusout', () => {
+            if (automaticLimits && (valueData.readOnly || valueData.value.trim() === ''
+                    || !Number.isFinite(Number(valueData.value)))) {
+                valueData.value = valueDataOld;
+                return;
+            }
+            if (automaticLimits)
+                valueData.value = Number(valueData.value).toExponential();
             if (valueData.value === valueDataOld) {
                 return;
             }
