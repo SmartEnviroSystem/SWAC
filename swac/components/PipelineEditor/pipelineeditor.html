@@ -1,0 +1,178 @@
+<main class="pm-app">
+  <div class="pm-head">
+    <div>
+      <div class="pm-kicker" swac_lang="PipelineEditor.group_desc">SmartMonitoring · Web Engineering · Gruppe 4</div>
+      <h1 class="pm-title" swac_lang="PipelineEditor.datapipelines_title">Datenpipelines</h1>
+      <p class="pm-desc" swac_lang="PipelineEditor.desc">Verarbeitungspipelines erstellen und konfigurieren</p>
+    </div>
+  </div>
+
+  <div class="pm-grid">
+
+    <!-- Pipeline-Verwaltung -->
+    <section class="pm-card">
+      <div class="pm-card-head">
+        <h2 swac_lang="PipelineEditor.pipeline_management_title">Pipeline-Verwaltung</h2>
+        <p swac_lang="PipelineEditor.pipeline_management_desc">Vorhandene Pipeline öffnen oder neu anlegen</p>
+      </div>
+
+      <div class="pm-card-body">
+        <div id="pipelineTreeList" class="pm-tree-list" role="group" aria-label="Pipeline-Bäume"></div>
+        <div style="height:10px"></div>
+
+        <button type="button" class="pm-btn" id="newPipeline" swac_lang="PipelineEditor.btn_new_pipeline">＋ Neue Pipeline anlegen</button>
+        <div style="height:10px"></div>
+
+        <button type="button" class="pm-btn" id="savePipeline" swac_lang="PipelineEditor.btn_save_pipeline">Pipeline speichern</button>
+
+        <div class="pm-smhead" swac_lang="PipelineEditor.palette_head">Verfügbare Bausteine</div>
+
+        <div class="pm-palette" aria-label="Bausteintypen">
+          <span class="pm-chip pm-chip-source" swac_lang="PipelineEditor.chip_source">Quelle</span>
+          <span class="pm-chip pm-chip-filter" swac_lang="PipelineEditor.chip_filter">Filter</span>
+          <span class="pm-chip pm-chip-consolidation" swac_lang="PipelineEditor.chip_consolidation">Konsolidierung</span>
+          <span class="pm-chip pm-chip-script" swac_lang="PipelineEditor.chip_script">Skript / Job</span>
+          <span class="pm-chip pm-chip-target" swac_lang="PipelineEditor.chip_target">Ziel</span>
+        </div>
+
+        <p class="pm-desc" style="margin-top:12px;font-size:12px" swac_lang="PipelineEditor.palette_desc">
+          Die Schritte erscheinen in VisualModel als vertikale Bäume. Klicke einen Knoten oder die Schnellwahl an, um seine Einstellungen zu sehen. Bei „Konsolidierung“ konfigurierst du zwei Tabellen und Zeit-Matching. Bei „Skript / Job“ kannst du eine Vorlage, eigenen Python-Code oder einen Job wählen.
+        </p>
+      </div>
+    </section>
+
+    <!-- Pipeline-Editor / VisualModel -->
+    <section class="pm-card" aria-label="Pipeline-Editor">
+
+      <div class="pm-card-head">
+        <h2 swac_lang="PipelineEditor.editor_title">Pipeline-Editor</h2>
+        <p id="pipelineLabel" swac_lang="PipelineEditor.editor_subtitle">Messdaten aufbereiten</p>
+      </div>
+
+      <!-- Schnellwahl / Nodes -->
+      <div class="pm-step-nav" aria-label="Tastaturbedienbare Baustein-Schnellwahl">
+
+        <button type="button" class="pm-node" data-step="source" aria-pressed="false">
+          <span class="pm-node-name" swac_lang="PipelineEditor.node_source">Quelle</span>
+          <span class="pm-node-value" id="sourcePreview" swac_lang="PipelineEditor.node_source_default">Noch nicht gewählt</span>
+        </button>
+
+        <button type="button" class="pm-node" data-step="consolidation" aria-pressed="false">
+          <span class="pm-node-name" swac_lang="PipelineEditor.node_consolidation">Konsolidierung</span>
+          <span class="pm-node-value" id="consolidationPreview" swac_lang="PipelineEditor.node_consolidation_default">Noch nicht konfiguriert</span>
+        </button>
+
+        <button type="button" class="pm-node" data-step="filter" aria-pressed="false">
+          <span class="pm-node-name" swac_lang="PipelineEditor.node_filter">Filter</span>
+          <span class="pm-node-value" id="filterPreview" swac_lang="PipelineEditor.node_filter_default">Zeitraum: 7 Tage</span>
+        </button>
+
+        <button type="button" class="pm-node" data-step="script" aria-pressed="true">
+          <span class="pm-node-name" swac_lang="PipelineEditor.node_script">Skript / Job</span>
+          <span class="pm-node-value" id="scriptPreview">normalize_values.py</span>
+        </button>
+
+        <button type="button" class="pm-node" data-step="target" aria-pressed="false">
+          <span class="pm-node-name" swac_lang="PipelineEditor.node_target">Ziel</span>
+          <span class="pm-node-value" id="targetPreview" swac_lang="PipelineEditor.node_target_default">ergebnis_tabelle</span>
+        </button>
+
+      </div>
+
+      <!-- Visual Toolbar -->
+      <div class="pm-visual-toolbar">
+        <span class="pm-visual-heading" swac_lang="PipelineEditor.visualmodel_heading">SWAC VisualModel · Baumansicht</span>
+
+        <div class="pm-visual-controls" role="group" aria-label="Baumansicht steuern">
+
+          <button type="button"
+                  class="pm-visual-control"
+                  id="vmZoomOut"
+                  title="Verkleinern"
+                  aria-label="Verkleinern">−</button>
+
+          <output id="vmZoomLabel" aria-label="Zoomstufe">100 %</output>
+
+          <button type="button"
+                  class="pm-visual-control"
+                  id="vmZoomIn"
+                  title="Vergrößern"
+                  aria-label="Vergrößern">＋</button>
+
+          <button type="button"
+                  class="pm-visual-control pm-visual-reset"
+                  id="vmReset"
+                  title="Ansicht zurücksetzen"
+                  swac_lang="PipelineEditor.zoom_reset">Zurücksetzen</button>
+
+          <!-- NEU: Editor vergrößern / verkleinern -->
+          <button type="button"
+                  class="pm-visual-control"
+                  id="vmExpand"
+                  aria-label="Editor vergrößern"
+                  aria-pressed="false"
+                  title="Editor vergrößern">
+            <span id="vmExpandLabel">⛶ Vergrößern</span>
+          </button>
+
+        </div>
+      </div>
+
+      <!-- VisualModel-Viewport -->
+      <div id="visualViewport" class="pm-visual-viewport" tabindex="0" aria-label="Pipeline-Baumansicht mit Scrollfunktion">
+
+        <div id="visualModelHost" class="pm-visual-host">
+          <div class="swac_visualmodel_drawarea"></div>
+
+          <div class="swac_visualmodel_menue" style="display:none">
+            <div class="swac_visualmodel_scenegraph_menue"></div>
+            <div class="swac_visualmodel_scenegraph"></div>
+          </div>
+
+          <div class="swac_visualmodel_legend"></div>
+        </div>
+
+        <div id="visualModelMessage" class="pm-visual-message" role="status" swac_lang="PipelineEditor.visual_loading">
+          VisualModel wird geladen ...
+        </div>
+      </div>
+
+      <!-- Bedienhinweise -->
+      <p class="pm-flow-help" swac_lang="PipelineEditor.flow_help">
+        Freien Bereich ziehen = Ansicht verschieben · Scrollleisten = navigieren · ＋/− = zoomen · Knoten = Einstellungen öffnen
+      </p>
+
+      <!-- Anwendungsfall -->
+      <div class="pm-flow-footer">
+        <h3 swac_lang="PipelineEditor.usecase_title">Anwendungsfall</h3>
+        <p swac_lang="PipelineEditor.usecase_desc">
+          Messdaten aus einer Quelle lesen, filtern und optional mit einer zweiten Tabelle zeitbasiert konsolidieren; danach als Skript-/Job-Schritt konfigurieren und das gewünschte Ziel festlegen. Mehrere Bäume sind lokal im Browser möglich. Keine Backend-Ausführung oder dauerhafte Speicherung.
+        </p>
+      </div>
+
+    </section>
+
+    <!-- Bausteinkonfiguration -->
+    <section class="pm-card pm-settings" aria-label="Bausteinkonfiguration">
+
+      <div class="pm-card-head">
+        <h2 swac_lang="PipelineEditor.settings_title">Bausteinkonfiguration</h2>
+        <p swac_lang="PipelineEditor.settings_desc">Felder ändern sich je nach ausgewähltem Baustein</p>
+      </div>
+
+      <div class="pm-card-body">
+        <span class="pm-badge" id="currentStep" swac_lang="PipelineEditor.settings_badge">Ausgewählter Baustein: Skript</span>
+
+        <form id="detailsForm"></form>
+
+        <div class="pm-feedback" id="feedback" role="status" hidden></div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="pm-footer" swac_lang="PipelineEditor.footer">
+    SmartMonitoring · Datenpipelines · Gruppe 4
+  </div>
+</main>
