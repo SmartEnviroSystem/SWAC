@@ -14,6 +14,11 @@ var Mediapreview_de = {
     of: 'von',
     media: 'Medien',
     loading: 'Lade Medien …',
-    nomedia: 'Keine Medien vorhanden'
+    nomedia: 'Keine Medien vorhanden',
+    goto: 'Gehe zu',
+    playpages: 'Seiten abspielen / anhalten',
+    playspeed: 'Anzeigedauer je Seite',
+    beforefirst: 'Der Zeitpunkt liegt vor dem ersten Medium.',
+    afterlast: 'Der Zeitpunkt liegt nach dem letzten Medium.'
 };
 export default Mediapreview_de;

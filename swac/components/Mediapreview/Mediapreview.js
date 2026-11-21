@@ -3,6 +3,7 @@ import View from '../../View.js';
 import Msg from '../../Msg.js';
 import Mediacode from '../Mediaplayer/Mediacode.js';
 import MediaNavigator from './MediaNavigator.js';
+import ViewHandler from '../../ViewHandler.js';
 
 export default class Mediapreview extends View {
 
@@ -70,6 +71,38 @@ export default class Mediapreview extends View {
         this.desc.optPerTpl[7] = {
             selc: '.swac_mediapreview_withoutts',
             desc: 'Button that switches to the media without timestamp. Only shown if some media have a timestamp and some not.'
+        };
+        this.desc.optPerTpl[8] = {
+            selc: '.swac_mediapreview_bigview',
+            desc: 'Modal for the big view of the images. Shown when an image is clicked and the option bigView is active.'
+        };
+        this.desc.optPerTpl[9] = {
+            selc: '.swac_mediapreview_bigviewarea',
+            desc: 'Element inside the big view where the Collage component is created.'
+        };
+        this.desc.optPerTpl[10] = {
+            selc: '.swac_mediapreview_timenav',
+            desc: 'Area with the navigation by time. Shown when the media are navigated by timestamp.'
+        };
+        this.desc.optPerTpl[11] = {
+            selc: '.swac_mediapreview_timecontrols',
+            desc: 'Form with the input .swac_mediapreview_timepoint, the button .swac_mediapreview_goto and the jump buttons .swac_mediapreview_jumpback and .swac_mediapreview_jumpfwd.'
+        };
+        this.desc.optPerTpl[12] = {
+            selc: '.swac_mediapreview_timemsg',
+            desc: 'Element for messages of the navigation by time.'
+        };
+        this.desc.optPerTpl[13] = {
+            selc: '.swac_mediapreview_timeaxis_bar',
+            desc: 'Time axis from the first to the last medium. Contains .swac_mediapreview_timeaxis_page for the shown page and .swac_mediapreview_timeaxis_hover for the time under the mouse.'
+        };
+        this.desc.optPerTpl[14] = {
+            selc: '.swac_mediapreview_timeaxis_ticks',
+            desc: 'Element where the labels of the time axis are created.'
+        };
+        this.desc.optPerTpl[15] = {
+            selc: '.swac_mediapreview_timeaxis_start',
+            desc: 'Element for the time of the first medium. .swac_mediapreview_timeaxis_end for the time of the last medium.'
         };
         this.desc.reqPerSet[0] = {
             name: 'id',
@@ -172,6 +205,53 @@ export default class Mediapreview extends View {
             this.options.pathAttr = 'path';
         // The required path attribute is the configured one
         this.desc.reqPerSet[2].name = this.options.pathAttr;
+        this.desc.opts[10] = {
+            name: "bigView",
+            desc: "If true, a click on an image opens a big view with the Collage component. "
+                    + "There the images can be navigated one by one and played like a video. "
+                    + "When the big view is closed, the page with the last shown image is shown. "
+                    + "Other media and false use the link of the media."
+        };
+        if (options.bigView === undefined)
+            this.options.bigView = true;
+        this.desc.opts[11] = {
+            name: "bigViewOptions",
+            desc: "Options for the Collage component in the big view, e.g. {playInterval: 250}."
+        };
+        if (!options.bigViewOptions)
+            this.options.bigViewOptions = {};
+        this.desc.opts[12] = {
+            name: "timeNavigation",
+            desc: "If true and the media have timestamps, a timepoint can be chosen, "
+                    + "the pages can be jumped by time and a time axis shows the shown page."
+        };
+        if (options.timeNavigation === undefined)
+            this.options.timeNavigation = true;
+        this.desc.opts[13] = {
+            name: "jumpSeconds",
+            desc: "Number of seconds the jump buttons move the shown page."
+        };
+        if (!options.jumpSeconds)
+            this.options.jumpSeconds = 3600;
+        this.desc.opts[14] = {
+            name: "pagePlayInterval",
+            desc: "Milliseconds a page is shown when the pages are played. "
+                    + "The time starts when the images of the page are loaded."
+        };
+        if (!options.pagePlayInterval)
+            this.options.pagePlayInterval = 2000;
+        this.desc.opts[15] = {
+            name: "pagePlaySpeeds",
+            desc: "Intervals in milliseconds the user can choose for playing the pages. An empty list hides the choice."
+        };
+        if (!options.pagePlaySpeeds)
+            this.options.pagePlaySpeeds = [1000, 2000, 5000, 10000];
+
+        this.desc.events[0] = {
+            name: 'swac_REQUESTOR_ID_mediapreview_play',
+            desc: 'Fired when playing the pages starts or stops.',
+            data: 'Delivers {requestor, playing} with true if playing started.'
+        };
 
         this.desc.funcs[0] = {
             name: 'firstPage',
@@ -213,6 +293,51 @@ export default class Mediapreview extends View {
                 type: 'Promise'
             }
         };
+        this.desc.funcs[5] = {
+            name: 'showTimepoint',
+            desc: 'Shows the page that begins at the given timepoint. '
+                    + 'Before the first or after the last medium the first or last page is shown.',
+            params: [
+                {
+                    name: 'timepoint',
+                    desc: 'Date or text like 2026-06-15T02:00:00 (local time)'
+                }
+            ],
+            returns: {
+                desc: 'Promise that resolves when the page is shown.',
+                type: 'Promise'
+            }
+        };
+        this.desc.funcs[6] = {
+            name: 'jump',
+            desc: 'Shows the page that begins jumpSeconds before or after the first shown medium.',
+            params: [
+                {
+                    name: 'direction',
+                    desc: '-1 for earlier, 1 for later media'
+                }
+            ],
+            returns: {
+                desc: 'Promise that resolves when the page is shown.',
+                type: 'Promise'
+            }
+        };
+        this.desc.funcs[7] = {
+            name: 'play',
+            desc: 'Shows the following pages automatically. On the last page it starts with the first page.',
+            returns: {
+                desc: 'Promise that resolves when playing ends.',
+                type: 'Promise'
+            }
+        };
+        this.desc.funcs[8] = {
+            name: 'pause',
+            desc: 'Stops playing the pages.'
+        };
+        this.desc.funcs[9] = {
+            name: 'togglePlay',
+            desc: 'Starts or stops playing the pages.'
+        };
 
         // Load language file for mediacode
         SWAC.lang.loadTranslationFile('../swac/components/Mediaplayer/langs/mediacode', 'Mediacode');
@@ -242,11 +367,29 @@ export default class Mediapreview extends View {
         this.hasPrev = false;
         this.hasNext = false;
         this.navLoading = false;
+        this.baseWheres = {};       // WHERE clause from the declaration
+        // Navigation by time
+        this.timeRange = null;      // {start, end} time of the first and last medium in milliseconds
+        this.timeMsg = '';          // Message of the navigation by time
+        this.axisWidth = 0;         // Width the labels of the time axis were created for
+        // Playing the pages
+        this.playing = false;
+        this.playRun = 0;           // Number of the current playing, older runs stop
+        this.playTimeout = null;
+        // Big view
+        this.bigViewElem = null;
+        this.bigViewCollage = null;
+        this.bigViewLastSet = null; // Last image shown in the big view
     }
 
     init() {
         return new Promise((resolve, reject) => {
+            // The WHERE clause from the declaration, before loading changes it
+            let fromWheres = this.firstDatasource ? this.firstDatasource.fromWheres : this.requestor.fromWheres;
+            this.baseWheres = Object.assign({}, fromWheres);
             this.toggleMediaEditorButtons();
+            if (this.options.bigView)
+                this.initBigView();
             if (this.options.navigation)
                 this.initNavigation();
             resolve();
@@ -265,6 +408,17 @@ export default class Mediapreview extends View {
     //Inheritted
     afterAddSet(set, repeateds) {
         this.createPreview(set)
+        if (this.bigViewElem)
+            this.addBigViewClick(set);
+    }
+
+    /**
+     * Gets the number of media per page
+     *
+     * @returns {Number} Number of media
+     */
+    getPageSize() {
+        return this.options.pageSize || parseInt(this.baseWheres.size) || 25;
     }
 
     /**
@@ -278,17 +432,13 @@ export default class Mediapreview extends View {
             Msg.warn('Mediapreview', 'The template has no element .swac_mediapreview_nav. Navigation is not available.', this.requestor);
             return;
         }
-        // The WHERE clause from the declaration, before loading changes it
-        let fromWheres = this.firstDatasource ? this.firstDatasource.fromWheres : this.requestor.fromWheres;
-        fromWheres = Object.assign({}, fromWheres);
-        let order = fromWheres.order ? fromWheres.order.toLowerCase() : '';
+        let order = this.baseWheres.order ? this.baseWheres.order.toLowerCase() : '';
         this.descending = order.endsWith(',desc');
-        let pageSize = this.options.pageSize || parseInt(fromWheres.size) || 25;
         this.navigator = new MediaNavigator(this, {
             tsAttr: this.options.tsAttr,
             orderAttr: this.options.orderAttr,
-            pageSize: pageSize,
-            fromWheres: fromWheres
+            pageSize: this.getPageSize(),
+            fromWheres: this.baseWheres
         });
 
         let buttons = {
@@ -301,8 +451,9 @@ export default class Mediapreview extends View {
         for (let curName in buttons) {
             let button = nav.querySelector('.swac_mediapreview_' + curName);
             if (button)
-                button.addEventListener('click', buttons[curName].bind(this));
+                button.addEventListener('click', this.onUserNavigation.bind(this, buttons[curName]));
         }
+        this.initPlay(nav);
 
         try {
             await this.navigator.detect();
@@ -312,7 +463,310 @@ export default class Mediapreview extends View {
             return;
         }
         nav.classList.remove('swac_dontdisplay');
+        if (this.options.timeNavigation)
+            await this.initTimeNavigation();
         await this.firstPage();
+    }
+
+    /**
+     * Prepares the navigation by time and loads the time of the first and last medium
+     *
+     * @returns {Promise} Resolves when the navigation by time is ready
+     */
+    async initTimeNavigation() {
+        let timenav = this.requestor.querySelector('.swac_mediapreview_timenav');
+        if (!timenav)
+            return;
+        try {
+            this.timeRange = await this.navigator.loadRange();
+        } catch (e) {
+            Msg.error('Mediapreview', 'Could not load the time range: ' + e, this.requestor);
+        }
+        if (!this.timeRange)
+            return;
+
+        let dict = SWAC.lang.dict.Mediapreview;
+        let duration = this.formatDuration(this.options.jumpSeconds);
+        let jumpBack = timenav.querySelector('.swac_mediapreview_jumpback');
+        if (jumpBack) {
+            jumpBack.textContent = '−' + duration;
+            jumpBack.addEventListener('click', this.onUserNavigation.bind(this, this.jump, -1));
+        }
+        let jumpFwd = timenav.querySelector('.swac_mediapreview_jumpfwd');
+        if (jumpFwd) {
+            jumpFwd.textContent = '+' + duration;
+            jumpFwd.addEventListener('click', this.onUserNavigation.bind(this, this.jump, 1));
+        }
+        let gotoButton = timenav.querySelector('.swac_mediapreview_goto');
+        if (gotoButton)
+            gotoButton.textContent = dict.goto;
+        let input = timenav.querySelector('.swac_mediapreview_timepoint');
+        if (input) {
+            input.min = this.navigator.formatDate(new Date(this.timeRange.start));
+            input.max = this.navigator.formatDate(new Date(this.timeRange.end));
+        }
+        let controls = timenav.querySelector('.swac_mediapreview_timecontrols');
+        if (controls && input) {
+            controls.addEventListener('submit', evt => {
+                evt.preventDefault();
+                if (input.value)
+                    this.onUserNavigation(this.showTimepoint, input.value);
+            });
+        }
+
+        let bar = timenav.querySelector('.swac_mediapreview_timeaxis_bar');
+        if (bar) {
+            bar.addEventListener('click', evt => {
+                this.onUserNavigation(this.showTimepoint, this.getAxisTime(evt, bar));
+            });
+            bar.addEventListener('mousemove', this.onAxisHover.bind(this, bar));
+            bar.addEventListener('mouseleave', () => {
+                let hover = bar.querySelector('.swac_mediapreview_timeaxis_hover');
+                if (hover)
+                    hover.classList.add('swac_dontdisplay');
+            });
+        }
+        let startElem = timenav.querySelector('.swac_mediapreview_timeaxis_start');
+        if (startElem)
+            startElem.textContent = new Date(this.timeRange.start).toLocaleString();
+        let endElem = timenav.querySelector('.swac_mediapreview_timeaxis_end');
+        if (endElem)
+            endElem.textContent = new Date(this.timeRange.end).toLocaleString();
+        window.addEventListener('resize', () => this.updateTimeNavigation());
+    }
+
+    /**
+     * Executes a navigation the user started. Playing the pages stops, so the user keeps control.
+     *
+     * @param {Function} action Navigation function of this component
+     * @param {...*} args Arguments for the function
+     * @returns {Promise} Resolves when the navigation is done
+     */
+    onUserNavigation(action, ...args) {
+        this.pause();
+        return action.apply(this, args);
+    }
+
+    /**
+     * Prepares the play button and the choice of the speed
+     *
+     * @param {DOMElement} nav Element of the navigation
+     * @returns {undefined}
+     */
+    initPlay(nav) {
+        let playButton = nav.querySelector('.swac_mediapreview_play');
+        if (playButton) {
+            playButton.addEventListener('click', this.togglePlay.bind(this));
+            this.updatePlayButton();
+        }
+        let speed = nav.querySelector('.swac_mediapreview_playspeed');
+        if (!speed)
+            return;
+        let speeds = this.options.pagePlaySpeeds.slice();
+        if (speeds.length === 0) {
+            speed.classList.add('swac_dontdisplay');
+            return;
+        }
+        if (!speeds.includes(this.options.pagePlayInterval))
+            speeds.push(this.options.pagePlayInterval);
+        speeds.sort((a, b) => a - b);
+        for (let curSpeed of speeds) {
+            let option = document.createElement('option');
+            option.value = curSpeed;
+            option.textContent = (curSpeed / 1000).toLocaleString() + ' s';
+            option.selected = curSpeed === this.options.pagePlayInterval;
+            speed.appendChild(option);
+        }
+        speed.addEventListener('change', () => {
+            this.options.pagePlayInterval = parseInt(speed.value);
+        });
+    }
+
+    /**
+     * Starts or stops playing the pages
+     *
+     * @returns {undefined}
+     */
+    togglePlay() {
+        if (this.playing)
+            this.pause();
+        else
+            this.play();
+    }
+
+    /**
+     * Shows the following pages automatically. On the last page it starts with the first page.
+     *
+     * @returns {Promise} Resolves when the playing ends
+     */
+    async play() {
+        if (this.playing || !this.navigator || !this.navigator.mode)
+            return;
+        this.playing = true;
+        let run = ++this.playRun;
+        this.updatePlayButton();
+        this.dispatchPlayEvent();
+        if (!this.hasNext)
+            await this.firstPage();
+        while (run === this.playRun) {
+            // Each page is shown complete for the interval
+            await this.waitForImages();
+            if (run !== this.playRun)
+                return;
+            if (!this.hasNext) {
+                this.pause();
+                return;
+            }
+            await new Promise(resolve => {
+                this.playTimeout = setTimeout(resolve, this.options.pagePlayInterval);
+            });
+            if (run !== this.playRun)
+                return;
+            await this.nextPage();
+        }
+    }
+
+    /**
+     * Stops playing the pages
+     *
+     * @returns {undefined}
+     */
+    pause() {
+        if (!this.playing)
+            return;
+        this.playing = false;
+        this.playRun++;
+        clearTimeout(this.playTimeout);
+        this.updatePlayButton();
+        this.dispatchPlayEvent();
+    }
+
+    /**
+     * Shows the state of playing on the play button
+     *
+     * @returns {undefined}
+     */
+    updatePlayButton() {
+        let playButton = this.requestor.querySelector('.swac_mediapreview_play');
+        if (!playButton)
+            return;
+        // &#xFE0E; shows the play symbol as text instead of an emoji
+        playButton.innerHTML = this.playing ? '&#10074;&#10074;' : '&#9654;&#xFE0E;';
+        playButton.classList.toggle('uk-button-primary', this.playing);
+    }
+
+    /**
+     * Informs other components that playing started or stopped
+     *
+     * @returns {undefined}
+     */
+    dispatchPlayEvent() {
+        document.dispatchEvent(new CustomEvent('swac_' + this.requestor.id + '_mediapreview_play', {
+            detail: {requestor: this.requestor, playing: this.playing}
+        }));
+    }
+
+    /**
+     * Waits until the images of the shown page are loaded
+     *
+     * @param {Number} maxWait Maximum milliseconds to wait, so that a missing image does not stop playing
+     * @returns {Promise} Resolves when the images are loaded
+     */
+    waitForImages(maxWait = 10000) {
+        let loading = [];
+        for (let curImg of this.requestor.querySelectorAll('.swac_repeatedForSet .swac_mediapreview_mediaarea img')) {
+            if (curImg.complete)
+                continue;
+            loading.push(new Promise(resolve => {
+                curImg.addEventListener('load', resolve, {once: true});
+                curImg.addEventListener('error', resolve, {once: true});
+            }));
+        }
+        if (loading.length === 0)
+            return Promise.resolve();
+        let timeout;
+        return Promise.race([
+            Promise.all(loading),
+            new Promise(resolve => {
+                timeout = setTimeout(resolve, maxWait);
+            })
+        ]).then(() => clearTimeout(timeout));
+    }
+
+    /**
+     * Shows the page that begins at the given timepoint
+     *
+     * @param {Date|String} timepoint Date or text like 2026-06-15T02:00:00 (local time)
+     * @returns {Promise} Resolves when the page is shown
+     */
+    async showTimepoint(timepoint) {
+        if (!this.navigator || !this.navigator.mode || this.navLoading)
+            return;
+        if (this.navigator.getAttr() !== this.options.tsAttr) {
+            Msg.warn('Mediapreview', 'The shown media are not navigated by timestamp.', this.requestor);
+            return;
+        }
+        let date = timepoint instanceof Date ? timepoint : new Date(timepoint);
+        if (isNaN(date.valueOf())) {
+            Msg.error('Mediapreview', 'Timepoint >' + timepoint + '< is not a valid date.', this.requestor);
+            return;
+        }
+        let dict = SWAC.lang.dict.Mediapreview;
+        let time = date.getTime();
+        // Outside of the media the first or last page in the order of time is shown
+        let msg = '';
+        let edge = null;
+        // Timepoints are given in whole seconds, media can have milliseconds
+        if (this.timeRange && time < Math.floor(this.timeRange.start / 1000) * 1000) {
+            msg = dict.beforefirst;
+            edge = this.descending ? 'last' : 'first';
+        } else if (this.timeRange && time > this.timeRange.end) {
+            msg = dict.afterlast;
+            edge = this.descending ? 'first' : 'last';
+        }
+        if (!edge) {
+            // Descending pages go back in time, so they include the whole given second
+            let refSet = {};
+            refSet[this.options.tsAttr] = new Date(this.descending ? time + 999 : time).toISOString();
+            let shown = await this.showPageFrom(refSet);
+            if (!shown) {
+                // No media after (ascending) or before (descending) the timepoint
+                msg = this.descending ? dict.beforefirst : dict.afterlast;
+                edge = 'last';
+            }
+        }
+        if (edge)
+            await this.showPage(edge);
+        this.timeMsg = msg;
+        this.updateTimeNavigation();
+    }
+
+    /**
+     * Shows the page that begins with the given set. Near the end of the media
+     * the last full page is shown, it contains the set too.
+     *
+     * @param {WatchableSet} set Set the page should begin with
+     * @returns {Promise<Boolean>} Resolves with true when a page with media was shown
+     */
+    async showPageFrom(set) {
+        let shown = await this.showPage('from', set);
+        if (shown && !this.hasNext && this.shownSets.length < this.getPageSize())
+            await this.showPage('last');
+        return shown;
+    }
+
+    /**
+     * Shows the page that begins jumpSeconds before or after the first shown medium
+     *
+     * @param {Number} direction -1 for earlier, 1 for later media
+     * @returns {Promise} Resolves when the page is shown
+     */
+    jump(direction) {
+        let first = this.shownSets[0];
+        let date = first && this.navigator ? this.navigator.getDate(first) : null;
+        if (!date)
+            return Promise.resolve();
+        return this.showTimepoint(new Date(date.getTime() + direction * this.options.jumpSeconds * 1000));
     }
 
     /**
@@ -367,29 +821,37 @@ export default class Mediapreview extends View {
     /**
      * Loads and shows a page of media
      *
-     * @param {String} which first, prev, next or last
-     * @returns {Promise} Resolves when the page is shown
+     * @param {String} which first, prev, next, last or from
+     * @param {WatchableSet} fromSet Set the page begins with, only for from
+     * @returns {Promise<Boolean>} Resolves with true when a page with media was shown
      */
-    async showPage(which) {
+    async showPage(which, fromSet = null) {
         if (!this.navigator || !this.navigator.mode || this.navLoading)
-            return;
+            return false;
         // Forward in the display goes back in the order when media are shown descending
-        let forward = which === 'first' || which === 'next';
+        let forward = which === 'first' || which === 'next' || which === 'from';
         let direction = forward !== this.descending ? 1 : -1;
         let refSet = null;
         if (which === 'next')
             refSet = this.shownSets[this.shownSets.length - 1];
         else if (which === 'prev')
             refSet = this.shownSets[0];
-        if ((which === 'next' || which === 'prev') && !refSet)
-            return;
+        else if (which === 'from')
+            refSet = fromSet;
+        if (which !== 'first' && which !== 'last' && !refSet)
+            return false;
 
+        let shown = false;
+        this.timeMsg = '';
         this.navLoading = true;
         try {
             this.updateNavigation();
-            let page = await this.navigator.loadPage(direction, refSet);
+            let page = await this.navigator.loadPage(direction, refSet, which === 'from');
             if (page.sets.length > 0) {
-                if (which === 'first' || which === 'last') {
+                if (which === 'from') {
+                    this.hasPrev = true;
+                    this.hasNext = page.more;
+                } else if (which === 'first' || which === 'last') {
                     this.hasPrev = which === 'last' && page.more;
                     this.hasNext = which === 'first' && page.more;
                 } else {
@@ -398,6 +860,8 @@ export default class Mediapreview extends View {
                 }
                 let sets = this.descending ? page.sets.reverse() : page.sets;
                 this.showSets(sets);
+                this.checkTimeRange();
+                shown = true;
             } else if (which === 'next') {
                 this.hasNext = false;
             } else if (which === 'prev') {
@@ -409,6 +873,22 @@ export default class Mediapreview extends View {
             this.navLoading = false;
             this.updateNavigation();
         }
+        return shown;
+    }
+
+    /**
+     * Uses the time of the first and last medium to know if there are pages before and after the shown one
+     *
+     * @returns {undefined}
+     */
+    checkTimeRange() {
+        if (!this.timeRange || this.navigator.getAttr() !== this.options.tsAttr)
+            return;
+        let times = this.shownSets.map(curSet => this.navigator.getDate(curSet).getTime());
+        let earlier = Math.min(...times) > this.timeRange.start;
+        let later = Math.max(...times) < this.timeRange.end;
+        this.hasPrev = this.descending ? later : earlier;
+        this.hasNext = this.descending ? earlier : later;
     }
 
     /**
@@ -480,6 +960,135 @@ export default class Mediapreview extends View {
             let count = this.navigator.withoutTsCount;
             withoutTs.textContent = SWAC.lang.dict.Mediapreview.withoutts + (count !== null ? ' (' + count + ')' : '');
         }
+        this.updateTimeNavigation();
+    }
+
+    /**
+     * Updates the navigation by time: buttons, timepoint, message and time axis
+     *
+     * @returns {undefined}
+     */
+    updateTimeNavigation() {
+        let timenav = this.requestor.querySelector('.swac_mediapreview_timenav');
+        if (!timenav || !this.navigator)
+            return;
+        let active = this.options.timeNavigation && this.timeRange !== null
+                && this.navigator.getAttr() === this.options.tsAttr;
+        timenav.classList.toggle('swac_dontdisplay', !active);
+        if (!active)
+            return;
+        for (let curButton of timenav.querySelectorAll('.swac_mediapreview_timecontrols button')) {
+            curButton.disabled = this.navLoading;
+        }
+        let msgElem = timenav.querySelector('.swac_mediapreview_timemsg');
+        if (msgElem)
+            msgElem.textContent = this.timeMsg;
+
+        let times = this.shownSets.map(curSet => this.navigator.getDate(curSet)).filter(curDate => curDate)
+                .map(curDate => curDate.getTime());
+        let input = timenav.querySelector('.swac_mediapreview_timepoint');
+        if (input && !this.navLoading && times.length > 0)
+            input.value = this.navigator.formatDate(new Date(times[0]));
+
+        let bar = timenav.querySelector('.swac_mediapreview_timeaxis_bar');
+        if (!bar)
+            return;
+        let duration = Math.max(this.timeRange.end - this.timeRange.start, 1);
+        let pageElem = bar.querySelector('.swac_mediapreview_timeaxis_page');
+        if (pageElem && times.length > 0) {
+            let min = Math.min(...times);
+            let max = Math.max(...times);
+            pageElem.style.left = ((min - this.timeRange.start) / duration * 100) + '%';
+            pageElem.style.width = ((max - min) / duration * 100) + '%';
+        }
+        // Labels are created again when the width changed
+        let width = bar.offsetWidth;
+        if (width > 0 && width !== this.axisWidth) {
+            this.axisWidth = width;
+            this.createAxisTicks(timenav.querySelector('.swac_mediapreview_timeaxis_ticks'), width);
+        }
+    }
+
+    /**
+     * Creates the labels of the time axis at full local times, e.g. full hours or days
+     *
+     * @param {DOMElement} ticksElem Element where to create the labels
+     * @param {Number} width Width of the time axis in pixel
+     * @returns {undefined}
+     */
+    createAxisTicks(ticksElem, width) {
+        if (!ticksElem)
+            return;
+        ticksElem.innerHTML = '';
+        let start = this.timeRange.start;
+        let duration = this.timeRange.end - start;
+        if (duration <= 0)
+            return;
+        // Smallest interval that leaves enough space for each label
+        let maxLabels = Math.max(Math.floor(width / 80), 1);
+        let minutes = [1, 2, 5, 10, 15, 30, 60, 120, 180, 360, 720, 1440, 2880, 10080];
+        let interval = minutes.map(curMin => curMin * 60000).find(curInterval => duration / curInterval <= maxLabels);
+        if (!interval)
+            interval = Math.ceil(duration / maxLabels / 604800000) * 604800000;
+        // Start at a full interval of the local time, e.g. a full hour
+        let offset = new Date(start).getTimezoneOffset() * 60000;
+        let first = Math.ceil((start - offset) / interval) * interval + offset;
+        for (let time = first; time <= this.timeRange.end; time += interval) {
+            let percent = (time - start) / duration * 100;
+            // Labels at the edges would be cut off
+            if (percent < 3 || percent > 97)
+                continue;
+            let date = new Date(time);
+            let label = document.createElement('span');
+            label.classList.add('swac_mediapreview_timeaxis_tick');
+            label.textContent = interval >= 86400000 ? date.toLocaleDateString() : date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+            label.style.left = percent + '%';
+            ticksElem.appendChild(label);
+        }
+    }
+
+    /**
+     * Calculates the time at the mouse position on the time axis
+     *
+     * @param {MouseEvent} evt Mouse event on the time axis
+     * @param {DOMElement} bar Element of the time axis
+     * @returns {Date} Time at the mouse position
+     */
+    getAxisTime(evt, bar) {
+        let rect = bar.getBoundingClientRect();
+        let ratio = Math.min(Math.max((evt.clientX - rect.left) / rect.width, 0), 1);
+        return new Date(this.timeRange.start + ratio * (this.timeRange.end - this.timeRange.start));
+    }
+
+    /**
+     * Shows the time under the mouse on the time axis
+     *
+     * @param {DOMElement} bar Element of the time axis
+     * @param {MouseEvent} evt Mouse event
+     * @returns {undefined}
+     */
+    onAxisHover(bar, evt) {
+        let hover = bar.querySelector('.swac_mediapreview_timeaxis_hover');
+        if (!hover)
+            return;
+        let rect = bar.getBoundingClientRect();
+        hover.style.left = (evt.clientX - rect.left) + 'px';
+        hover.textContent = this.getAxisTime(evt, bar).toLocaleString();
+        hover.classList.remove('swac_dontdisplay');
+    }
+
+    /**
+     * Formats a duration for the jump buttons
+     *
+     * @param {Number} seconds Duration in seconds
+     * @returns {String} Text like 1 h, 30 min or 20 s
+     */
+    formatDuration(seconds) {
+        if (seconds % 3600 === 0)
+            return (seconds / 3600) + ' h';
+        if (seconds % 60 === 0)
+            return (seconds / 60) + ' min';
+        return seconds + ' s';
     }
 
     /**
@@ -512,6 +1121,151 @@ export default class Mediapreview extends View {
         if (this.navigator.total !== null)
             count += ' ' + dict.of + ' ' + this.navigator.total;
         return range + ' · ' + count + ' ' + dict.media;
+    }
+
+    /**
+     * Prepares the big view of the images
+     *
+     * @returns {undefined}
+     */
+    initBigView() {
+        let bigView = this.requestor.querySelector('.swac_mediapreview_bigview');
+        if (!bigView || !bigView.querySelector('.swac_mediapreview_bigviewarea')) {
+            Msg.warn('Mediapreview', 'The template has no element .swac_mediapreview_bigview with .swac_mediapreview_bigviewarea. Big view is not available.', this.requestor);
+            return;
+        }
+        this.bigViewElem = bigView;
+        // UIkit moves the modal to the end of the page, so the element is kept here
+        bigView.addEventListener('hidden', evt => {
+            // Events of tooltips inside the big view bubble up too
+            if (evt.target === bigView)
+                this.onBigViewHidden();
+        });
+    }
+
+    /**
+     * Opens the big view when the image of a set is clicked
+     *
+     * @param {WatchableSet} set Set whose preview was created
+     * @returns {undefined}
+     */
+    addBigViewClick(set) {
+        if (!this.isImage(set))
+            return;
+        let repeated = this.requestor.querySelector('[swac_setid="' + set.id + '"]');
+        let mediaarea = repeated ? repeated.querySelector('.swac_mediapreview_mediaarea') : null;
+        if (!mediaarea)
+            return;
+        mediaarea.addEventListener('click', evt => {
+            evt.preventDefault();
+            this.openBigView(set);
+        });
+    }
+
+    /**
+     * Checks if a set contains an image, the big view can only show images
+     *
+     * @param {WatchableSet} set Set to check
+     * @returns {Boolean} True if the mimetype is an image type
+     */
+    isImage(set) {
+        return typeof set.mimetype === 'string' && set.mimetype.startsWith('image/');
+    }
+
+    /**
+     * Opens the big view with the images of the shown page, beginning with the given set
+     *
+     * @param {WatchableSet} set Set of the clicked image
+     * @returns {Promise} Resolves when the images are shown
+     */
+    async openBigView(set) {
+        // The big view has its own playing
+        this.pause();
+        let sets;
+        if (this.navigator && this.navigator.mode) {
+            sets = this.shownSets.slice();
+        } else {
+            sets = this.data[this.requestor.fromName].getSets().filter(curSet => curSet);
+        }
+        sets = sets.filter(curSet => this.isImage(curSet));
+        UIkit.modal(this.bigViewElem).show();
+        let collage;
+        try {
+            collage = await this.getBigViewCollage();
+        } catch (e) {
+            Msg.error('Mediapreview', 'Could not create the big view: ' + e, this.requestor);
+            return;
+        }
+        // The collage navigates by timestamp only if all shown images have one
+        collage.hasTs = sets.length > 0 && sets.every(curSet => curSet[this.options.tsAttr]);
+        collage.sortImages(sets);
+        let index = sets.findIndex(curSet => curSet.id === set.id);
+        this.bigViewLastSet = null;
+        collage.showImages(sets, Math.max(index, 0));
+        let strip = collage.requestor.querySelector('.swac_collage_strip');
+        if (strip)
+            strip.focus({preventScroll: true});
+    }
+
+    /**
+     * Gets the Collage component of the big view. It is created on the first call.
+     *
+     * @returns {Promise<Collage>} Collage component
+     */
+    async getBigViewCollage() {
+        if (this.bigViewCollage)
+            return this.bigViewCollage;
+        let elem = document.createElement('div');
+        elem.id = this.requestor.id + '_bigview';
+        // Same data source and WHERE clause, the collage navigates itself
+        let wheres = [];
+        for (let curWhere in this.baseWheres) {
+            if (['order', 'size', 'page'].includes(curWhere))
+                continue;
+            if (curWhere === 'filter') {
+                for (let curFilter of this.baseWheres.filter.split('&filter=')) {
+                    wheres.push('filter=' + curFilter);
+                }
+            } else {
+                wheres.push(curWhere + '=' + this.baseWheres[curWhere]);
+            }
+        }
+        wheres.push('order=id,ASC');
+        wheres.push('size=' + this.getPageSize());
+        elem.setAttribute('swa', 'Collage FROM ' + this.requestor.fromName + ' WHERE ' + wheres.join(' AND '));
+        window[elem.id + '_options'] = Object.assign({
+            mode: 'timeline',
+            pageSize: this.getPageSize(),
+            pathAttr: this.options.pathAttr,
+            tsAttr: this.options.tsAttr,
+            docroot: this.options.docroot
+        }, this.options.bigViewOptions);
+        this.bigViewElem.querySelector('.swac_mediapreview_bigviewarea').appendChild(elem);
+        document.addEventListener('swac_' + elem.id + '_collage_select', evt => {
+            this.bigViewLastSet = evt.detail.set;
+        });
+        await new ViewHandler().load(elem);
+        // Let the collage show its own first images before they are replaced
+        await new Promise(resolve => setTimeout(resolve, 0));
+        this.bigViewCollage = elem.swac_comp;
+        return this.bigViewCollage;
+    }
+
+    /**
+     * Stops the playback and shows the page with the last image of the big view
+     *
+     * @returns {undefined}
+     */
+    onBigViewHidden() {
+        if (!this.bigViewCollage)
+            return;
+        this.bigViewCollage.pause();
+        let set = this.bigViewLastSet;
+        if (!set || !this.navigator || !this.navigator.mode)
+            return;
+        if (this.shownSets.some(curSet => curSet.id === set.id))
+            return;
+        this.showPageFrom(set);
     }
 
     /**

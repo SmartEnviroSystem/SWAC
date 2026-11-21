@@ -14,6 +14,11 @@ var Mediapreview_en = {
   of: 'of',
   media: 'media',
   loading: 'Loading media …',
-  nomedia: 'No media available'
+  nomedia: 'No media available',
+  goto: 'Go to',
+  playpages: 'Play / pause pages',
+  playspeed: 'Display time per page',
+  beforefirst: 'The timepoint is before the first medium.',
+  afterlast: 'The timepoint is after the last medium.'
 };
 export default Mediapreview_en;

@@ -98,13 +98,14 @@ export default class MediaNavigator {
      *
      * @param {Number} direction 1 for sets after the reference set, -1 for sets before it
      * @param {WatchableSet} refSet Reference set, null for the first (1) or last (-1) page
+     * @param {Boolean} inclusive If true, the page begins with the reference set itself
      * @returns {Promise<Object>} {sets: sets ordered ascending, more: true if there are further sets in this direction}
      */
-    async loadPage(direction, refSet = null) {
+    async loadPage(direction, refSet = null, inclusive = false) {
         let attr = this.getAttr();
         let filters = this.getModeFilters();
         if (refSet)
-            filters.push(this.getCursorFilter(attr, direction, refSet));
+            filters.push(this.getCursorFilter(attr, direction, refSet, inclusive));
         // Two more sets than needed: the reference set can be delivered again
         // (filters use whole seconds) and one more shows if there are further sets
         let sets = await this.request(filters, attr + (direction > 0 ? ',asc' : ',desc'), this.pageSize + 2);
@@ -115,12 +116,40 @@ export default class MediaNavigator {
         if (sets.length > this.pageSize + 2)
             this.total = sets.length;
         if (refSet)
-            sets = sets.filter(curSet => direction * this.compare(curSet, refSet) > 0);
+            sets = sets.filter(curSet => direction * this.compare(curSet, refSet) > (inclusive ? -1 : 0));
         sets.sort((a, b) => this.compare(a, b));
 
         let more = sets.length > this.pageSize;
         sets = direction > 0 ? sets.slice(0, this.pageSize) : sets.slice(-this.pageSize);
         return {sets: sets, more: more};
+    }
+
+    /**
+     * Loads the time of the first and the last set. Only available when
+     * navigating by timestamp.
+     *
+     * @returns {Promise<Object>} {start, end} in milliseconds or null if not available
+     */
+    async loadRange() {
+        if (this.getAttr() !== this.tsAttr)
+            return null;
+        let filters = this.getModeFilters();
+        let sets = await this.request(filters, this.tsAttr + ',asc', 1);
+        // A source that delivers more than requested ignores the filters, so all sets are known
+        if (sets.length <= 1)
+            sets = sets.concat(await this.request(filters, this.tsAttr + ',desc', 1));
+        let start = null;
+        let end = null;
+        for (let curSet of sets) {
+            if (!this.matchesMode(curSet))
+                continue;
+            let time = this.getDate(curSet).getTime();
+            if (start === null || time < start)
+                start = time;
+            if (end === null || time > end)
+                end = time;
+        }
+        return start === null ? null : {start: start, end: end};
     }
 
     /**
@@ -158,9 +187,10 @@ export default class MediaNavigator {
      * @param {String} attr Attribute to navigate by
      * @param {Number} direction 1 for sets after, -1 for sets before
      * @param {WatchableSet} refSet Reference set
+     * @param {Boolean} inclusive If true, the reference set itself is included
      * @returns {String} Filter like ts,gt,2026-01-03T10:15:00
      */
-    getCursorFilter(attr, direction, refSet) {
+    getCursorFilter(attr, direction, refSet, inclusive = false) {
         let value = refSet[attr];
         if (attr === this.tsAttr) {
             let date = this.getDate(refSet);
@@ -168,7 +198,8 @@ export default class MediaNavigator {
             let seconds = Math.floor(date.getTime() / 1000) + (direction < 0 && date.getMilliseconds() > 0 ? 1 : 0);
             value = this.formatDate(new Date(seconds * 1000));
         }
-        return attr + (direction > 0 ? ',gt,' : ',lt,') + value;
+        let operator = direction > 0 ? (inclusive ? 'ge' : 'gt') : (inclusive ? 'le' : 'lt');
+        return attr + ',' + operator + ',' + value;
     }
 
     /**
