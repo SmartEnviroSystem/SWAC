@@ -2130,8 +2130,8 @@ DEFINTION of SET:\n\
         for (let set of sets) {
             if (!set)
                 continue;
-            set.swac_sampling_interval_ms = null;
-            set.swac_sampling_median_ms = null;
+            set.swac_sampling_interval_sec = null;
+            set.swac_sampling_median_sec = null;
             let value = set[timeAttribute];
             if (value === null || typeof value === 'undefined' || value === '')
                 continue;
@@ -2140,13 +2140,14 @@ DEFINTION of SET:\n\
                 timedSets.push({set: set, time: time});
         }
         timedSets.sort(function (first, second) {
+
             return first.time - second.time;
         });
 
         let differences = [];
         for (let i = 1; i < timedSets.length; i++) {
             let difference = timedSets[i].time - timedSets[i - 1].time;
-            timedSets[i].set.swac_sampling_interval_ms = difference;
+            timedSets[i].set.swac_sampling_interval_sec = difference / 1000;
             if (difference > 0)
                 differences.push(difference);
         }
@@ -2159,7 +2160,7 @@ DEFINTION of SET:\n\
         let median = differences.length % 2 ? differences[middle]
                 : Math.round((differences[middle - 1] + differences[middle]) / 2);
         for (let entry of timedSets)
-            entry.set.swac_sampling_median_ms = median;
+            entry.set.swac_sampling_median_sec = median;
         return median;
     }
 }
