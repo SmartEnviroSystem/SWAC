@@ -23,7 +23,15 @@
         <button type="button" class="pm-btn" id="newPipeline" swac_lang="PipelineEditor.btn_new_pipeline">＋ Neue Pipeline anlegen</button>
         <div style="height:10px"></div>
 
-        <button type="button" class="pm-btn" id="savePipeline" swac_lang="PipelineEditor.btn_save_pipeline">Pipeline speichern</button>
+        <div class="pm-backend-test">
+          <label for="pipelineBackendEndpoint">Backend-Endpunkt (nur Test)</label>
+          <input id="pipelineBackendEndpoint" type="url"
+                 value="http://localhost:8765/pipeline/configurations"
+                 placeholder="http://localhost:8765/pipeline/configurations"
+                 autocomplete="off" spellcheck="false">
+          <p>Sendet eine JSON-Konfiguration an den lokalen Testserver. Keine Job-Ausführung und keine Datenbank-Speicherung.</p>
+        </div>
+        <button type="button" class="pm-btn" id="savePipeline">Konfiguration an Test-Backend senden</button>
 
         <div class="pm-smhead" swac_lang="PipelineEditor.palette_head">Verfügbare Bausteine</div>
 
@@ -146,7 +154,7 @@
       <div class="pm-flow-footer">
         <h3 swac_lang="PipelineEditor.usecase_title">Anwendungsfall</h3>
         <p swac_lang="PipelineEditor.usecase_desc">
-          Messdaten aus einer Quelle lesen, filtern und optional mit einer zweiten Tabelle zeitbasiert konsolidieren; danach als Skript-/Job-Schritt konfigurieren und das gewünschte Ziel festlegen. Mehrere Bäume sind lokal im Browser möglich. Keine Backend-Ausführung oder dauerhafte Speicherung.
+          Messdaten aus einer Quelle lesen, filtern und optional mit einer zweiten Tabelle zeitbasiert konsolidieren; danach als Skript-/Job-Schritt konfigurieren und das gewünschte Ziel festlegen. Mehrere Bäume sind lokal im Browser möglich. Ein lokaler Testserver kann die JSON-Konfiguration empfangen, führt aber keine Jobs aus und speichert nichts dauerhaft.
         </p>
       </div>
 

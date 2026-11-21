@@ -1,5 +1,6 @@
 import View from '../../View.js';
 import forms from './PipelineForms.js';
+import { createPipelineDraft, postPipelineDraft } from './PipelineBackendClient.js';
 
 /**
  * PipelineEditor for SmartMonitoring.
@@ -80,6 +81,11 @@ export default class PipelineEditor extends View {
         this.expandButton = null;
         this.expandLabel = null;
         this.editorCard = null;
+
+        // Wiederholbare Schritte: 0 = erster, bisheriger Filter bzw. Skript.
+        this.currentFilterIndex = 0;
+        this.currentScriptIndex = 0;
+        this.backendSubmitting = false;
     }
 
 
@@ -154,7 +160,9 @@ export default class PipelineEditor extends View {
             },
             consolidation: this.blankConsolidation(
                 'exampledata_timeseries_1week'
-            )
+            ),
+            extraFilters: [],
+            extraScripts: []
         });
 
         // Pipeline-Baum
@@ -175,6 +183,8 @@ export default class PipelineEditor extends View {
         this.newDraft = false;
         this.visualModel = null;
         this.scriptMode = 'existing';
+        this.currentFilterIndex = 0;
+        this.currentScriptIndex = 0;
 
         // Graph-Konfiguration
         this.graphSource = 'PmTreeNode';
@@ -298,13 +308,16 @@ export default class PipelineEditor extends View {
                     return;
                 }
 
-                this.pipeline.period = periodField ? periodField.value : '7 Tage';
-                this.pipeline.filter = {
-                    column,
-                    operator,
-                    value,
-                    enabled: Boolean(column && value)
+                const nextFilter = {
+                    column, operator, value, enabled: Boolean(column && value)
                 };
+                if (this.currentFilterIndex === 0) {
+                    this.pipeline.period = periodField ? periodField.value : '7 Tage';
+                    this.pipeline.filter = nextFilter;
+                } else {
+                    this.getActiveFilterStep().period = periodField ? periodField.value : '7 Tage';
+                    this.getActiveFilterStep().filter = nextFilter;
+                }
             }
 
             if (this.currentStep === 'consolidation') {
@@ -344,6 +357,7 @@ export default class PipelineEditor extends View {
             }
 
             if (this.currentStep === 'script') {
+                const activeScript = this.getActiveScriptStep();
                 if (this.scriptMode === 'job') {
                     const jobField = this.$('fieldJob');
                     const jobName = jobField ? jobField.value : '';
@@ -354,11 +368,11 @@ export default class PipelineEditor extends View {
                         return;
                     }
 
-                    this.pipeline.jobId = job.id;
-                    this.pipeline.script = job.name;
-                    this.pipeline.scriptType = 'job';
-                    this.pipeline.description = job.desc || '';
-                    this.pipeline.parameter = '';
+                    activeScript.jobId = job.id;
+                    activeScript.script = job.name;
+                    activeScript.scriptType = 'job';
+                    activeScript.description = job.desc || '';
+                    activeScript.parameter = '';
 
                     this.renderFlow?.();
 
@@ -416,11 +430,11 @@ export default class PipelineEditor extends View {
                         this.ownScripts.push(custom);
                     }
 
-                    this.pipeline.script = name;
-                    this.pipeline.jobId = null;
-                    this.pipeline.scriptType = 'custom';
-                    this.pipeline.description = custom.description;
-                    this.pipeline.parameter = custom.parameter;
+                    activeScript.script = name;
+                    activeScript.jobId = null;
+                    activeScript.scriptType = 'custom';
+                    activeScript.description = custom.description;
+                    activeScript.parameter = custom.parameter;
 
                     this.scriptMode = 'existing';
 
@@ -435,16 +449,16 @@ export default class PipelineEditor extends View {
                 const descField = this.$('fieldDescription');
                 const paramField = this.$('fieldParameter');
 
-                this.pipeline.script = scriptField ? scriptField.value : '';
-                this.pipeline.jobId = null;
+                activeScript.script = scriptField ? scriptField.value : '';
+                activeScript.jobId = null;
 
                 const ownScripts = this.ownScripts || [];
-                this.pipeline.scriptType = ownScripts.some(
-                    script => script.name === this.pipeline.script
+                activeScript.scriptType = ownScripts.some(
+                    script => script.name === activeScript.script
                 ) ? 'custom' : 'predefined';
 
-                this.pipeline.description = descField ? descField.value : '';
-                this.pipeline.parameter = paramField ? paramField.value : '';
+                activeScript.description = descField ? descField.value : '';
+                activeScript.parameter = paramField ? paramField.value : '';
             }
 
             if (this.currentStep === 'target') {
@@ -501,7 +515,9 @@ export default class PipelineEditor extends View {
                         targetConfig: { format: 'table', writeMode: 'replace', includeTimestamp: true },
                         consolidation: typeof this.blankConsolidation === 'function'
                             ? this.blankConsolidation()
-                            : {}
+                            : {},
+                        extraFilters: [],
+                        extraScripts: []
                     },
                     isDraft: true
                 };
@@ -514,17 +530,10 @@ export default class PipelineEditor extends View {
             });
         }
 
-        /*
-         * Registriert den Klick-Handler für die Schaltfläche zum Speichern
-         * der Pipeline.
-         * Zeigt einen Hinweis an, dass die dauerhafte Speicherung
-         * derzeit noch nicht implementiert ist.
-         */
+        // Ausdrücklich nur der Konfigurationstest; KEINE Job-Ausführung oder Datenbank-Speicherung.
         const savePipelineBtn = this.$('savePipeline');
         if (savePipelineBtn) {
-            savePipelineBtn.addEventListener('click', () => {
-                this.showMessage?.('Die dauerhafte Speicherung ist noch nicht angebunden.');
-            });
+            savePipelineBtn.addEventListener('click', () => this.sendPipelineConfiguration());
         }
     }
 
@@ -560,7 +569,7 @@ export default class PipelineEditor extends View {
 
         // Bisherige Auswahl speichern
         const selectedBefore = select.value ||
-            (this.pipeline?.scriptType === 'job' ? String(this.pipeline.jobId || '') : '');
+            (this.getActiveScriptStep()?.scriptType === 'job' ? String(this.getActiveScriptStep().jobId || '') : '');
 
         // Alte Dropdown Einträge entfernen.
         select.replaceChildren();
@@ -824,6 +833,137 @@ export default class PipelineEditor extends View {
         }
     }
 
+    // Der erste Schritt bleibt mit der bisherigen Datenstruktur kompatibel.
+    getActiveFilterStep() {
+        const p = this.pipeline;
+        if (!p) return null;
+        if (this.currentFilterIndex === 0) return { period: p.period, filter: p.filter };
+        p.extraFilters ||= [];
+        return p.extraFilters[this.currentFilterIndex - 1] || null;
+    }
+
+    getActiveScriptStep() {
+        const p = this.pipeline;
+        if (!p) return null;
+        if (this.currentScriptIndex === 0) return p;
+        p.extraScripts ||= [];
+        return p.extraScripts[this.currentScriptIndex - 1] || null;
+    }
+
+    getFilterSteps(p) {
+        return [{ period: p.period || '7 Tage', filter: p.filter || {} }, ...(p.extraFilters || [])];
+    }
+
+    getScriptSteps(p) {
+        return [p, ...(p.extraScripts || [])];
+    }
+
+    addRepeatedStep(type) {
+        const p = this.pipeline;
+        if (!p || !['filter', 'script'].includes(type)) return;
+        if (type === 'filter') {
+            p.extraFilters ||= [];
+            if (p.extraFilters.length >= 19) return this.showMessage('Maximal 20 Filter erlaubt.');
+            p.extraFilters.push({ period: '7 Tage', filter: { column: '', operator: 'gt', value: '', enabled: false } });
+            this.selectStep('filter', p.extraFilters.length);
+        } else {
+            p.extraScripts ||= [];
+            if (p.extraScripts.length >= 19) return this.showMessage('Maximal 20 Skript-/Job-Schritte erlaubt.');
+            p.extraScripts.push({ script: '', scriptType: 'predefined', jobId: null, description: '', parameter: '' });
+            this.selectStep('script', p.extraScripts.length);
+        }
+        this.showMessage('Neuer Schritt angelegt. Bitte konfigurieren und übernehmen.');
+    }
+
+    deleteRepeatedStep(type) {
+        const field = type === 'filter' ? 'extraFilters' : 'extraScripts';
+        const index = type === 'filter' ? this.currentFilterIndex : this.currentScriptIndex;
+        if (!index) return this.showMessage('Der erste Schritt bleibt erhalten.');
+        this.pipeline[field].splice(index - 1, 1);
+        this.selectStep(type, Math.max(0, index - 1));
+    }
+
+    moveRepeatedStep(type, delta) {
+        const isFilter = type === 'filter';
+        const index = isFilter ? this.currentFilterIndex : this.currentScriptIndex;
+        const data = this.pipeline;
+        const list = isFilter ? this.getFilterSteps(data) : this.getScriptSteps(data).map(step => ({
+            script: step.script || '', scriptType: step.scriptType || 'predefined',
+            jobId: step.jobId ?? null, description: step.description || '', parameter: step.parameter || ''
+        }));
+        const next = index + delta;
+        if (next < 0 || next >= list.length) return;
+        [list[index], list[next]] = [list[next], list[index]];
+        if (isFilter) {
+            data.period = list[0].period;
+            data.filter = list[0].filter;
+            data.extraFilters = list.slice(1);
+        } else {
+            Object.assign(data, list[0]);
+            data.extraScripts = list.slice(1);
+        }
+        this.selectStep(type, next);
+    }
+
+    setupRepeatedControls(type) {
+        const form = this.$('detailsForm');
+        if (!form) return;
+        const isFilter = type === 'filter';
+        const current = isFilter ? this.currentFilterIndex : this.currentScriptIndex;
+        const count = 1 + ((isFilter ? this.pipeline.extraFilters : this.pipeline.extraScripts) || []).length;
+        const wrapper = document.createElement('div');
+        wrapper.className = 'pm-repeat-controls';
+        const title = document.createElement('label');
+        title.textContent = `${isFilter ? 'Filter' : 'Skript / Job'} auswählen (${count})`;
+        const select = document.createElement('select');
+        select.setAttribute('aria-label', `${type} Schritt auswählen`);
+        for (let i = 0; i < count; i++) select.add(new Option(`${isFilter ? 'Filter' : 'Skript / Job'} ${i + 1}`, String(i)));
+        select.value = String(Math.min(current, count - 1));
+        select.addEventListener('change', () => this.selectStep(type, Number(select.value)));
+        wrapper.append(title, select);
+        const toolbar = document.createElement('div');
+        toolbar.className = 'pm-repeat-actions';
+        for (const [text, action, disabled] of [
+            [`+ ${isFilter ? 'Filter' : 'Skript / Job'}`, () => this.addRepeatedStep(type), false],
+            ['↑', () => this.moveRepeatedStep(type, -1), current === 0],
+            ['↓', () => this.moveRepeatedStep(type, 1), current >= count - 1],
+            ['Entfernen', () => this.deleteRepeatedStep(type), current === 0]
+        ]) {
+            const button = document.createElement('button');
+            button.type = 'button'; button.className = 'pm-repeat-btn';
+            button.textContent = text; button.disabled = disabled;
+            button.addEventListener('click', action); toolbar.appendChild(button);
+        }
+        wrapper.appendChild(toolbar);
+        const note = document.createElement('small');
+        note.className = 'pm-field-help';
+        note.textContent = 'Änderungen am aktuellen Schritt zuerst mit „Änderungen übernehmen“ bestätigen.';
+        wrapper.appendChild(note);
+        form.prepend(wrapper);
+    }
+
+    async sendPipelineConfiguration() {
+        if (this.backendSubmitting) return;
+        const endpoint = this.$('pipelineBackendEndpoint')?.value?.trim() || '';
+        if (!endpoint) return this.showMessage('Bitte zuerst einen Backend-Testendpunkt angeben.');
+        const tree = (this.pipelineTrees || []).find(t => t.id === this.activeTreeId);
+        if (!tree) return this.showMessage('Keine Pipeline ausgewählt.');
+        const payload = createPipelineDraft(tree);
+        const button = this.$('savePipeline');
+        this.backendSubmitting = true;
+        if (button) button.disabled = true;
+        try {
+            const response = await postPipelineDraft(endpoint, payload);
+            const hint = response?.message || 'Backend hat die Konfiguration empfangen.';
+            this.showMessage(`Backend-Antwort: ${hint} (keine Pipeline ausgeführt).`);
+        } catch (error) {
+            this.showMessage(`Backend-Test fehlgeschlagen: ${error.message}`);
+        } finally {
+            this.backendSubmitting = false;
+            if (button) button.disabled = false;
+        }
+    }
+
     /**
      * Aktualisiert die Vorschau aller Pipeline-Schritte und markiert den
      * aktuell ausgewählten Baustein.
@@ -837,17 +977,21 @@ export default class PipelineEditor extends View {
         // 1. Vorschauen für die einzelnen Schritte aktualisieren
         this.$('sourcePreview').textContent = p.source || 'Bitte auswählen';
 
-        const filter = p.filter || { column: '', operator: 'gt', value: '', enabled: false };
-        this.$('filterPreview').textContent = filter.enabled
-            ? `${p.period} · ${filter.column} ${filter.operator} ${filter.value}`
-            : `Zeitraum: ${p.period || ''}`;
+        const filter = this.getActiveFilterStep() || {};
+        const filterState = filter.filter || { column: '', operator: 'gt', value: '', enabled: false };
+        const filterCount = 1 + (p.extraFilters || []).length;
+        this.$('filterPreview').textContent = filterState.enabled
+            ? `${filterCount} Filter · ${filter.period} · ${filterState.column} ${filterState.operator} ${filterState.value}`
+            : `${filterCount} Filter · Zeitraum: ${filter.period || ''}`;
 
         const cons = p.consolidation || {};
         this.$('consolidationPreview').textContent = cons.configured
             ? `${cons.source_a} + ${cons.source_b} · ${cons.matching_mode}`
             : 'Noch nicht konfiguriert';
 
-        this.$('scriptPreview').textContent = p.script || 'Bitte auswählen';
+        const activeScript = this.getActiveScriptStep() || {};
+        const scriptCount = 1 + (p.extraScripts || []).length;
+        this.$('scriptPreview').textContent = `${scriptCount} Schritt(e) · ${activeScript.script || 'Bitte auswählen'}`;
 
         const targetConfig = p.targetConfig || { format: 'table', writeMode: 'replace' };
         this.$('targetPreview').textContent = p.target
@@ -912,7 +1056,7 @@ export default class PipelineEditor extends View {
 
             const status = document.createElement('span');
             status.className = 'pm-tree-status';
-            status.textContent = `${tree.isDraft ? 'Entwurf · ' : ''}5 Schritte · Baum ${tree.id}`;
+            status.textContent = `${tree.isDraft ? 'Entwurf · ' : ''}${5 + (tree.data?.extraFilters?.length || 0) + (tree.data?.extraScripts?.length || 0)} Schritte · Baum ${tree.id}`;
 
             button.append(title, status);
             button.addEventListener('click', () => this.activateTree(tree.id));
@@ -930,7 +1074,7 @@ export default class PipelineEditor extends View {
      * @param {number} id - ID des zu aktivierenden Pipeline-Baums.
      * @param {string} [step] - Optionaler Bearbeitungsschritt.
      */
-    activateTree(id, step) {
+    activateTree(id, step, stepIndex = null) {
         const trees = this.pipelineTrees || [];
         const tree = trees.find(item => item.id === id);
         if (!tree) return;
@@ -938,11 +1082,13 @@ export default class PipelineEditor extends View {
         this.activeTreeId = tree.id;
         this.pipeline = tree.data;
         this.newDraft = tree.isDraft;
+        this.currentFilterIndex = 0;
+        this.currentScriptIndex = 0;
         this.scriptMode = this.pipeline?.scriptType === 'job' ? 'job' : 'existing';
 
         // Klassenkontext: this.selectStep aufrufen
         if (typeof this.selectStep === 'function') {
-            this.selectStep(step || (tree.isDraft ? 'source' : 'script'));
+            this.selectStep(step || (tree.isDraft ? 'source' : 'script'), stepIndex);
         }
 
         // Viewport-Scrollen korrigieren und absichern
@@ -964,230 +1110,123 @@ export default class PipelineEditor extends View {
      * Aktualisiert anschließend die grafische Darstellung.
      */
     renderVisualTree() {
-        if (!this.visualModel?.stage || !this.visualModel?.layer || !window.Konva) {
-            return;
-        }
-
+        if (!this.visualModel?.stage || !this.visualModel?.layer || !window.Konva) return;
         const vm = this.visualModel;
         const K = window.Konva;
         const trees = this.pipelineTrees || [];
-        const columnWidth = this.graphColumn || 220; // Fallback, falls graphColumn nicht definiert
-
-        const canvasWidth = Math.max(
-            760,
-            trees.length * columnWidth + 70
-        );
-
+        const columnWidth = this.graphColumn || 375;
         const nodeWidth = 170;
         const nodeHeight = 65;
-
-        const rows = {
-            source: 80,
-            consolidation: 192,
-            filter: 304,
-            script: 416,
-            target: 528
-        };
-
+        const interval = 112;
+        const baseY = 80;
         const colors = {
-            source: '#138b70',
-            consolidation: '#8057c4',
-            filter: '#2c7cbe',
-            script: '#bc852d',
-            target: '#c65e80'
+            source: '#138b70', consolidation: '#8057c4',
+            filter: '#2c7cbe', script: '#bc852d', target: '#c65e80'
         };
-
+        const longest = Math.max(5, ...trees.map(tree =>
+            5 + (tree.data?.extraFilters?.length || 0) + (tree.data?.extraScripts?.length || 0)
+        ));
+        const height = Math.max(685, baseY + interval * (longest - 1) + nodeHeight + 40);
+        const canvasWidth = Math.max(760, trees.length * columnWidth + 70);
         vm.requestor.style.width = `${canvasWidth}px`;
+        vm.requestor.style.height = `${height}px`;
         vm.stage.width(canvasWidth);
-        vm.stage.height(this.graphHeight || 650);
+        vm.stage.height(height);
         vm.layer.destroyChildren();
 
-        const addArrow = (ax, ay, bx, by) => {
-            vm.layer.add(new K.Arrow({
-                points: [ax, ay, bx, by],
-                stroke: '#91a4b9',
-                fill: '#91a4b9',
-                strokeWidth: 2,
-                pointerLength: 8,
-                pointerWidth: 8,
-                listening: false
-            }));
-        };
-
-        const addNode = (tree, x, y, step, title, subtitle) => {
-            const selected = tree.id === this.activeTreeId && this.currentStep === step;
-
+        const arrow = (ax, ay, bx, by) => vm.layer.add(new K.Arrow({
+            points: [ax, ay, bx, by], stroke: '#91a4b9', fill: '#91a4b9',
+            strokeWidth: 2, pointerLength: 8, pointerWidth: 8, listening: false
+        }));
+        const node = (tree, x, y, step, index, title, subtitle) => {
+            const selectedIndex = step === 'filter' ? this.currentFilterIndex
+                : step === 'script' ? this.currentScriptIndex : 0;
+            const selected = tree.id === this.activeTreeId && this.currentStep === step && selectedIndex === index;
             const group = new K.Group({ x, y, listening: true });
-
             group.add(new K.Rect({
-                x: 0,
-                y: 0,
-                width: nodeWidth,
-                height: nodeHeight,
+                x: 0, y: 0, width: nodeWidth, height: nodeHeight,
                 fill: selected ? '#e6f3ff' : '#ffffff',
                 stroke: selected ? '#1769aa' : colors[step],
-                strokeWidth: selected ? 2.8 : 1.5,
-                cornerRadius: 9,
-                shadowColor: '#304960',
-                shadowBlur: 3,
-                shadowOpacity: 0.09
+                strokeWidth: selected ? 2.8 : 1.5, cornerRadius: 9,
+                shadowColor: '#304960', shadowBlur: 3, shadowOpacity: 0.09
             }));
-
             group.add(new K.Text({
-                x: 10,
-                y: 11,
-                width: nodeWidth - 20,
-                height: 20,
-                text: title,
-                fontSize: 13,
-                fontStyle: 'bold',
-                fill: '#203854',
-                listening: false
+                x: 10, y: 11, width: nodeWidth - 20, height: 20,
+                text: title, fontSize: 13, fontStyle: 'bold',
+                fill: '#203854', listening: false
             }));
-
             group.add(new K.Text({
-                x: 10,
-                y: 35,
-                width: nodeWidth - 20,
-                height: 24,
-                text: String(subtitle || ''),
-                fontSize: 10.5,
-                fill: '#697d91',
-                wrap: 'none',
-                ellipsis: true,
-                listening: false
+                x: 10, y: 35, width: nodeWidth - 20, height: 24,
+                text: String(subtitle || ''), fontSize: 10.5,
+                fill: '#697d91', wrap: 'none', ellipsis: true, listening: false
             }));
-
             group.on('mouseenter', () => {
                 vm.stage.draggable(false);
                 vm.stage.container().style.cursor = 'pointer';
             });
-
             group.on('mouseleave', () => {
                 vm.stage.draggable(true);
                 vm.stage.container().style.cursor = 'grab';
             });
-
             group.on('click tap', event => {
                 event.cancelBubble = true;
-                this.activateTree(tree.id, step);
+                this.activateTree(tree.id, step, index);
             });
-
             vm.layer.add(group);
         };
 
-        trees.forEach((tree, index) => {
-            const base = index * columnWidth + 34;
+        trees.forEach((tree, treeIndex) => {
+            const p = tree.data || {};
+            const base = treeIndex * columnWidth + 34;
             const centralX = base + 91;
             const leftX = base;
             const rightX = base + 183;
-
-            const con = tree.data?.consolidation || {};
-            const hasB = Boolean(con.source_b);
-
             const center = x => x + nodeWidth / 2;
-
-            addArrow(
-                center(hasB ? leftX : centralX),
-                rows.source + nodeHeight,
-                center(centralX),
-                rows.consolidation
-            );
-
-            if (hasB) {
-                addArrow(
-                    center(rightX),
-                    rows.source + nodeHeight,
-                    center(centralX),
-                    rows.consolidation
-                );
-            }
-
-            for (const [from, to] of [
-                ['consolidation', 'filter'],
-                ['filter', 'script'],
-                ['script', 'target']
-            ]) {
-                addArrow(
-                    center(centralX),
-                    rows[from] + nodeHeight,
-                    center(centralX),
-                    rows[to]
-                );
-            }
+            const con = p.consolidation || {};
+            const hasB = Boolean(con.source_b);
+            const filterSteps = this.getFilterSteps(p);
+            const scriptSteps = this.getScriptSteps(p);
+            const consY = baseY + interval;
 
             vm.layer.add(new K.Text({
-                x: base,
-                y: 28,
-                width: nodeWidth * 2 + 12,
+                x: base, y: 28, width: nodeWidth * 2 + 12,
                 text: `${tree.name}${tree.isDraft ? ' · Entwurf' : ''}`,
                 fill: tree.id === this.activeTreeId ? '#1769aa' : '#465d75',
-                fontStyle: 'bold',
-                fontSize: 16,
-                listening: false
+                fontStyle: 'bold', fontSize: 16, listening: false
             }));
-
-            addNode(
-                tree,
-                hasB ? leftX : centralX,
-                rows.source,
-                'source',
-                hasB ? 'Quelle A' : 'Quelle',
-                tree.data?.source || 'Keine Tabelle gewählt'
-            );
-
+            node(tree, hasB ? leftX : centralX, baseY, 'source', 0,
+                hasB ? 'Quelle A' : 'Quelle', p.source || 'Keine Tabelle gewählt');
+            arrow(center(hasB ? leftX : centralX), baseY + nodeHeight, center(centralX), consY);
             if (hasB) {
-                addNode(
-                    tree,
-                    rightX,
-                    rows.source,
-                    'consolidation',
-                    'Quelle B',
-                    con.source_b
-                );
+                node(tree, rightX, baseY, 'consolidation', 0, 'Quelle B', con.source_b);
+                arrow(center(rightX), baseY + nodeHeight, center(centralX), consY);
             }
+            node(tree, centralX, consY, 'consolidation', 0, 'Konsolidierung',
+                con.configured ? `${con.matching_mode} · ${con.tolerance_seconds}s` : 'Noch nicht konfiguriert');
 
-            addNode(
-                tree,
-                centralX,
-                rows.consolidation,
-                'consolidation',
-                'Konsolidierung',
-                con.configured
-                    ? `${con.matching_mode} · ${con.tolerance_seconds}s`
-                    : 'Noch nicht konfiguriert'
-            );
-
-            addNode(
-                tree,
-                centralX,
-                rows.filter,
-                'filter',
-                'Filter',
-                tree.data?.period
-            );
-
-            addNode(
-                tree,
-                centralX,
-                rows.script,
-                'script',
-                'Skript / Job',
-                tree.data?.scriptType === 'job'
-                    ? 'Job konfiguriert'
-                    : 'Skriptschritt'
-            );
-
-            addNode(
-                tree,
-                centralX,
-                rows.target,
-                'target',
-                'Ziel',
-                tree.data?.target || 'Kein Ziel gewählt'
-            );
+            let priorY = consY;
+            let position = 2;
+            filterSteps.forEach((item, i) => {
+                const y = baseY + interval * position++;
+                arrow(center(centralX), priorY + nodeHeight, center(centralX), y);
+                const detail = item.filter?.enabled
+                    ? `${item.period} · ${item.filter.column} ${item.filter.operator} ${item.filter.value}`
+                    : `Zeitraum: ${item.period || '7 Tage'}`;
+                node(tree, centralX, y, 'filter', i, `Filter ${i + 1}`, detail);
+                priorY = y;
+            });
+            scriptSteps.forEach((item, i) => {
+                const y = baseY + interval * position++;
+                arrow(center(centralX), priorY + nodeHeight, center(centralX), y);
+                node(tree, centralX, y, 'script', i, `Skript / Job ${i + 1}`,
+                    item.scriptType === 'job' ? `Job: ${item.script || 'Bitte wählen'}`
+                        : item.script ? 'Skript konfiguriert' : 'Bitte auswählen');
+                priorY = y;
+            });
+            const targetY = baseY + interval * position;
+            arrow(center(centralX), priorY + nodeHeight, center(centralX), targetY);
+            node(tree, centralX, targetY, 'target', 0, 'Ziel', p.target || 'Kein Ziel gewählt');
         });
-
         vm.stage.draggable(true);
         vm.layer.batchDraw();
     }
@@ -1210,6 +1249,7 @@ export default class PipelineEditor extends View {
         detailsForm.innerHTML =
             formHtml +
             '<button id="submitSettings" type="submit" class="pm-btn pm-btn-primary">Änderungen übernehmen</button>';
+        if (step === 'filter' || step === 'script') this.setupRepeatedControls(step);
 
         const p = this.pipeline || {};
 
@@ -1218,10 +1258,11 @@ export default class PipelineEditor extends View {
         }
 
         if (step === 'filter') {
-            const filter = p.filter || { column: '', operator: 'gt', value: '', enabled: false };
+            const selectedFilter = this.getActiveFilterStep() || {};
+            const filter = selectedFilter.filter || { column: '', operator: 'gt', value: '', enabled: false };
 
             const periodField = this.$('fieldPeriod');
-            if (periodField) periodField.value = p.period || '7 Tage';
+            if (periodField) periodField.value = selectedFilter.period || '7 Tage';
 
             const colField = this.$('fieldFilterColumn');
             if (colField) colField.value = filter.column || '';
@@ -1279,8 +1320,8 @@ export default class PipelineEditor extends View {
     setEditorExpanded(expanded) {
         if (!this.editorCard || !this.expandButton) return;
 
-        this.editorCard.classList.toggle('pm-editor-expanded', this.expanded);
-        document.body.classList.toggle('pm-editor-open', this.expanded);
+        this.editorCard.classList.toggle('pm-editor-expanded', expanded);
+        document.body.classList.toggle('pm-editor-open', expanded);
 
         this.expandButton.setAttribute(
             'aria-pressed',
@@ -1553,7 +1594,7 @@ export default class PipelineEditor extends View {
         createGroup('Vorhandene Skripte', predefined);
         createGroup('Eigene Skripte', own);
 
-        const p = this.pipeline || {};
+        const p = this.getActiveScriptStep() || {};
         select.value = p.scriptType === 'job' ? '' : (p.script || '');
     }
 
@@ -1656,7 +1697,7 @@ export default class PipelineEditor extends View {
     setupScriptPanel() {
         this.populateScriptList();
 
-        const p = this.pipeline || {};
+        const p = this.getActiveScriptStep() || {};
         if (p.script && p.scriptType !== 'job') {
             const descField = this.$('fieldDescription');
             if (descField) {
@@ -1742,8 +1783,19 @@ export default class PipelineEditor extends View {
      *
      * @param {string} step - Der auszuwählende Pipeline-Schritt.
      */
-    selectStep(step) {
+    selectStep(step, index = null) {
         if (!step) return;
+        if (step === 'filter') {
+            const count = this.getFilterSteps(this.pipeline || {}).length;
+            if (index !== null) this.currentFilterIndex = Math.min(count - 1, Math.max(0, Number(index) || 0));
+            else this.currentFilterIndex = Math.min(count - 1, this.currentFilterIndex || 0);
+        }
+        if (step === 'script') {
+            const count = this.getScriptSteps(this.pipeline || {}).length;
+            if (index !== null) this.currentScriptIndex = Math.min(count - 1, Math.max(0, Number(index) || 0));
+            else this.currentScriptIndex = Math.min(count - 1, this.currentScriptIndex || 0);
+            this.scriptMode = this.getActiveScriptStep()?.scriptType === 'job' ? 'job' : 'existing';
+        }
 
         this.currentStep = step;
 

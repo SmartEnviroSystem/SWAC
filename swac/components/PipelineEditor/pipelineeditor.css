@@ -229,3 +229,15 @@ body.pm-editor-open {
         background: #fff;
     }
 }
+/* Mehrere Filter/Skript-Schritte und explizite Backend-Demo. */
+.pm-repeat-controls { background:#f0f6fc; border:1px solid #cddfeb; border-radius:10px; padding:11px; margin:0 0 16px; }
+.pm-repeat-controls>label { display:block; font-size:12px; font-weight:750; color:#254b71; margin-bottom:6px; }
+.pm-repeat-controls>select { width:100%; border:1px solid #c4d5e6; border-radius:7px; background:white; padding:9px; color:#163454; }
+.pm-repeat-actions { display:grid; grid-template-columns:2fr .65fr .65fr 1.35fr; gap:5px; margin-top:9px; }
+.pm-repeat-btn { cursor:pointer; border:1px solid #c2d6e5; border-radius:7px; background:#fff; color:#1e557b; padding:8px 3px; font-size:11px; }
+.pm-repeat-btn:disabled { cursor:not-allowed; opacity:.45; }
+.pm-repeat-btn:hover:not(:disabled) { background:#dfeefb; }
+.pm-backend-test { margin:14px 0 8px; padding:10px; background:#f3f7fb; border:1px dashed #b9cfe4; border-radius:9px; }
+.pm-backend-test label { display:block; font-size:11px; font-weight:750; margin-bottom:5px; }
+.pm-backend-test input { width:100%; min-width:0; font:11px ui-monospace,monospace; padding:8px; border-radius:6px; border:1px solid #bbcee0; }
+.pm-backend-test p { font-size:10px; margin:5px 0 0; line-height:1.5; color:#607991; }
