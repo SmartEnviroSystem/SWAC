@@ -92,8 +92,10 @@ export default class TableActionsSPL extends Plugin {
     updateActions(set, cell) {
         this.actions.forEach((action, index) => {
             const button = cell.children[index];
-            button.hidden = typeof action.visible === 'function' && !action.visible(set);
-            button.disabled = typeof action.disabled === 'function' && !!action.disabled(set);
+            const hidden = typeof action.visible === 'function' && !action.visible(set);
+            const disabled = typeof action.disabled === 'function' && !!action.disabled(set);
+            if (button.hidden !== hidden) button.hidden = hidden;
+            if (button.disabled !== disabled) button.disabled = disabled;
         });
     }
 
