@@ -85,6 +85,10 @@ export default class TableHierarchySPL extends Plugin {
                     event.stopPropagation();
                     this.sort(header);
                 }, true);
+                if (this.requestor.parent.swac_comp.options.rowHover === true) {
+                    table.addEventListener('pointerover', event => this.updateHover(table, event.target));
+                    table.addEventListener('pointerout', event => this.updateHover(table, event.relatedTarget));
+                }
                 this.tables.add(table);
             }
         }
@@ -127,6 +131,19 @@ export default class TableHierarchySPL extends Plugin {
 
     /** Called by TableFilter; render evaluates every active column filter. */
     filter() { this.render(); }
+
+    updateHover(table, target) {
+        if (this.requestor.parent.swac_comp.options.rowHover !== true) return;
+        const row = target?.closest?.('tr');
+        const group = row?.closest('table') === table && !row.hidden
+            ? this.entries.get(row)?.hoverGroup : null;
+        for (const [member, entry] of this.entries) {
+            if (entry.table !== table) continue;
+            const hovered = !!group && entry.hoverGroup === group && !member.hidden;
+            if (member.classList.contains('swac_tablehierarchy_hover') !== hovered)
+                member.classList.toggle('swac_tablehierarchy_hover', hovered);
+        }
+    }
 
     render() {
         const {scrollX, scrollY} = window;
@@ -199,6 +216,7 @@ export default class TableHierarchySPL extends Plugin {
                 const expanded = filtered || automatic || this.expanded.has(root);
                 for (const member of group.members) {
                     const row = byId.get(member.id);
+                    this.entries.get(row).hoverGroup = expanded && hasChildren ? root : null;
                     const cell = row.querySelector('.swac_tablehierarchy_cell');
                     const padding = (0.75 + Math.min(member.depth, 8) * 0.8) + 'rem';
                     if (cell.style.paddingLeft !== padding) cell.style.paddingLeft = padding;
@@ -257,6 +275,8 @@ export default class TableHierarchySPL extends Plugin {
                 currentRows.splice(index, 0, row);
             }
         }
+        for (const table of this.tables)
+            this.updateHover(table, table.querySelector('tr.swac_repeatedForSet:hover'));
         update(this.message, 'textContent', this.loadError ? this.labels.loaderror : (invalid ? this.labels.invalid : ''));
         update(this.message, 'hidden', !this.message.textContent);
         // Moving rows can blur a keyboard-focused toggle in native browsers.

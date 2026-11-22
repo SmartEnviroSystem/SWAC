@@ -1,0 +1,9 @@
+/* Shade cell backgrounds without dimming text, icons or controls. */
+.swac_present_rowhover tr.swac_repeatedForSet:hover > td,
+.swac_present_rowhover tr.swac_tablehierarchy_hover > td {
+    box-shadow: inset 0 0 0 9999px rgb(0 0 0 / 3%);
+}
+
+.swac_present_rowhover tr.swac_tablehierarchy_hover:hover > td {
+    box-shadow: inset 0 0 0 9999px rgb(0 0 0 / 6%);
+}
