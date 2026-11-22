@@ -1,0 +1,102 @@
+<div class="cal">
+    <!-- Auswahl -->
+    <div class="uk-card uk-card-default uk-card-small uk-card-body cal-controls">
+        <div class="cal-controls-row">
+            <div class="cal-control">
+                <span class="cal-control-label" swac_lang="Diagramcalendar.device">Gerät</span>
+                <span class="cal-device">–</span>
+            </div>
+            <div class="cal-control cal-control--attrs">
+                <span class="cal-control-label"><span swac_lang="Diagramcalendar.measurements">Messwerte</span> <span class="cal-note" swac_lang="Diagramcalendar.atleastone">(mindestens einer)</span></span>
+                <div class="cal-attrs" role="group"></div>
+                <p class="cal-hint" aria-live="polite"></p>
+            </div>
+            <label class="cal-control">
+                <span class="cal-control-label" swac_lang="Diagramcalendar.meanper">Mittelwert je</span>
+                <select class="uk-select uk-form-small cal-interval"></select>
+                <span class="cal-interval-hint" aria-live="polite" hidden></span>
+            </label>
+            <label class="cal-control">
+                <span class="cal-control-label" swac_lang="Diagramcalendar.linestyle">Darstellung</span>
+                <select class="uk-select uk-form-small cal-linestyle">
+                    <option value="line" swac_lang="Diagramcalendar.linestyleline">Linie</option>
+                    <option value="step" swac_lang="Diagramcalendar.linestylestep">Treppe</option>
+                </select>
+            </label>
+        </div>
+    </div>
+
+    <!-- Kalender -->
+    <div class="uk-card uk-card-default uk-card-small cal-card">
+        <div class="cal-nav">
+            <div class="cal-nav-left">
+                <div class="uk-button-group">
+                    <button class="uk-button uk-button-default uk-button-small cal-prev" type="button"><span uk-icon="chevron-left"></span></button>
+                    <button class="uk-button uk-button-default uk-button-small cal-next" type="button"><span uk-icon="chevron-right"></span></button>
+                </div>
+                <div class="uk-button-group cal-viewswitch" hidden>
+                    <button class="uk-button uk-button-default uk-button-small cal-view" type="button" data-view="month" swac_lang="Diagramcalendar.viewmonth">Monat</button>
+                    <button class="uk-button uk-button-default uk-button-small cal-view" type="button" data-view="week" swac_lang="Diagramcalendar.viewweek">Woche</button>
+                </div>
+            </div>
+            <h2 class="cal-title" aria-live="polite"></h2>
+            <div class="cal-nav-right">
+                <button class="uk-button uk-button-default uk-button-small cal-today" type="button" swac_lang="Diagramcalendar.today">Heute</button>
+                <button class="uk-button uk-button-default uk-button-small cal-latest" type="button" swac_lang="Diagramcalendar.latest" hidden>Neueste Daten</button>
+            </div>
+        </div>
+
+        <div class="cal-message" aria-live="polite"></div>
+        <div class="cal-summary"></div>
+        <div class="cal-legend"></div>
+
+        <div class="cal-body">
+            <div class="cal-weekdays" aria-hidden="true"></div>
+            <div class="cal-grid" role="grid"></div>
+            <div class="cal-loading" hidden>
+                <div class="cal-loading-box"><span uk-spinner="ratio: 0.8"></span><span swac_lang="Diagramcalendar.loading">Lädt…</span></div>
+            </div>
+        </div>
+        <p class="cal-status" role="status"></p>
+    </div>
+
+    <!-- Tooltip über den Tageszellen -->
+    <div class="cal-tooltip" role="tooltip" hidden></div>
+
+    <!-- Detailansicht eines Tages (UIkit hängt das Modal beim Öffnen an body) -->
+    <div class="cal-detail uk-modal-container" uk-modal>
+        <div class="uk-modal-dialog cal">
+            <button class="uk-modal-close-default" type="button" uk-close></button>
+            <div class="uk-modal-header cal-detail-header">
+                <div class="uk-button-group">
+                    <button class="uk-button uk-button-default uk-button-small cal-detail-prev" type="button"><span uk-icon="chevron-left"></span></button>
+                    <button class="uk-button uk-button-default uk-button-small cal-detail-next" type="button"><span uk-icon="chevron-right"></span></button>
+                </div>
+                <h2 class="uk-modal-title cal-detail-title"></h2>
+            </div>
+            <div class="uk-modal-body">
+                <div class="cal-detail-stats"></div>
+                <div class="cal-detail-message"></div>
+                <div class="cal-detail-chart"></div>
+                <div class="cal-detail-toolbar">
+                    <label class="cal-detail-resolution-label">
+                        <span swac_lang="Diagramcalendar.detailresolution">Auflösung</span>
+                        <select class="uk-select uk-form-small cal-detail-resolution"></select>
+                    </label>
+                    <label class="cal-detail-resolution-label">
+                        <span swac_lang="Diagramcalendar.linestyle">Darstellung</span>
+                        <select class="uk-select uk-form-small cal-detail-linestyle">
+                            <option value="line" swac_lang="Diagramcalendar.linestyleline">Linie</option>
+                            <option value="step" swac_lang="Diagramcalendar.linestylestep">Treppe</option>
+                        </select>
+                    </label>
+                    <span class="cal-detail-info"></span>
+                    <div class="cal-detail-actions">
+                        <button class="uk-button uk-button-default uk-button-small cal-detail-reset" type="button"><span uk-icon="icon: refresh; ratio: 0.8"></span> <span swac_lang="Diagramcalendar.resetzoom">Zoom zurücksetzen</span></button>
+                        <a class="uk-button uk-button-primary uk-button-small cal-detail-swac" href="#" target="_blank" rel="noopener"><span uk-icon="icon: forward; ratio: 0.8"></span> <span swac_lang="Diagramcalendar.openswac">In SWAC Charts öffnen</span></a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

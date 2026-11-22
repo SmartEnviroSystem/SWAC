@@ -1,0 +1,785 @@
+/*
+ * Diagramm-Kalender (Feature #55) – ergänzt UIkit und css/global.css von SmartMonitoring.
+ * Farben angelehnt an global.css (Akzent #3754FA, Text #1A1A1D, Grau #727683).
+ */
+.cal {
+    --cal-accent: #3754FA;
+    --cal-accent-soft: #e3e6f7;
+    --cal-text: #1A1A1D;
+    --cal-muted: #727683;
+    --cal-border: #e1e3ea;
+    --cal-surface: #ffffff;
+    --cal-empty: #f5f6fa;
+    --cal-weekend: #fafbff;
+}
+
+.cal-controls,
+.cal-card {
+    border-radius: 8px;
+    margin-bottom: 16px;
+}
+
+.cal-card {
+    padding: 16px;
+}
+
+/* ---------- Auswahl ---------- */
+
+.cal-controls-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px 28px;
+    align-items: flex-start;
+}
+
+.cal-control {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.cal-control--attrs {
+    flex: 1 1 420px;
+}
+
+.cal-control-label {
+    color: var(--cal-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.cal-note {
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 400;
+}
+
+.cal-device {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--cal-text);
+    line-height: 30px;
+}
+
+.cal-device[hidden],
+.cal-device-select[hidden] {
+    display: none;
+}
+
+.cal-device-select {
+    width: auto;
+    min-width: 200px;
+}
+
+.cal-interval {
+    width: auto;
+    min-width: 130px;
+}
+
+.cal-interval-hint {
+    max-width: 220px;
+    color: #F3A02B;
+    font-size: 0.75rem;
+    line-height: 1.3;
+}
+
+.cal-interval-hint[hidden] {
+    display: none;
+}
+
+.cal-attrs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.cal-attr {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border: 1px solid var(--cal-border);
+    border-radius: 16px;
+    background: var(--cal-surface);
+    color: var(--cal-text);
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: border-color 0.15s, background-color 0.15s;
+}
+
+.cal-attr:hover {
+    border-color: var(--cal-accent);
+}
+
+.cal-attr:has(input:checked) {
+    border-color: var(--cal-accent);
+    background: var(--cal-accent-soft);
+}
+
+.cal-attr .uk-checkbox {
+    margin: 0;
+}
+
+.cal-swatch {
+    display: inline-block;
+    flex: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+
+.cal-hint {
+    min-height: 1.2em;
+    margin: 0;
+    color: #F84F4F;
+    font-size: 0.8rem;
+}
+
+/* ---------- Navigation ---------- */
+
+.cal-nav {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.cal-nav-right {
+    justify-self: end;
+    display: flex;
+    gap: 6px;
+}
+
+.cal-title {
+    margin: 0;
+    font-size: 1.4rem;
+    font-weight: 600;
+    text-align: center;
+    color: var(--cal-text);
+}
+
+.cal-nav .uk-button-small {
+    padding: 0 10px;
+}
+
+/* ---------- Meldungen, Übersicht, Legende ---------- */
+
+.cal-alert {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 16px;
+    margin: 0 0 12px;
+    border-radius: 6px;
+}
+
+.cal-alert p {
+    margin: 0;
+}
+
+.cal-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.cal-summary:empty {
+    display: none;
+}
+
+.cal-summary-item {
+    flex: 1 1 220px;
+    padding: 8px 12px;
+    border-left: 4px solid var(--attr-color, var(--cal-accent));
+    border-radius: 4px;
+    background: var(--cal-empty);
+}
+
+.cal-summary-name {
+    color: var(--cal-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.cal-summary-values {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 16px;
+    font-size: 0.85rem;
+}
+
+.cal-summary-value {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    color: var(--cal-text);
+}
+
+.cal-summary-label,
+.cal-summary-date {
+    color: var(--cal-muted);
+    font-size: 0.75rem;
+}
+
+.cal-legend {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px 24px;
+    margin-bottom: 12px;
+    font-size: 0.8rem;
+    color: var(--cal-text);
+}
+
+.cal-legend:empty {
+    display: none;
+}
+
+.cal-legend-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 12px;
+}
+
+.cal-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.cal-legend-line {
+    width: 24px;
+    height: 8px;
+}
+
+.cal-legend-range,
+.cal-legend-axis {
+    color: var(--cal-muted);
+}
+
+.cal-legend-axis {
+    flex-basis: 100%;
+    text-align: center;
+}
+
+/* ---------- Raster ---------- */
+
+.cal-body {
+    position: relative;
+}
+
+.cal-weekdays,
+.cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.cal-weekdays span {
+    padding-bottom: 4px;
+    color: var(--cal-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.cal-grid[aria-busy="true"] {
+    opacity: 0.45;
+    transition: opacity 0.2s;
+}
+
+.cal-day {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-height: 104px;
+    padding: 6px 6px 4px;
+    border: 1px solid var(--cal-border);
+    border-radius: 6px;
+    background: var(--cal-surface);
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+}
+
+.cal-day--weekend {
+    background: var(--cal-weekend);
+}
+
+.cal-day[data-has-data] {
+    cursor: pointer;
+}
+
+.cal-day[data-has-data]:hover,
+.cal-day[data-has-data]:focus-visible,
+.cal-day--hover {
+    border-color: var(--cal-accent);
+    box-shadow: 0 4px 14px rgba(55, 84, 250, 0.14);
+}
+
+.cal-day[data-has-data]:focus-visible {
+    box-shadow: 0 0 0 3px rgba(55, 84, 250, 0.35);
+}
+
+.cal-day--outside {
+    border-style: dashed;
+    background: transparent;
+    color: var(--cal-muted);
+    opacity: 0.45;
+}
+
+.cal-day--empty {
+    background: var(--cal-empty);
+}
+
+.cal-day--future.cal-day--empty .cal-no-data {
+    opacity: 0.5;
+}
+
+.cal-day--today {
+    border: 2px solid var(--cal-accent);
+    padding: 5px 5px 3px;
+}
+
+.cal-day-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 22px;
+}
+
+.cal-day-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 22px;
+    border-radius: 11px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--cal-text);
+}
+
+.cal-day--today .cal-day-number {
+    background: var(--cal-accent);
+    color: #fff;
+}
+
+.cal-today-badge {
+    color: var(--cal-accent);
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.cal-day-peak {
+    margin-left: auto;
+    overflow: hidden;
+    color: var(--cal-muted);
+    font-size: 0.7rem;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.cal-day-charts {
+    position: relative;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin-top: 2px;
+}
+
+.cal-unit-chart {
+    position: relative;
+    flex: 1;
+    display: flex;
+    min-height: 34px;
+}
+
+.cal-unit-chart + .cal-unit-chart {
+    padding-top: 3px;
+    border-top: 1px dotted var(--cal-border);
+}
+
+.cal-unit-label {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 1;
+    padding: 0 2px;
+    background: rgba(255, 255, 255, 0.85);
+    color: var(--cal-muted);
+    font-size: 0.6rem;
+    line-height: 1.2;
+}
+
+.cal-unit-chart + .cal-unit-chart .cal-unit-label {
+    top: 3px;
+}
+
+.cal-unit-nodata {
+    margin: auto;
+    color: var(--cal-muted);
+    font-size: 0.65rem;
+}
+
+.mini-chart {
+    flex: 1;
+    width: 100%;
+    min-height: 34px;
+    overflow: visible;
+}
+
+.mini-chart-grid {
+    stroke: var(--cal-border);
+    stroke-width: 1;
+    stroke-dasharray: 2 2;
+    vector-effect: non-scaling-stroke;
+}
+
+.cal-crosshair {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 0;
+    border-left: 1px solid var(--cal-accent);
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.cal-no-data {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--cal-muted);
+    font-size: 0.75rem;
+}
+
+/* Platzhalter während des ersten Ladens */
+.cal-skeleton {
+    flex: 1;
+    margin-top: 6px;
+    border-radius: 4px;
+    background: linear-gradient(90deg, var(--cal-empty) 25%, #eceef5 50%, var(--cal-empty) 75%);
+    background-size: 200% 100%;
+    animation: cal-shimmer 1.4s infinite linear;
+}
+
+@keyframes cal-shimmer {
+    from { background-position: 200% 0; }
+    to { background-position: -200% 0; }
+}
+
+.cal-loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 80px;
+    pointer-events: none;
+}
+
+.cal-loading[hidden] {
+    display: none;
+}
+
+.cal-loading-box {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 18px;
+    border-radius: 20px;
+    background: var(--cal-surface);
+    box-shadow: 0 4px 18px rgba(26, 26, 29, 0.15);
+    color: var(--cal-accent);
+    font-weight: 600;
+}
+
+.cal-status {
+    margin: 12px 0 0;
+    color: var(--cal-muted);
+    font-size: 0.8rem;
+}
+
+/* ---------- Tooltip ---------- */
+
+.cal-tooltip {
+    position: fixed;
+    z-index: 1100;
+    max-width: 380px;
+    padding: 10px 12px;
+    border: 1px solid var(--cal-border, #e1e3ea);
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 8px 24px rgba(26, 26, 29, 0.18);
+    color: #1A1A1D;
+    font-size: 0.8rem;
+    pointer-events: none;
+}
+
+.cal-tooltip[hidden] {
+    display: none;
+}
+
+.cal-tooltip-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 6px;
+}
+
+.cal-tooltip-time {
+    color: #3754FA;
+    font-weight: 600;
+}
+
+.cal-tooltip-table {
+    border-collapse: collapse;
+    width: 100%;
+}
+
+.cal-tooltip-table th {
+    padding: 0 0 2px 10px;
+    color: #727683;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-align: right;
+}
+
+.cal-tooltip-table td {
+    padding: 2px 0 2px 10px;
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.cal-tooltip-table td.cal-tooltip-name {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding-left: 0;
+    text-align: left;
+}
+
+.cal-tooltip-now {
+    font-weight: 700;
+}
+
+.cal-tooltip-empty {
+    color: #727683;
+    text-align: center !important;
+}
+
+.cal-tooltip-foot {
+    margin-top: 6px;
+    color: #727683;
+    font-size: 0.7rem;
+}
+
+/* ---------- Detailansicht ---------- */
+
+.cal-detail-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding-right: 56px;
+}
+
+.cal-detail-header .uk-modal-title {
+    margin: 0;
+    font-size: 1.4rem;
+}
+
+.cal-detail-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.cal-detail-chart {
+    position: relative;
+    min-height: 420px;
+}
+
+.cal-detail-chart {
+    height: 440px;
+}
+
+.cal-detail-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 16px;
+    margin-top: 12px;
+}
+
+.cal-detail-info {
+    color: #727683;
+    font-size: 0.8rem;
+}
+
+/* Auswahl „Auflösung“ im Tagesdiagramm (Originaldaten oder Mittelwerte) */
+.cal-detail-resolution-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.cal-detail-resolution {
+    width: auto;
+    min-width: 260px;
+}
+
+.cal-detail-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+@media (max-width: 720px) {
+    .cal-detail-chart {
+        height: 320px;
+        min-height: 0;
+    }
+}
+
+/* ---------- Schmale Bildschirme: Liste statt Raster ---------- */
+
+@media (max-width: 720px) {
+    .cal-weekdays {
+        display: none;
+    }
+
+    .cal-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .cal-day--outside {
+        display: none;
+    }
+
+    .cal-day {
+        min-height: 84px;
+    }
+
+    .mini-chart {
+        flex: none;
+        height: 56px;
+    }
+
+    .cal-nav {
+        grid-template-columns: auto 1fr;
+    }
+
+    .cal-nav-right {
+        grid-column: 1 / -1;
+        justify-self: stretch;
+    }
+
+    .cal-title {
+        text-align: right;
+        font-size: 1.15rem;
+    }
+}
+
+/* ---------- Komponente: Navigation mit Umschalter Monat/Woche ---------- */
+
+.cal-nav-left {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.cal-viewswitch[hidden] {
+    display: none;
+}
+
+/* ---------- Wochenansicht: 7 größere Diagramme ---------- */
+
+.cal-grid--week .cal-day {
+    min-height: 240px;
+    padding-bottom: 2px;
+}
+
+.cal-grid--week .cal-day-number {
+    padding: 0 6px;
+    border-radius: 11px;
+}
+
+.cal-grid--week .cal-unit-chart {
+    min-height: 70px;
+    padding-left: 0;
+}
+
+.cal-grid--week .mini-chart {
+    min-height: 70px;
+}
+
+.cal-axis-y {
+    position: absolute;
+    right: 0;
+    z-index: 1;
+    padding: 0 2px;
+    background: rgba(255, 255, 255, 0.85);
+    color: var(--cal-muted);
+    font-size: 0.6rem;
+    line-height: 1.2;
+    pointer-events: none;
+}
+
+.cal-axis-y--max {
+    top: 0;
+}
+
+.cal-axis-y--min {
+    bottom: 0;
+}
+
+.cal-unit-chart + .cal-unit-chart .cal-axis-y--max {
+    top: 3px;
+}
+
+.cal-axis-x {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 2px;
+    color: var(--cal-muted);
+    font-size: 0.6rem;
+    line-height: 1;
+}
+
+@media (max-width: 720px) {
+    .cal-grid--week .cal-day {
+        min-height: 180px;
+    }
+}
+
+/* ---------- Konstante Attribute (z. B. Koordinaten, Flags) ---------- */
+
+.cal-summary-constant {
+    color: var(--cal-muted);
+    font-weight: 400;
+    font-style: italic;
+}
+
+/* Kennzahlen aus abgeschnittenem Abruf (maxRecords) */
+.cal-summary-incomplete {
+    color: #b45309;
+    font-weight: 600;
+}
