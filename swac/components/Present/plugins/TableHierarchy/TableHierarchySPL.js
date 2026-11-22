@@ -129,6 +129,7 @@ export default class TableHierarchySPL extends Plugin {
     filter() { this.render(); }
 
     render() {
+        const {scrollX, scrollY} = window;
         const focused = document.activeElement;
         let invalid = false;
         for (const table of this.tables) {
@@ -187,6 +188,7 @@ export default class TableHierarchySPL extends Plugin {
                     ? Number(value(a)) - Number(value(b))
                     : value(a).localeCompare(value(b))));
             }
+            const orderedRows = [];
             for (const group of groups) {
                 const root = byId.get(group.root);
                 const hasChildren = group.members.length > 1;
@@ -198,40 +200,74 @@ export default class TableHierarchySPL extends Plugin {
                 for (const member of group.members) {
                     const row = byId.get(member.id);
                     const cell = row.querySelector('.swac_tablehierarchy_cell');
-                    cell.style.paddingLeft = (0.75 + Math.min(member.depth, 8) * 0.8) + 'rem';
+                    const padding = (0.75 + Math.min(member.depth, 8) * 0.8) + 'rem';
+                    if (cell.style.paddingLeft !== padding) cell.style.paddingLeft = padding;
                     if (member.depth === 0 && hasChildren) {
                         let button = cell.querySelector('button');
                         if (!button) {
                             button = document.createElement('button');
                             button.type = 'button';
                             button.className = 'uk-button uk-button-text';
-                            button.addEventListener('click', () => {
+                            // Keep pointer focus from scrolling before the click handler runs.
+                            button.addEventListener('mousedown', event => {
+                                if (event.button === 0) event.preventDefault();
+                            });
+                            button.addEventListener('click', event => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                const {scrollX, scrollY} = window;
+                                button.focus({preventScroll: true});
                                 if (this.expanded.has(root)) this.expanded.delete(root);
                                 else this.expanded.add(root);
                                 this.render();
+                                // Layout and scroll anchoring can settle after the click handler.
+                                window.requestAnimationFrame(() => {
+                                    if (window.scrollX !== scrollX || window.scrollY !== scrollY)
+                                        window.scrollTo({left: scrollX, top: scrollY, behavior: 'instant'});
+                                });
                             });
                             cell.replaceChildren(button);
                         }
-                        button.textContent = expanded ? '▼' : '▷';
-                        button.title = expanded ? this.labels.collapse : this.labels.expand;
-                        button.setAttribute('aria-label', button.title);
-                        button.setAttribute('aria-expanded', String(expanded));
-                        button.setAttribute('aria-controls', group.members.slice(1).map(child => byId.get(child.id).id).join(' '));
-                        button.disabled = filtered || automatic;
+                        const label = expanded ? this.labels.collapse : this.labels.expand;
+                        update(button, 'textContent', expanded ? '▼' : '▷');
+                        update(button, 'title', label);
+                        for (const [name, value] of Object.entries({
+                            'aria-label': label,
+                            'aria-expanded': String(expanded),
+                            'aria-controls': group.members.slice(1).map(child => byId.get(child.id).id).join(' ')
+                        })) {
+                            if (button.getAttribute(name) !== value) button.setAttribute(name, value);
+                        }
+                        update(button, 'disabled', !!(filtered || automatic));
                     } else {
-                        cell.textContent = member.depth ? '↳' : '';
+                        update(cell, 'textContent', member.depth ? '↳' : '');
                     }
-                    row.hidden = !visible || (member.depth > 0 && !expanded);
-                    // Reorder original rows; callbacks and WatchableSet bindings stay intact.
-                    row.parentElement.appendChild(row);
+                    update(row, 'hidden', !visible || (member.depth > 0 && !expanded));
+                    orderedRows.push(row);
                 }
             }
+            // Keep unchanged rows attached so polling preserves the browser's scroll anchor.
+            const currentRows = [...table.querySelectorAll('tr')].filter(row =>
+                this.entries.get(row)?.table === table && this.requestor.parent.contains(row));
+            for (let index = 0; index < orderedRows.length; index++) {
+                const row = orderedRows[index];
+                if (currentRows[index] === row) continue;
+                currentRows[index].parentElement.insertBefore(row, currentRows[index]);
+                currentRows.splice(currentRows.indexOf(row), 1);
+                currentRows.splice(index, 0, row);
+            }
         }
-        this.message.textContent = this.loadError ? this.labels.loaderror : (invalid ? this.labels.invalid : '');
-        this.message.hidden = !this.message.textContent;
+        update(this.message, 'textContent', this.loadError ? this.labels.loaderror : (invalid ? this.labels.invalid : ''));
+        update(this.message, 'hidden', !this.message.textContent);
         // Moving rows can blur a keyboard-focused toggle in native browsers.
         if (focused && focused !== document.activeElement
                 && this.requestor.parent.contains(focused) && !focused.closest('tr')?.hidden)
             focused.focus({preventScroll: true});
+        if (window.scrollX !== scrollX || window.scrollY !== scrollY)
+            window.scrollTo({left: scrollX, top: scrollY, behavior: 'instant'});
     }
+}
+
+function update(element, property, value) {
+    if (element[property] !== value) element[property] = value;
 }
