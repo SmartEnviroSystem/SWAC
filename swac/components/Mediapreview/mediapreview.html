@@ -25,4 +25,43 @@
             </div>
         </div>
     </div>
+    <!--Page navigation-->
+    <div class="swac_mediapreview_nav swac_dontdisplay">
+        <button type="button" class="uk-button uk-button-default swac_mediapreview_first" title="Mediapreview.firstpage"><span uk-icon="chevron-double-left"></span></button>
+        <button type="button" class="uk-button uk-button-default swac_mediapreview_prev" title="Mediapreview.prevpage"><span uk-icon="chevron-left"></span></button>
+        <button type="button" class="uk-button uk-button-default swac_mediapreview_play" title="Mediapreview.playpages"></button>
+        <select class="uk-select uk-form-width-xsmall swac_mediapreview_playspeed" title="Mediapreview.playspeed"></select>
+        <span class="swac_mediapreview_pageinfo"></span>
+        <button type="button" class="uk-button uk-button-default swac_mediapreview_next" title="Mediapreview.nextpage"><span uk-icon="chevron-right"></span></button>
+        <button type="button" class="uk-button uk-button-default swac_mediapreview_last" title="Mediapreview.lastpage"><span uk-icon="chevron-double-right"></span></button>
+        <button type="button" class="uk-button uk-button-default swac_mediapreview_withoutts swac_dontdisplay"></button>
+    </div>
+    <!--Navigation by time-->
+    <div class="swac_mediapreview_timenav swac_dontdisplay">
+        <form class="swac_mediapreview_timecontrols" novalidate>
+            <button type="button" class="uk-button uk-button-default swac_mediapreview_jumpback"></button>
+            <input type="datetime-local" step="1" class="uk-input uk-form-width-medium swac_mediapreview_timepoint">
+            <button type="submit" class="uk-button uk-button-default swac_mediapreview_goto"></button>
+            <button type="button" class="uk-button uk-button-default swac_mediapreview_jumpfwd"></button>
+        </form>
+        <div class="swac_mediapreview_timemsg uk-text-meta"></div>
+        <div class="swac_mediapreview_timeaxis">
+            <div class="swac_mediapreview_timeaxis_bar">
+                <div class="swac_mediapreview_timeaxis_page"></div>
+                <div class="swac_mediapreview_timeaxis_hover swac_dontdisplay"></div>
+            </div>
+            <div class="swac_mediapreview_timeaxis_ticks"></div>
+            <div class="swac_mediapreview_timeaxis_range uk-text-meta">
+                <span class="swac_mediapreview_timeaxis_start"></span>
+                <span class="swac_mediapreview_timeaxis_end"></span>
+            </div>
+        </div>
+    </div>
+    <!--Big view of the images-->
+    <div class="swac_mediapreview_bigview uk-modal-full" uk-modal>
+        <div class="uk-modal-dialog uk-modal-body">
+            <button class="uk-modal-close-full uk-close-large" type="button" uk-close></button>
+            <div class="swac_mediapreview_bigviewarea"></div>
+        </div>
+    </div>
 </div>

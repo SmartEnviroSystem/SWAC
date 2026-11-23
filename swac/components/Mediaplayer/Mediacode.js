@@ -23,6 +23,19 @@ export default class Mediacode {
     }
 
     /**
+     * Builds the source of a media file. The basepath is only added to plain
+     * paths, not to absolute or relative paths, URLs or data URLs.
+     *
+     * @param {String} path Path, URL or data URL of the media
+     * @returns {String} Source to use in the media element
+     */
+    getSrc(path) {
+        if (typeof path !== 'string' || /^(\/|\.|data:|blob:|[a-z][a-z0-9+.-]*:\/\/)/i.test(path))
+            return path;
+        return this.basepath + path;
+    }
+
+    /**
      * Creates the DOMElement that is needed to present the media.
      * 
      * @returns {undefined}
@@ -73,7 +86,7 @@ export default class Mediacode {
 
         let imgElem = document.createElement('img');
         imgElem.classList.add(this.set.mimetype);
-        imgElem.src = this.basepath + this.set[this.pathattr];
+        imgElem.src = this.getSrc(this.set[this.pathattr]);
         imgElem.title = title;
         imgElem.alt = title;
         return imgElem;
@@ -128,7 +141,7 @@ export default class Mediacode {
         if (this.set.image) {
             let coverElem = document.createElement('img');
             coverElem.classList.add('swac_media_cover');
-            coverElem.setAttribute("data-src", this.basepath + this.set.image);
+            coverElem.setAttribute("data-src", this.getSrc(this.set.image));
             coverElem.height = '100px';
             divElem.appendChild(coverElem);
         }
@@ -160,7 +173,7 @@ export default class Mediacode {
         if(!this.set[this.pathattr]) {
             Msg.error('mediacode','Source in attribute >' + this.pathattr + '< is missing.',this.requestor);
         }
-        sourceElem.src = this.basepath + this.set[this.pathattr];
+        sourceElem.src = this.getSrc(this.set[this.pathattr]);
         sourceElem.type = this.set[this.typeattr];
         mediaElem.appendChild(sourceElem);
         return sourceElem;
@@ -168,7 +181,7 @@ export default class Mediacode {
     
     createHtmlCode() {
         let iframe = document.createElement('iframe');
-        iframe.src = this.basepath + this.set[this.pathattr];
+        iframe.src = this.getSrc(this.set[this.pathattr]);
         return iframe;
     }
 }

@@ -4,3 +4,134 @@
     overflow-y: auto;
     overflow-x: hidden;
 }
+
+/* Page navigation below the media */
+.swac_mediapreview_nav {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.swac_mediapreview_nav .uk-button {
+    padding: 0 12px;
+}
+
+.swac_mediapreview_play {
+    min-width: 44px;
+}
+
+.swac_mediapreview_playspeed {
+    width: 80px;
+}
+
+.swac_mediapreview_pageinfo {
+    padding: 0 8px;
+}
+
+.swac_mediapreview_withoutts {
+    margin-left: 16px;
+}
+
+/* Big view: the image uses most of the screen */
+.swac_mediapreview_bigview .swac_collage_mainimg {
+    max-height: 75vh;
+}
+
+/* Navigation by time */
+.swac_mediapreview_timenav {
+    margin-top: 12px;
+}
+
+.swac_mediapreview_timecontrols {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.swac_mediapreview_timecontrols .uk-button {
+    padding: 0 12px;
+    text-transform: none;
+}
+
+.swac_mediapreview_timemsg {
+    min-height: 1.5em;
+    text-align: center;
+}
+
+.swac_mediapreview_timeaxis {
+    margin: 4px 8px 0;
+}
+
+.swac_mediapreview_timeaxis_bar {
+    position: relative;
+    height: 14px;
+    border-radius: 3px;
+    background: #e5e5e5;
+    cursor: pointer;
+}
+
+/* Part of the time axis with the shown page */
+.swac_mediapreview_timeaxis_page {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    min-width: 4px;
+    border-radius: 3px;
+    background: #1e87f0;
+    pointer-events: none;
+}
+
+/* Time under the mouse */
+.swac_mediapreview_timeaxis_hover {
+    position: absolute;
+    bottom: calc(100% + 4px);
+    transform: translateX(-50%);
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: rgba(0, 0, 0, 0.7);
+    color: #fff;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.swac_mediapreview_timeaxis_ticks {
+    position: relative;
+    height: 1.6em;
+    font-size: 0.75rem;
+}
+
+.swac_mediapreview_timeaxis_tick {
+    position: absolute;
+    top: 4px;
+    transform: translateX(-50%);
+    white-space: nowrap;
+}
+
+.swac_mediapreview_timeaxis_tick::before {
+    content: "";
+    position: absolute;
+    top: -4px;
+    left: 50%;
+    height: 4px;
+    border-left: 1px solid #999;
+}
+
+.swac_mediapreview_timeaxis_range {
+    display: flex;
+    justify-content: space-between;
+}
+
+/* Small screens: the page information gets its own line above the buttons */
+@media (max-width: 640px) {
+    .swac_mediapreview_pageinfo {
+        flex-basis: 100%;
+        order: -1;
+        text-align: center;
+    }
+}
