@@ -463,9 +463,30 @@ export default class Mediapreview extends View {
             return;
         }
         nav.classList.remove('swac_dontdisplay');
+        this.loadTotals();
         if (this.options.timeNavigation)
             await this.initTimeNavigation();
         await this.firstPage();
+    }
+
+    /**
+     * Loads the number of media for the page information and the button for media without timestamp
+     *
+     * @returns {Promise} Resolves when the numbers are loaded
+     */
+    async loadTotals() {
+        let withoutTs = this.navigator.withoutTs;
+        try {
+            let total = await this.navigator.loadTotal(withoutTs);
+            // The user could have switched the media in the meantime
+            if (total !== null && withoutTs === this.navigator.withoutTs)
+                this.navigator.total = total;
+            if (this.navigator.mode === 'mixed' && this.navigator.withoutTsCount === null)
+                this.navigator.withoutTsCount = await this.navigator.loadTotal(true);
+        } catch (e) {
+            Msg.warn('Mediapreview', 'Could not load the number of media: ' + e, this.requestor);
+        }
+        this.updateNavigation();
     }
 
     /**
@@ -815,6 +836,7 @@ export default class Mediapreview extends View {
             return Promise.resolve();
         this.navigator.withoutTs = !this.navigator.withoutTs;
         this.navigator.total = null;
+        this.loadTotals();
         return this.showPage('first');
     }
 

@@ -126,3 +126,12 @@
     display: flex;
     justify-content: space-between;
 }
+
+/* Small screens: the page information gets its own line above the buttons */
+@media (max-width: 640px) {
+    .swac_mediapreview_pageinfo {
+        flex-basis: 100%;
+        order: -1;
+        text-align: center;
+    }
+}

@@ -43,8 +43,6 @@ export default class MediaNavigator {
         this.withoutTsCount = null;
         // Number of sets that can be navigated, null if unknown
         this.total = null;
-        // Ids of own requests, so that the component can ignore their sets
-        this.requestIds = new Set();
     }
 
     /**
@@ -125,6 +123,22 @@ export default class MediaNavigator {
     }
 
     /**
+     * Loads the number of sets that can be navigated
+     *
+     * @param {Boolean} withoutTs Count the sets without timestamp (mixed mode)
+     * @returns {Promise<Number>} Number of sets or null if the source can not count
+     */
+    async loadTotal(withoutTs = this.withoutTs) {
+        let sets = await this.request(this.getModeFilters(withoutTs), 'id,asc', 1, {countonly: 'true'});
+        // A source that ignores countonly delivers the sets themselves
+        if (sets.length > 1)
+            return sets.filter(curSet => this.matchesMode(curSet, withoutTs)).length;
+        if (sets.length === 1 && typeof sets[0].count === 'number' && sets[0][this.tsAttr] === undefined)
+            return sets[0].count;
+        return null;
+    }
+
+    /**
      * Loads the time of the first and the last set. Only available when
      * navigating by timestamp.
      *
@@ -155,11 +169,12 @@ export default class MediaNavigator {
     /**
      * Gets the filters that select the sets of the current mode
      *
+     * @param {Boolean} withoutTs Filters for the sets without timestamp (mixed mode)
      * @returns {String[]} Filters
      */
-    getModeFilters() {
+    getModeFilters(withoutTs = this.withoutTs) {
         if (this.mode === 'mixed')
-            return [this.tsAttr + (this.withoutTs ? ',is' : ',nis')];
+            return [this.tsAttr + (withoutTs ? ',is' : ',nis')];
         if (this.mode === 'attr' && this.orderAttr !== 'id')
             return [this.orderAttr + ',nis'];
         return [];
@@ -169,11 +184,12 @@ export default class MediaNavigator {
      * Checks if a set belongs to the current mode
      *
      * @param {WatchableSet} set Set to check
+     * @param {Boolean} withoutTs Check for the sets without timestamp (mixed mode)
      * @returns {Boolean} True if the set can be navigated in the current mode
      */
-    matchesMode(set) {
+    matchesMode(set, withoutTs = this.withoutTs) {
         if (this.mode === 'mixed')
-            return this.withoutTs ? !this.hasTs(set) : this.hasTs(set);
+            return withoutTs ? !this.hasTs(set) : this.hasTs(set);
         if (this.mode === 'ts')
             return this.hasTs(set);
         if (this.mode === 'attr')
@@ -209,9 +225,10 @@ export default class MediaNavigator {
      * @param {String[]} filters Additional filters
      * @param {String} order Order like ts,asc
      * @param {Number} size Maximum number of sets
+     * @param {Object} extraWheres Further parameters like {countonly: 'true'}
      * @returns {Promise<WatchableSet[]>} Delivered sets
      */
-    async request(filters, order, size) {
+    async request(filters, order, size, extraWheres = {}) {
         let fromWheres = {};
         for (let curWhere in this.fromWheres) {
             if (!['filter', 'order', 'size', 'page'].includes(curWhere))
@@ -223,15 +240,14 @@ export default class MediaNavigator {
             fromWheres.filter = allFilters.join('&filter=');
         fromWheres.order = order;
         fromWheres.size = size;
+        Object.assign(fromWheres, extraWheres);
 
         let dataRequest = {
             fromName: this.comp.requestor.fromName,
             fromWheres: fromWheres
         };
-        let loadProm = Model.load(dataRequest);
         // requestId is calculated synchronous by Model.load
-        this.requestIds.add(dataRequest.requestId);
-        let data = await loadProm;
+        let data = await Model.load(dataRequest);
         // The store can contain sets of earlier requests too
         return Array.from(data).filter(curSet => curSet && curSet.swac_dataRequest
                     && curSet.swac_dataRequest.requestId === dataRequest.requestId);
