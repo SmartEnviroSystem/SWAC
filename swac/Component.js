@@ -2117,4 +2117,122 @@ DEFINTION of SET:\n\
             }
         }
     }
+    
+    /**
+     * Calculates the sampling rate and expected measurements.
+     *
+     * @param {Number} measureRate Measurement interval in seconds
+     * @param {Number} hoursPerDay Measuring hours per day
+     * @returns {Object|null} Sampling information
+     */
+    calculateSamplingRate(measureRate, hoursPerDay = 24) {
+        const interval = Number(measureRate);
+        const hours = Number(hoursPerDay);
+
+        if (!Number.isFinite(interval) || interval <= 0 ||
+            !Number.isFinite(hours) || hours < 0 || hours > 24) {
+            return null;
+        }
+
+        return {
+            perSecond: 1 / interval,
+            perHour: 3600 / interval,
+            perDay: (3600 * hours) / interval
+        };
+    }
+    
+    
+/**
+ * Berechnet die Sampling Rate automatisch aus JSON-Daten.
+ *
+ * @param {Object[]} rows Messdaten aus der JSON-Datei
+ * @param {String} timeAttribute Name der Zeitstempel-Spalte
+ * @returns {Object|null} Berechnete Sampling-Informationen
+ */
+calculateSamplingRateFromData(rows, timeAttribute = 'ts') {
+
+    if (!Array.isArray(rows)) {
+        return null;
+    }
+
+    const timestamps = [];
+    let invalidTimestamps = 0;
+
+    // 1. Zeitstempel aus JSON lesen
+    for (const row of rows) {
+
+        const raw = row && row[timeAttribute];
+
+        if (raw === null || raw === undefined || raw === '') {
+            invalidTimestamps++;
+            continue;
+        }
+
+        // DBeaver-Zeitformat in JavaScript-Datum umwandeln
+        const value = raw instanceof Date
+            ? raw
+            : String(raw).trim().replace(
+                /^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2}(?:\.\d+)?)/,
+                '$1T$2'
+            );
+
+        const timestamp = new Date(value).getTime();
+
+        if (!Number.isFinite(timestamp)) {
+            invalidTimestamps++;
+        } else {
+            timestamps.push(timestamp);
+        }
+    }
+
+    // 2. Zeitstempel sortieren
+    timestamps.sort((a, b) => a - b);
+
+    const intervals = [];
+    let duplicateTimestamps = 0;
+
+    // 3. Zeitabstände berechnen
+    for (let i = 1; i < timestamps.length; i++) {
+
+        const difference = timestamps[i] - timestamps[i - 1];
+
+        if (difference === 0) {
+            duplicateTimestamps++;
+        } else {
+            intervals.push(difference);
+        }
+    }
+
+    if (intervals.length === 0) {
+        return null;
+    }
+
+    // 4. Typisches Messintervall mit Median berechnen
+    intervals.sort((a, b) => a - b);
+
+    const middle = Math.floor(intervals.length / 2);
+
+    const medianMs = intervals.length % 2 === 1
+        ? intervals[middle]
+        : (intervals[middle - 1] + intervals[middle]) / 2;
+
+    const intervalSeconds = medianMs / 1000;
+
+    // 5. Sampling Rate automatisch berechnen
+    return {
+        intervalSeconds: intervalSeconds,
+        perSecond: 1 / intervalSeconds,
+        perHour: 3600 / intervalSeconds,
+        measurements: timestamps.length,
+        duplicateTimestamps: duplicateTimestamps,
+        invalidTimestamps: invalidTimestamps,
+        possibleGaps: intervals.filter(
+            value => value > 1.5 * medianMs
+        ).length
+    };
 }
+
+
+}
+
+
