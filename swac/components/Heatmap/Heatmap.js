@@ -14,7 +14,10 @@ export default class Heatmap extends Present {
 
         this.desc.text = 'Displays datasets as a coloured table using a Datadescription legend.';
         this.desc.templates = [];
-       
+        this.desc.templates[0] = {
+            name: 'heatmap',
+            desc: 'Heatmap with coloured values.'
+        };
         this.desc.opts[1] = {
             name: 'datadescription',
             desc: 'ID of the Datadescription component used for the heatmap legend and cell background colours. Required; specify the ID without #.',
