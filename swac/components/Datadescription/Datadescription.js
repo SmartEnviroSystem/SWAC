@@ -1354,7 +1354,11 @@ thisRef.formatDataElement(curRequestor);
               const component = curElemForAttr.closest('[swa]')?.swac_comp;
               const set = component?.findSourceSet(curElemForAttr);
               if (set && set[attribute] !== undefined && set[attribute] !== null) {
-                  curElemForAttr.style.backgroundColor = this.getValueColor(String(set[attribute]),null,attribute);
+                  const backgroundColor = this.getValueColor(String(set[attribute]), null, attribute);
+                  curElemForAttr.style.backgroundColor = backgroundColor;
+                  if (curElemForAttr.classList.contains('swac_repeatedForValue')) {
+                      curElemForAttr.style.color = Colorcalculations.calculateContrastColor(backgroundColor);
+                  }
               }
             }
 
