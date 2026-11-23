@@ -111,7 +111,7 @@ export default class Dataselect extends View {
             this.options.showAttribute = true;
         this.desc.opts[4] = {
             name: 'urlParam',
-            desc: 'Name of the URL parameter holding the id of the dataset to preselect. null disables preselection.'
+            desc: 'Name of the URL parameter holding the id of the dataset to preselect. The parameters attribute, start and end (format 2026-11-25T00:00) preselect the attribute and the period. The URL is kept up to date with the selection, so it can be shared. null disables both.'
         };
         if (typeof options.urlParam === 'undefined')
             this.options.urlParam = 'oo_id';
@@ -303,9 +303,42 @@ export default class Dataselect extends View {
     preselectFromUrl() {
         if (!this.options.urlParam)
             return;
-        let id = new URLSearchParams(window.location.search).get(this.options.urlParam);
+        let params = new URLSearchParams(window.location.search);
+        // The period is set first, so the change event of the dataset already carries it
+        if (this.options.showPeriod && this.fromInput && this.toInput) {
+            for (let [input, name] of [[this.fromInput, 'start'], [this.toInput, 'end']]) {
+                if (params.get(name))
+                    input.value = params.get(name);
+                // An invalid date leaves the input empty, then the preset stays
+                if (!input.value)
+                    input.value = input.defaultValue;
+            }
+            this.checkPeriod();
+        }
+        let id = params.get(this.options.urlParam);
         if (id && this.sets.has(id) && this.setSelect.value !== id)
-            this.setSelection(id);
+            this.setSelection(id, params.get('attribute'));
+    }
+
+    /**
+     * Writes the selection into the URL, so the address can be shared.
+     */
+    writeToUrl() {
+        let selection = this.getSelection();
+        let values = {
+            [this.options.urlParam]: selection && selection.id,
+            attribute: selection && selection.attribute,
+            start: selection && selection.from,
+            end: selection && selection.to
+        };
+        let params = new URLSearchParams(window.location.search);
+        for (let name in values) {
+            if (values[name])
+                params.set(name, values[name]);
+            else
+                params.delete(name);
+        }
+        history.replaceState(history.state, '', '?' + params.toString() + window.location.hash);
     }
 
     /**
@@ -405,6 +438,8 @@ export default class Dataselect extends View {
     }
 
     notifyChange(changed) {
+        if (this.options.urlParam)
+            this.writeToUrl();
         document.dispatchEvent(new CustomEvent('swac_' + this.requestor.id + '_dataselect_changed', {
             detail: {
                 requestor: this,
