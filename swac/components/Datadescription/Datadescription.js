@@ -5,7 +5,14 @@ import Msg from '../../Msg.js';
 export default class Datadescription extends View {
 
     constructor(options = {}) {
+        if (typeof options.showWhenNoData === 'undefined')
+            options.showWhenNoData = true;
         super(options);
+
+        this.options.borderColor = true;
+        this.options.backgroundColor = options.backgroundColor ?? false;
+
+
         this.name = 'Datadescription';
         this.desc.text = 'Describe your data with text and colors. This component makes it possible to describe data. So a simple analysis is possible.';
         this.desc.developers = 'Florian Fehring (HSBI)';
@@ -25,6 +32,11 @@ export default class Datadescription extends View {
             name: 'datadescription',
             style: 'datadescription',
             desc: 'Shows the legend of the data'
+        };
+        this.desc.templates[1] = {
+            name: 'min_median_max',
+            style: 'datadescription',
+            desc: 'Shows minimum, median and maximum with editable colours.'
         };
 
         this.desc.reqPerTpl[0] = {
@@ -99,6 +111,14 @@ export default class Datadescription extends View {
         this.desc.optPerSet[12] = {
             name: 'ATTRIBUTENAME.values[VALUE].txt',
             desc: 'Text describing this value. Used in legend and as vocable in description texts.'
+        };
+        this.desc.optPerSet[13] = {
+            name: 'ATTRIBUTENAME.col_uknw',
+            desc: 'Color to use, when there is no value or no matching value description. Default is grey (#808080).'
+        };
+        this.desc.optPerSet[14] = {
+            name: 'ATTRIBUTENAME.combine',
+            desc: 'Makes the attribute a combined attribute, whose value is calculated from multiple other attributes. Object with: attrs (names of the attributes), mode (max, min, avg, weighted), weights (object with weight per attribute for mode weighted) and invert (names of attributes where a high value means a low level). For avg and weighted the combined level (0 - 100) is colored with the values of this attribute. Example: {"attrs": ["irradiance", "cloudcover"], "mode": "weighted", "weights": {"irradiance": 2, "cloudcover": 1}, "invert": ["cloudcover"]}'
         };
         this.desc.opts[0] = {
             name: 'visuDataset',
@@ -189,6 +209,64 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
                 {
                     name: 'visdataname',
                     desc: 'Name of the visdata to get'
+                }
+            ]
+        };
+
+        this.desc.funcs[2] = {
+            name: 'getDescribedAttributes',
+            desc: 'Gets the names of all attributes that have a value description (ATTRIBUTENAME.values) and can therefore be used for coloring.'
+        };
+        this.desc.funcs[3] = {
+            name: 'getAttributeDescription',
+            desc: 'Gets the description object (txt_title, col, calcmode, values, ...) of an attribute.',
+            parameter: [
+                {
+                    name: 'attr',
+                    desc: 'Attributes name'
+                }
+            ]
+        };
+        this.desc.funcs[4] = {
+            name: 'getValueLevel',
+            desc: 'Calculates the position (0 - 1) of a value within the described range of an attribute. Uses ATTRIBUTENAME.minValue / maxValue if available, otherwise the defined values.',
+            parameter: [
+                {
+                    name: 'attr',
+                    desc: 'Attributes name'
+                },
+                {
+                    name: 'value',
+                    desc: 'Value to get level for'
+                }
+            ]
+        };
+        this.desc.funcs[5] = {
+            name: 'getCombinedValueColor',
+            desc: 'Gets a color calculated from the values of multiple attributes of a dataset.',
+            parameter: [
+                {
+                    name: 'set',
+                    desc: 'Dataset with the values'
+                },
+                {
+                    name: 'combination',
+                    desc: 'Object describing the combination: {attrs: [String], mode: max|min|avg|weighted|custom, weights: {ATTRIBUTENAME: Number}, invert: [String], targetAttr: String, func: Function(values, set, datadescription)}'
+                }
+            ]
+        };
+
+        this.desc.funcs[6] = {
+            name: 'getColor',
+            desc: 'Gets the color for a dataset. Uses the combination rules if the attribute has a combine description. If there is no color the col_uknw of the attribute is used.',
+            parameter: [
+                {
+                    name: 'set',
+                    desc: 'Dataset with the values'
+                },
+                {
+                    name: 'attr',
+                    desc: 'Name of the attribute to color by, null for the visuAttribute option'
                 }
             ]
         };
@@ -297,8 +375,7 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
             return null;
         }
         let visuAttributeFromOpts = false;
-        if (visuAttribute === null
-                && this.options.visuDataset) {
+        if (visuAttribute === null) {
             visuAttribute = this.options.visuAttribute;
             visuAttributeFromOpts = true;
         }
@@ -309,10 +386,11 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
             let dProp = set;
             for (let curProp of dProps) {
                 dProp = dProp[curProp];
-                if (!dProp)
+                // Values like 0 or false are valid values
+                if (dProp === null || typeof dProp === 'undefined')
                     break;
             }
-            if (dProp) {
+            if (dProp !== null && typeof dProp !== 'undefined') {
                 return dProp;
             } else {
                 let msg = 'visuAttribute >' + visuAttribute + '< was not found in dataset.';
@@ -540,7 +618,8 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
             value = data;
         }
 
-        if (!value || value === null) {
+        // Value 0 is a valid value
+        if (value === null || typeof value === 'undefined' || value === '') {
             Msg.warn('Datadescription', 'There is no value for attribute >' + visuAttribute + '<.', this.requestor);
             return null;
         }
@@ -549,6 +628,11 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
 
     // public function
     getValuesVisdata(attr, value, visdataname) {
+        // Description may not be loaded yet, when other components ask for colors
+        if (!this.options.activeSource || !this.data[this.options.activeSource]) {
+            Msg.warn('Datadescription', 'Datadescription is not loaded yet. Can not get >' + visdataname + '< for attribute >' + attr + '<.', this.requestor);
+            return null;
+        }
         // Get matching legends data
         let legenddata = this.data[this.options.activeSource].getSet(this.options.activeSet);
         if (typeof legenddata[attr] === 'undefined') {
@@ -579,7 +663,9 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
             return legenddata[attr].values[value][visdataname];
         } else if (calcMode === '<') {
             // Get attributes into array
-            let vals = Object.keys(legenddata[attr].values);
+            let vals = Object.keys(legenddata[attr].values).sort(function (first, second) {
+                return Number(first) - Number(second);
+            });
             for (let curVal of vals) {
                 let curValNumber = new Number(curVal);
                 if (value >= curValNumber) {
@@ -588,6 +674,9 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
                     return legenddata[attr].values[curVal][visdataname];
                 }
             }
+            let last = vals[vals.length - 1];
+            if (legenddata[attr].includeMax && Number(value) === Number(last))
+                return legenddata[attr].values[last][visdataname];
         } else if (calcMode === 'gradient') {
             // Get attributes into array
             let vals = Object.keys(legenddata[attr].values);
@@ -596,7 +685,7 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
                 let curValNumber = new Number(curVal);
                 if (value <= curValNumber) {
                     // If is below any specified color use first color
-                    if (!prevVal)
+                    if (prevVal === null)
                         return legenddata[attr].values[curVal][visdataname];
                     // Else calculate from distances
                     const f = (value - prevVal) / (curValNumber - prevVal);
@@ -609,8 +698,11 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
                     };
                     return Colorcalculations.rgbToHex(rgbres);
                 }
-                prevVal = curValNumber;
+                prevVal = curVal;
             }
+            // If is above any specified value use last color
+            if (vals.length > 0)
+                return legenddata[attr].values[vals[vals.length - 1]][visdataname];
         } else if (calcMode === '>') {
             console.error('calcMode > not implemented yet');
         } else {
@@ -620,11 +712,240 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
     }
 
     /**
+     * Gets the names of all attributes that have a value description and
+     * can therefore be used for coloring.
+     *
+     * @returns {String[]} Names of the described attributes
+     */
+    getDescribedAttributes() {
+        let attrs = [];
+        if (!this.options.activeSource || !this.data[this.options.activeSource])
+            return attrs;
+        let legenddata = this.data[this.options.activeSource].getSet(this.options.activeSet);
+        for (let attr in legenddata) {
+            if (attr.startsWith('swac_') || typeof legenddata[attr] !== 'object' || legenddata[attr] === null)
+                continue;
+            if (legenddata[attr].values && Object.keys(legenddata[attr].values).length > 0)
+                attrs.push(attr);
+        }
+        return attrs;
+    }
+
+    /**
+     * Gets the description object of an attribute.
+     *
+     * @param {String} attr Attributes name
+     * @returns {Object} Description object (txt_title, col, calcmode, values, ...) or null
+     */
+    getAttributeDescription(attr) {
+        if (!this.options.activeSource || !this.data[this.options.activeSource])
+            return null;
+        let legenddata = this.data[this.options.activeSource].getSet(this.options.activeSet);
+        if (!legenddata[attr] || typeof legenddata[attr] !== 'object')
+            return null;
+        return legenddata[attr];
+    }
+
+    /**
+     * Calculates the position of a value within the described range of an attribute.
+     * Uses ATTRIBUTENAME.minValue and ATTRIBUTENAME.maxValue if available.
+     * Otherwise the position is calculated from the defined values:
+     * - calcmode = : index of the matching value
+     * - calcmode < : index of the class the value belongs to
+     * - calcmode gradient : linear between the lowest and highest defined value
+     *
+     * @param {String} attr Attributes name
+     * @param {Number} value Value to get the level for
+     * @returns {Number} Level between 0 (lowest) and 1 (highest) or null if not calculateable
+     */
+    getValueLevel(attr, value) {
+        let desc = this.getAttributeDescription(attr);
+        let numValue = Number(value);
+        if (!desc || value === null || typeof value === 'undefined' || value === '' || isNaN(numValue))
+            return null;
+        const clamp = (level) => Math.min(1, Math.max(0, level));
+
+        // Use estimated range if given
+        if (typeof desc.minValue !== 'undefined' && typeof desc.maxValue !== 'undefined'
+                && Number(desc.maxValue) !== Number(desc.minValue)) {
+            return clamp((numValue - desc.minValue) / (desc.maxValue - desc.minValue));
+        }
+        if (!desc.values)
+            return null;
+
+        // Use defined values
+        let keys = Object.keys(desc.values).map(Number).filter(k => !isNaN(k)).sort((a, b) => a - b);
+        if (keys.length === 0)
+            return null;
+        if (keys.length === 1)
+            return 0;
+        let calcMode = desc.calcmode;
+        if (!calcMode || calcMode === '=') {
+            let idx = keys.indexOf(numValue);
+            return idx < 0 ? null : idx / (keys.length - 1);
+        } else if (calcMode === '<') {
+            let idx = keys.findIndex(k => numValue < k);
+            if (idx < 0)
+                idx = keys.length - 1;
+            return idx / (keys.length - 1);
+        } else if (calcMode === 'gradient') {
+            return clamp((numValue - keys[0]) / (keys[keys.length - 1] - keys[0]));
+        }
+        Msg.warn('Datadescription', 'Calculation mode >' + attr + '.calcmode = "' + calcMode + '< is not supported for level calculation.', this.requestor);
+        return null;
+    }
+
+    /**
+     * Gets the color for a dataset. This is the one place where components get
+     * their data colors from:
+     * - If the attribute has a combine description (ATTRIBUTENAME.combine) the
+     *   color is calculated from the combined attributes
+     * - otherwise the color is taken from the values description of the attribute
+     * - if there is no matching color, ATTRIBUTENAME.col_uknw is used
+     *
+     * @param {Object} set Dataset with the values
+     * @param {String} attr Name of the attribute to color by, null for the visuAttribute option
+     * @returns {String} Color
+     */
+    getColor(set, attr = null) {
+        if (!attr)
+            attr = this.options.visuAttribute;
+        let desc = this.getAttributeDescription(attr);
+        let col = null;
+        if (desc && desc.combine) {
+            col = this.getCombinedValueColor(set, Object.assign({targetAttr: attr}, desc.combine));
+        } else {
+            col = this.getValueVisData(set, 'col', null, attr);
+        }
+        return col ? col : this.getUnknownColor(attr);
+    }
+
+    /**
+     * Gets the color for datasets without value or without matching value description.
+     *
+     * @param {String} attr Name of the attribute
+     * @returns {String} ATTRIBUTENAME.col_uknw or grey if not defined
+     */
+    getUnknownColor(attr = null) {
+        let desc = this.getAttributeDescription(attr ? attr : this.options.visuAttribute);
+        return desc && desc.col_uknw ? desc.col_uknw : '#808080';
+    }
+
+    /**
+     * Gets a color calculated from the values of multiple attributes of a dataset.
+     * Supported modes:
+     * - max: Color of the attribute with the highest level (e.g. worst pollutant)
+     * - min: Color of the attribute with the lowest level
+     * - avg: Average level of all attributes
+     * - weighted: Weighted average level (weights given in combination.weights)
+     * - custom: combination.func(values, set, datadescription) returns a color or a level (0 - 1)
+     * For avg, weighted and custom (when returning a level) the color is taken from
+     * the description of combination.targetAttr (level is given as 0 - 100).
+     * If there is no targetAttr the colors of the attributes are mixed.
+     * Attributes listed in combination.invert are used with inverted level (1 - level).
+     *
+     * @param {Object} set Dataset with the values
+     * @param {Object} combination Description of the combination {attrs, mode, weights, invert, targetAttr, func}
+     * @returns {String} Color or null if no color could be calculated
+     */
+    getCombinedValueColor(set, combination) {
+        if (!set || !combination || !Array.isArray(combination.attrs) || combination.attrs.length === 0) {
+            Msg.error('Datadescription', 'Combination needs at least one attribute in >attrs<.', this.requestor);
+            return null;
+        }
+        let mode = combination.mode ? combination.mode : 'max';
+
+        // Collect values and levels of all attributes
+        let entries = [];
+        let values = {};
+        for (let curAttr of combination.attrs) {
+            let value = this.getDescribedValue(set, curAttr);
+            values[curAttr] = value;
+            let level = this.getValueLevel(curAttr, value);
+            if (level === null)
+                continue;
+            // For attributes where a high value means a low level (e.g. cloud cover)
+            if (Array.isArray(combination.invert) && combination.invert.includes(curAttr))
+                level = 1 - level;
+            let weight = 1;
+            if (mode === 'weighted' && combination.weights && typeof combination.weights[curAttr] !== 'undefined')
+                weight = Number(combination.weights[curAttr]);
+            entries.push({attr: curAttr, value: value, level: level, weight: weight});
+        }
+
+        if (mode === 'custom') {
+            if (typeof combination.func !== 'function') {
+                Msg.error('Datadescription', 'Combination mode >custom< needs a function in >func<.', this.requestor);
+                return null;
+            }
+            let res = combination.func(values, set, this);
+            if (typeof res === 'number' && combination.targetAttr)
+                return this.getValuesVisdata(combination.targetAttr, res * 100, 'col');
+            return typeof res === 'string' ? res : null;
+        }
+
+        if (entries.length === 0)
+            return null;
+
+        if (mode === 'max' || mode === 'min') {
+            let chosen = entries[0];
+            for (let curEntry of entries) {
+                if ((mode === 'max' && curEntry.level > chosen.level)
+                        || (mode === 'min' && curEntry.level < chosen.level))
+                    chosen = curEntry;
+            }
+            return this.getValuesVisdata(chosen.attr, chosen.value, 'col');
+        } else if (mode === 'avg' || mode === 'weighted') {
+            let weightSum = entries.reduce((sum, e) => sum + e.weight, 0);
+            if (weightSum <= 0)
+                return null;
+            if (combination.targetAttr) {
+                let level = entries.reduce((sum, e) => sum + e.level * e.weight, 0) / weightSum;
+                return this.getValuesVisdata(combination.targetAttr, level * 100, 'col');
+            }
+            // Mix the colors of the single attributes
+            let mixed = {r: 0, g: 0, b: 0};
+            let mixedWeight = 0;
+            for (let curEntry of entries) {
+                let col = this.getValuesVisdata(curEntry.attr, curEntry.value, 'col');
+                let rgb = col ? this.hexToRgb(Colorcalculations.stringToHex(col)) : null;
+                if (!rgb)
+                    continue;
+                mixed.r += rgb.r * curEntry.weight;
+                mixed.g += rgb.g * curEntry.weight;
+                mixed.b += rgb.b * curEntry.weight;
+                mixedWeight += curEntry.weight;
+            }
+            if (mixedWeight === 0)
+                return null;
+            return Colorcalculations.rgbToHex({r: mixed.r / mixedWeight, g: mixed.g / mixedWeight, b: mixed.b / mixedWeight});
+        }
+        Msg.warn('Datadescription', 'Combination mode >' + mode + '< is not supported.', this.requestor);
+        return null;
+    }
+
+    /**
      * Builds a legend element (DIV Container) 
      * 
      * @returns {DOMElement} HTML DIV Element containing the legend
      */
     getLegend() {
+        let emptyLegend = this.requestor.querySelector('.swac_datadescription_empty_legend');
+        if (emptyLegend)
+            emptyLegend.style.display = this.options.showWhenNoData && !this.options.activeSource ? '' : 'none';
+        if (this.options.showWhenNoData && !this.options.activeSource) {
+            if (emptyLegend) {
+                let check = emptyLegend.querySelector('.swac_datadescription_datacheck');
+                check.title = 'Schwellenwerte automatisch berechnen';
+                check.onchange = function () {
+                    for (let input of emptyLegend.querySelectorAll('.swac_datadescription_value_value'))
+                        input.readOnly = check.checked;
+                };
+                check.onchange();
+            }
+            return;
+        }
+
         let requestor = this.requestor;
 
         // setup border Color input in modal
@@ -807,11 +1128,20 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
             checkElem.setAttribute('checked', 'checked');
             legenddata[attribute].visualise = true;
         }
-        // Add eventlistener for visualisation changes
+        if (typeof desc.autoCalculate === 'boolean') {
+            checkElem.checked = desc.autoCalculate;
+            checkElem.title = 'Schwellenwerte automatisch berechnen';
+        }
         checkElem.addEventListener('change', () => {
-            legenddata[attribute].visualise = checkElem.checked;
+            if (typeof desc.autoCalculate === 'boolean') {
+                desc.autoCalculate = checkElem.checked;
+                for (let input of attributeElem.querySelectorAll('.swac_datadescription_value_value'))
+                    input.readOnly = checkElem.checked;
+            } else {
+                legenddata[attribute].visualise = checkElem.checked;
+            }
             this.renderFormatedDataElements();
-        })
+        });
 
         if (this.options.onLegendEntryClick !== null) {
             titleElem.addEventListener('click', this.options.onLegendEntryClick);
@@ -820,7 +1150,7 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
         // Accordion content
         const addButton = attributeElem.querySelector('.swac_datadescription_addbutton');
         const acordCont = attributeElem.querySelector('.swac_datadescription_attribution');
-        if (legenddata[attribute].calcmode === 'gradient') {
+        if (legenddata[attribute].calcmode === 'gradient' && this.requestor.templateName !== 'min_median_max') {
             const wrapper = document.createElement('div');
             wrapper.style = 'display: flex;';
 
@@ -863,6 +1193,9 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
                 acordCont.appendChild(valueElem);
             });
         }
+        let emptyLegend = requestor.querySelector('.swac_datadescription_empty_legend');
+        if (emptyLegend)
+            emptyLegend.style.display = 'none';
         attributeTemplate.parentNode.appendChild(attributeElem);
         this.formatAll();
     }
@@ -970,7 +1303,9 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
         valueData.classList.add('swac_datadescription_value_value');
         valueData.placeholder = 'Datadescription.valuePlaceholder';
         valueData.style.width = valueData.value.length > 0 ? valueData.value.length + 'ch' : valueData.placeholder.length + 'ch';
-        valueData.style.display = 'none';
+        let automaticLimits = typeof legenddata[attribute].autoCalculate === 'boolean';
+        valueData.readOnly = automaticLimits && legenddata[attribute].autoCalculate;
+        valueData.style.display = automaticLimits ? 'block' : 'none';
         valueElem.appendChild(valueData);
 
         // Remove button
@@ -993,7 +1328,8 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
         });
         valueElem.addEventListener('mouseleave', () => {
             removeBtn.style.display = 'none';
-            valueData.style.display = 'none';
+            if (!automaticLimits)
+                valueData.style.display = 'none';
         });
 
         colorBtn.addEventListener('input', (e) => {
@@ -1045,6 +1381,13 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
             valueDataOld = valueData.value;
         });
         valueData.addEventListener('focusout', () => {
+            if (automaticLimits && (valueData.readOnly || valueData.value.trim() === ''
+                    || !Number.isFinite(Number(valueData.value)))) {
+                valueData.value = valueDataOld;
+                return;
+            }
+            if (automaticLimits)
+                valueData.value = Number(valueData.value).toExponential();
             if (valueData.value === valueDataOld) {
                 return;
             }
@@ -1070,13 +1413,22 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
     }
 
     formatAll() {
+        if (this.options.showWhenNoData && !this.options.activeSource)
+            return;
+
         Msg.flow('Datadescription', 'formatAll()', this.requestor);
         let thisRef = this;
         // Find requestors on page and wait for them to load, than format
         let requestors = document.querySelectorAll('[swa]');
         for (let curRequestor of requestors) {
             // Direclty format if possible
-            thisRef.formatDataElement(curRequestor);
+            if(this.options.borderColor){
+thisRef.formatDataElement(curRequestor);
+            }
+            if(this.options.backgroundColor){
+         thisRef.formatDataElementBackground(curRequestor)
+            }
+   
         }
     }
 
@@ -1119,7 +1471,8 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
             // Check if attribute should be visualised
             if (typeof legenddata[attribute] === 'object') {
                 // Select all alements for attribute
-                let elemsForAttr = element.querySelectorAll('[swac_attrname=' + attribute + ']');
+                // Quotes needed for attribute names with dots (e.g. destatis.population)
+                let elemsForAttr = element.querySelectorAll('[swac_attrname="' + attribute + '"]');
 
                 // Walk trough every element
                 for (let curElemForAttr of elemsForAttr) {
@@ -1144,10 +1497,75 @@ Example: in obj[0] = { attr1=1, attr2=2} can the second attribute be accessed wi
         }
     }
 
-    renderFormatedDataElements() {
+
+    formatDataElementBackground(element) {
+        Msg.flow('Datadescription', 'formatDataElement(' + element.id + ')', this.requestor);
+        // store formated elements
+        let elementInStorage = false;
         for (let curElem of this.formatedDataElements) {
-            this.formatDataElement(curElem);
+            if (curElem.id === element.id) {
+                elementInStorage = true;
+                break;
+            }
         }
+        if (!elementInStorage) {
+            this.formatedDataElements.push(element);
+        }
+        
+        if(!this.options.activeSource) {
+            Msg.error('Datadescription','No datadescription loaded.',this.requestor);
+            return;
+        }
+        if (!this.data[this.options.activeSource]) {
+            Msg.error('Datadescription', 'There is no datadescription with name >' + this.options.activeSource + '<', this.requestor);
+            return;
+        }
+        
+        let legenddata = this.data[this.options.activeSource].getSet(this.options.activeSet);
+        for (var attribute in legenddata) {
+            // Exclude swac internal attributes
+            if (attribute.startsWith('swac_'))
+                continue;
+            // Check if attribute should be visualised
+            if (typeof legenddata[attribute] === 'object') {
+                // Select all alements for attribute
+                let elemsForAttr = element.querySelectorAll('[swac_attrname=' + attribute + ']');
+
+                // Walk trough every element
+                for (let curElemForAttr of elemsForAttr) {
+                    // Exclude attr elements
+                    if (curElemForAttr.classList.contains('swac_repeatedForAttribute')) {
+                        continue;
+                    }
+                    curElemForAttr.style.backgroundColor = '';
+                    if (legenddata[attribute].visualise === false)
+                        continue;
+              const component = curElemForAttr.closest('[swa]')?.swac_comp;
+              const set = component?.findSourceSet(curElemForAttr);
+              if (set && set[attribute] !== undefined && set[attribute] !== null) {
+                  curElemForAttr.style.backgroundColor = this.getValueColor(String(set[attribute]),null,attribute);
+              }
+            }
+
+            }
+        }
+    }
+    renderFormatedDataElements() {
+        if(this.options.borderColor){
+             for (let curElem of this.formatedDataElements) {
+                if(this.options.borderColor){
+ this.formatDataElement(curElem);
+                }
+                   if(this.options.backgroundColor){
+                    this.formatDataElementBackground(curElem);
+                }
+           
+        }
+        
+     
+        
+        }
+       
         document.dispatchEvent(new CustomEvent('swac_Datadescription_' + this.requestor.id + '_changed', {
         }));
     }

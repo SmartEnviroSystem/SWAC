@@ -26,6 +26,7 @@ var Worldmap2d_en = {
     context_copycoords: 'Copy coordinates',
     context_centermap: 'Center map',
     context_zoomin: 'Zoom in',
-    context_zoomout: 'Zoom out'
+    context_zoomout: 'Zoom out',
+    areas: 'areas'
 };
 export default Worldmap2d_en;

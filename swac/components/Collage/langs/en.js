@@ -1,0 +1,14 @@
+var Collage_en = {
+    prev: 'Load previous images',
+    next: 'Load next images',
+    play: 'Play / pause (space)',
+    image: 'Image',
+    images: 'images',
+    of: 'of',
+    noolder: 'There are no older images.',
+    nonewer: 'There are no newer images.',
+    notimepoint: 'There are no images from this timepoint on.',
+    loaderror: 'The images could not be loaded.',
+    keogramcutting: 'Cutting the keogram out of the images:'
+};
+export default Collage_en;

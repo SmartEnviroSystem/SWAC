@@ -15,6 +15,7 @@ export default class GeoJson extends MapModel {
      * - fillColor Default color (css string or rgba hex code) of models (white if no setting is given)
      * - outlineColor Default color of models border (black if no setting is given)
      * - outlineWidth Width of the outline (1 if no setting is given)
+     * - fillOpacity Opacity of the fill from 0 to 1 (0.2 if no setting is given)
      * - fillColorProperty Property from data that should be used as color for the model
      * - outlineColorProperty Property from data that should be used as color for the models outline
      * - iconPropety Property from data that contains a token used in the icon url
@@ -129,10 +130,22 @@ export default class GeoJson extends MapModel {
             let datadescComp = null;
             if (thisRef.options.datadescription) {
                 let ddeElem = document.querySelector(thisRef.options.datadescription);
+                let ddLoaded = ddeElem && ddeElem.swac_comp
+                        && typeof ddeElem.swac_comp.getValueVisData === 'function'
+                        && ddeElem.swac_comp.options.activeSource;
                 if (!ddeElem) {
                     Msg.warn('GeoJson', 'Could not find datadescription component with selector >' + thisRef.options.datadescription + '< model will be colored with default values.');
-                } else {
+                } else if (!ddLoaded && !thisRef._waitedForDatadescription) {
+                    // Datadescription is not loaded yet, draw when it is available
+                    thisRef._waitedForDatadescription = true;
+                    window.swac.reactions.addReaction(() => {
+                        thisRef.draw(viewer).then(resolve).catch(reject);
+                    }, ddeElem.id);
+                    return;
+                } else if (ddLoaded) {
                     datadescComp = ddeElem.swac_comp;
+                } else {
+                    Msg.warn('GeoJson', 'Datadescription component >' + thisRef.options.datadescription + '< is not loaded. Model will be colored with default values.');
                 }
             } else {
                 Msg.warn('GeoJson', 'There is no description component bound and no visoptions set. Model will be colored with default values.');
@@ -143,7 +156,8 @@ export default class GeoJson extends MapModel {
                 let style = {
                     color: thisRef.options.outlineColor,
                     weight: thisRef.options.outlineWidth,
-                    fillColor: thisRef.options.fillColor
+                    fillColor: thisRef.options.fillColor,
+                    fillOpacity: thisRef.options.fillOpacity
                 };
                 // Set name of the model
                 let modelName = null;
@@ -359,7 +373,7 @@ export default class GeoJson extends MapModel {
 
             // Zoom into view
             if (thisRef.options.zoomTo) {
-                viewer.fitBounds(featuregroup.getBounds());
+                viewer.fitBounds(thisRef.featuregroup.getBounds());
             }
         });
     }
