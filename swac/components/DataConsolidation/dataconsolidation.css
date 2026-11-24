@@ -1,0 +1,40 @@
+.dc-app { --dc-ink:#172b4d; --dc-muted:#65758a; --dc-blue:#1769aa; --dc-line:#dfe7ef; max-width:1450px; margin:0 auto; padding:30px 24px 70px; font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; color:var(--dc-ink); }
+.dc-app, .dc-app * { box-sizing:border-box; }
+.dc-app input, .dc-app select, .dc-app button { font:inherit; }
+.dc-hero { display:flex; align-items:center; justify-content:space-between; gap:15px; margin-bottom:24px; }
+.dc-kicker { color:var(--dc-blue); font-size:12px; letter-spacing:.11em; text-transform:uppercase; font-weight:800; }
+.dc-hero h1 { margin:5px 0 6px; font-size:clamp(26px,3vw,36px); line-height:1.2; letter-spacing:-.035em; }
+.dc-hero p { margin:0; color:var(--dc-muted); font-size:14px; }
+.dc-demo { border:1px solid #bad8ee; background:#ebf6ff; color:#135989; border-radius:100px; white-space:nowrap; padding:7px 12px; font-size:12px; font-weight:700; }
+.dc-process { display:flex; align-items:center; gap:12px; padding:15px 20px; margin-bottom:20px; background:#f4f8fc; border:1px solid var(--dc-line); border-radius:14px; }
+.dc-process-item { display:flex; align-items:center; gap:10px; flex:1; justify-content:center; }
+.dc-process-item span { display:grid; place-items:center; width:32px; height:32px; flex:0 0 32px; border-radius:9px; background:#e3f1fb; color:#1769aa; font-size:12px; font-weight:800; }
+.dc-process-item strong { font-size:13px; }
+.dc-process-arrow { font-size:23px; color:#94a8b9; }
+.dc-layout { display:grid; grid-template-columns:minmax(0, 1.4fr) minmax(300px, 1fr); gap:18px; align-items:start; }
+.dc-card { border:1px solid var(--dc-line); background:#fff; box-shadow:0 5px 20px rgba(17,47,81,.04); border-radius:15px; overflow:hidden; min-width:0; }
+.dc-card-head { padding:19px 22px 16px; border-bottom:1px solid var(--dc-line); }
+.dc-card-head h2 { margin:0 0 5px; font-size:18px; }
+.dc-card-head p { margin:0; color:var(--dc-muted); font-size:12px; }
+.dc-card-body { padding:20px 22px 22px; }
+.dc-card-body h3 { display:flex; align-items:center; gap:9px; font-size:14px; margin:5px 0 16px; }
+.dc-card-body h3:not(:first-child) { margin-top:27px; padding-top:22px; border-top:1px solid var(--dc-line); }
+.dc-section-num { display:grid; place-items:center; background:#e9f3fb; color:#1769aa; border-radius:7px; width:24px; height:24px; font-size:12px; }
+.dc-two-col { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+.dc-field { margin-bottom:12px; min-width:0; }
+.dc-field label { display:block; margin-bottom:7px; color:#344f6b; font-weight:750; font-size:12px; }
+.dc-field input, .dc-field select { width:100%; min-width:0; padding:11px 12px; border:1px solid #cfdeea; border-radius:9px; background:#fff; color:var(--dc-ink); font-size:13px; }
+.dc-field :is(input,select):focus { outline:2px solid #a0cff4; border-color:#4d9bdb; }
+.dc-field select:disabled { background:#f4f6f8; color:#8795a7; }
+.dc-hint { margin:3px 0 10px; color:var(--dc-muted); font-size:12px; line-height:1.55; }
+.dc-primary { cursor:pointer; border:1px solid #1769aa; background:#1769aa; color:#fff; padding:12px 16px; border-radius:9px; font-size:13px; font-weight:750; width:100%; margin-top:12px; }
+.dc-primary:hover { background:#10578e; }
+.dc-primary:focus-visible { outline:3px solid #a0cff4; outline-offset:2px; }
+.dc-status { background:#eef7fd; border:1px solid #cee5f5; padding:12px 13px; border-radius:9px; color:#27618e; font-size:12px; line-height:1.5; margin:16px 0 0; }
+.dc-status[data-error="true"] { color:#a22121; background:#fff1f1; border-color:#ffc9c9; }
+.dc-code { white-space:pre-wrap; overflow-wrap:anywhere; margin:14px 0; padding:17px; border-radius:10px; background:#152c42; color:#e8f4ff; min-height:160px; font:12px/1.6 ui-monospace,Consolas,'Liberation Mono',monospace; }
+.dc-info { padding:14px; border-radius:10px; background:#f5f8fc; border:1px solid var(--dc-line); }
+.dc-info strong { font-size:13px; }
+.dc-info p { margin:8px 0 0; color:var(--dc-muted); font-size:12px; line-height:1.6; }
+@media (max-width:980px) { .dc-layout { grid-template-columns:1fr; } }
+@media (max-width:650px) { .dc-app { padding:20px 12px 40px; } .dc-hero { align-items:flex-start; flex-direction:column; } .dc-process { gap:6px; padding:10px; } .dc-process-item { gap:5px; flex-direction:column; text-align:center; } .dc-process-item strong { font-size:10px; } .dc-process-arrow { font-size:14px; } .dc-two-col { grid-template-columns:1fr; gap:0; } .dc-card-body { padding:16px; } }

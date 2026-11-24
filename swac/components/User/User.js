@@ -266,7 +266,7 @@ export default class User extends View {
                     let filename = urlparts[urlparts.length - 1];
                     let redirectTarget = this.options.loggedinRedirects.get(filename);
                     if (redirectTarget) {
-                        window.location = redirectTarget;
+                        window.location = SWAC_config.app_root + redirectTarget;
                     } else {
                         Msg.info('User', 'No redirect target found for page >' + filename + '<. Configure them with option >loggedinRedirects<', this.requestor);
                     }
@@ -645,7 +645,7 @@ export default class User extends View {
         let useracc = document.querySelector('.swac_user_usraccount');
         if (this.options.accountURL && useracc) {
             useracc.classList.remove('swac_dontdisplay');
-            useracc.querySelector('a').href = this.options.accountURL;
+            useracc.querySelector('a').href = SWAC_config.app_root + this.options.accountURL;
         }
 
         let user = this.getCurrentUser();
@@ -830,7 +830,7 @@ export default class User extends View {
         Remote.fetchGet(confurl, confdata).then(function (response) {
             if (thisRef.options.afterLogoutLoc) {
                 UIkit.modal.alert(SWAC.lang.dict.User.mailloginsend).then(function () {
-                    window.location.href = thisRef.options.afterLogoutLoc;
+                    window.location.href = SWAC_config.app_root + thisRef.options.afterLogoutLoc;
                 })
             } else {
                 UIkit.modal.alert(SWAC.lang.dict.User.mailloginsend);
@@ -862,7 +862,7 @@ export default class User extends View {
                     thisRef.options.afterLoginFunc(response.data);
                 }
                 if (thisRef.options.afterLoginLoc) {
-                    window.location = thisRef.options.afterLoginLoc;
+                    window.location = SWAC_config.app_root + thisRef.options.afterLoginLoc;
                 } else {
                     thisRef.showUser();
                 }

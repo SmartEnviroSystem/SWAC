@@ -63,11 +63,23 @@ export default class Present extends View {
             name: 'arangeable',
             desc: 'If true makes the presented data arangeable'
         };
+        this.desc.opts.push({
+            name: 'rowHover',
+            desc: 'Optional table row hover: 3% shading, plus 3% for expanded TableHierarchy groups.'
+        });
         if (typeof options.arangeable === 'undefined')
             this.options.arangeable = false;
 
         if (!options.plugins) {
             this.options.plugins = new Map();
+            this.options.plugins.set('TableHierarchy', {
+                id: 'TableHierarchy',
+                active: false
+            });
+            this.options.plugins.set('TableActions', {
+                id: 'TableActions',
+                active: false
+            });
             this.options.plugins.set('TableSort', {
                 id: 'TableSort',
                 active: false
@@ -94,6 +106,16 @@ export default class Present extends View {
 
     init() {
         return new Promise((resolve, reject) => {
+            if (this.options.rowHover === true) {
+                this.requestor.classList.add('swac_present_rowhover');
+                if (!document.getElementById('swac_present_rowhover_style')) {
+                    const style = document.createElement('link');
+                    style.id = 'swac_present_rowhover_style';
+                    style.rel = 'stylesheet';
+                    style.href = SWAC.config.swac_root + '/components/Present/rowhover.css?vers=' + SWAC.desc.version;
+                    document.head.appendChild(style);
+                }
+            }
             // Add arangeable mechanism
             if (this.options.arangeable) {
                 let gridelem = document.querySelector('#' + this.requestor.id + ' [uk-grid]');

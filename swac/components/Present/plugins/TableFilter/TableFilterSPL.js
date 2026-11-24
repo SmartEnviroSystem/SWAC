@@ -47,6 +47,11 @@ export default class TableFilterSPL extends Plugin {
      * Executed when an input changes in one filter field
      */
     onInputChange(evt) {
+        const hierarchy = evt.target.closest('table')?.swac_tableHierarchy;
+        if (hierarchy) {
+            hierarchy.filter();
+            return;
+        }
         // Reset visibility
         let alltrs = this.requestor.parent.querySelectorAll('.swac_repeatedForSet');
         for(let curTr of alltrs) {

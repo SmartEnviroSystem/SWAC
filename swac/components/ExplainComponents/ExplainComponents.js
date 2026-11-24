@@ -644,6 +644,16 @@ export default class ExplainComponents extends View {
                                 explDivTmpl.innerHTML = explDivTmpl.innerHTML.replace(re, '<span uk-tooltip="This element is repeated for every plugin and contains its content.">' + curCls + '</span>');
                                 continue;
                             }
+                            if (curCls === 'swac_onDesktop') {
+                                var re = new RegExp(curCls, 'g');
+                                explDivTmpl.innerHTML = explDivTmpl.innerHTML.replace(re, '<span uk-tooltip="This element is shown on desktop devices only.">' + curCls + '</span>');
+                                continue;
+                            }
+                            if (curCls === 'swac_onMobile') {
+                                var re = new RegExp(curCls, 'g');
+                                explDivTmpl.innerHTML = explDivTmpl.innerHTML.replace(re, '<span uk-tooltip="This element is shown on mobile devices only.">' + curCls + '</span>');
+                                continue;
+                            }
 
                             // Search in descriptions
                             let found = false;

@@ -41,6 +41,7 @@ let core_en = {
     day_5: 'Fri',
     day_6: 'Sat',
     view_adddata: 'Add data',
+    view_datasource: 'Datasource',
     contenttype_unsupported: 'Sorry content type %content-type% is currently not supported.',
     contenttype_jparseerr: 'The content could not be parsed as json.',
     updateavail: 'There is an update available. Restart the application to install.'

@@ -228,6 +228,16 @@ export default class Worldmap2d extends View {
             desc: 'longitude for point. Attribute name is configurable over lonAttr option.',
             type: 'String'
         };
+        this.desc.optPerSet[4] = {
+            name: 'map_icon',
+            desc: 'URL of an image that is used as icon for the location of this dataset. Size and anchor are configurable over mapIconOptions option.',
+            type: 'URL'
+        };
+        this.desc.optPerSet[5] = {
+            name: 'map_areacolorattr',
+            desc: 'Name of the attribute whose value determines the fill color of the area around the location of this dataset. Overwrites the areaColorAttr option of the ColorSelect plugin.',
+            type: 'String'
+        };
 
         this.options.showWhenNoData = true;
 
@@ -476,10 +486,61 @@ export default class Worldmap2d extends View {
         if (typeof options.dataShowModalAllowDelete === 'undefined')
             this.options.dataShowModalAllowDelete = false;
 
+        this.desc.opts[32] = {
+            name: 'areaShape',
+            desc: 'Shape of the area that is drawn around the location of each dataset. \n\
+Use this when the data of a location is ment for an area around it (e.g. raster data). \n\
+Possible values: rect, circle. If not set no areas are drawn.',
+            example: 'rect'
+        };
+        if (typeof options.areaShape === 'undefined')
+            this.options.areaShape = null;
+
+        this.desc.opts[33] = {
+            name: 'areaSize',
+            desc: 'Size of the area around a location in meters. Edge length for rect, diameter for circle.',
+            example: 3000
+        };
+        if (typeof options.areaSize === 'undefined')
+            this.options.areaSize = 1000;
+
+        this.desc.opts[34] = {
+            name: 'areaStyle',
+            desc: 'Style of the areas (leaflet path options, see leaflet docu). If color is given, it is used for the lines while the fill color depends on the data.',
+            example: {weight: 1, opacity: 0.8, fillOpacity: 0.4}
+        };
+        if (typeof options.areaStyle === 'undefined')
+            this.options.areaStyle = {weight: 1, opacity: 0.8, fillOpacity: 0.4};
+
+        this.desc.opts[35] = {
+            name: 'mapIconOptions',
+            desc: 'Options for icons given per dataset with the attribute map_icon (leaflet icon options, see leaflet docu).',
+            example: {iconSize: [32, 32], iconAnchor: [16, 32], popupAnchor: [0, -32]}
+        };
+        if (typeof options.mapIconOptions === 'undefined')
+            this.options.mapIconOptions = {iconSize: [32, 32], iconAnchor: [16, 32], popupAnchor: [0, -32]};
+
+        this.desc.opts[36] = {
+            name: 'areaOnly',
+            desc: 'If true and areaShape is set, only the areas are drawn and no markers. Use this for raster data with many locations (e.g. satellite data). The areas are clickable then and fire the same event as a marker click.',
+            example: true
+        };
+        if (typeof options.areaOnly === 'undefined')
+            this.options.areaOnly = false;
+
+        this.desc.opts[37] = {
+            name: 'areaSizeDeg',
+            desc: 'Size of rect areas in degrees [longitude, latitude]. Use this instead of areaSize for raster data with a grid in degrees (e.g. satellite data), so the cells fit together without gaps.',
+            example: [0.04, 0.0268]
+        };
+        if (typeof options.areaSizeDeg === 'undefined')
+            this.options.areaSizeDeg = null;
+
         // document plugins
         if (!options.plugins) {
             this.options.plugins = new Map();
             this.options.plugins.set('AreaMarker', {id: 'AreaMarker', active: false});
+            this.options.plugins.set('ColorSelect', {id: 'ColorSelect', active: false});
             this.options.plugins.set('CreateObjectModal', {id: 'CreateObjectModal', active: false});
             this.options.plugins.set('DataAPIShowModal', {id: 'DataAPIShowModal', active: false});
             this.options.plugins.set('DataAndMediaShowModal', {id: 'DataAndMediaShowModal', active: false});
@@ -519,6 +580,23 @@ export default class Worldmap2d extends View {
             ]
         };
 
+        this.desc.funcs[2] = {
+            name: 'getColorForSet',
+            desc: 'Gets the color for a dataset from the datadescription. Which attribute is used is set by the ColorSelect plugin (user selection, colorAttr, areaColorAttr) or the dataset (map_areacolorattr). Without plugin the visuAttribute of the datadescription is used.',
+            params: [
+                {
+                    name: 'set',
+                    desc: 'Dataset to get the color for',
+                    type: 'WatchableSet'
+                },
+                {
+                    name: 'forArea',
+                    desc: 'true to get the color for the area around the location',
+                    type: 'Boolean'
+                }
+            ]
+        };
+
         this.desc.events[0] = {
             name: 'swac_REQUESTOR_ID_map_click',
             desc: 'Event is fired, when a user clicks somewhere on the map (not on markers).',
@@ -543,6 +621,12 @@ export default class Worldmap2d extends View {
         this.overlayLayers = {};
         this.markers = {}; // this is a sparse array
         this.markersArray = []; // this is a normal array
+        this.areas = {}; // Areas per datasource, used by addArea()
+        this.locationAreas = {}; // Areas around locations per datasource, used by addLocationArea()
+        this.areaLayers = {}; // Layers for areas around locations per datasource
+        this.colorSelect = null; // ColorSelect plugin, registers itself when loaded
+        // Colors where marker icons exist in Icon/imgs/map
+        this.markerIconColors = ['2A81CB', '2AAD27', '3D3D3D', '7B7B7B', '9C2BCB', 'CAC428', 'CB2B3E', 'CB8427', 'FFD326'];
 
         this.view = {};
         this.tile = null;
@@ -896,7 +980,12 @@ export default class Worldmap2d extends View {
         if (zoomToSource && zoomToSource === set.swac_fromName && zoomToSet && parseInt(zoomToSet) === set.id) {
             this.zoomToSet(set);
         }
-        this.addMarker(geoJSON);
+        // Raster data with many locations: only areas, no markers
+        if (!this.options.areaShape || !this.options.areaOnly)
+            this.addMarker(geoJSON);
+        // Draw area around the location
+        if (this.options.areaShape)
+            this.addLocationArea(geoJSON);
         super.afterAddSet(set);
     }
 
@@ -905,6 +994,7 @@ export default class Worldmap2d extends View {
         let marker = this.markers[set.swac_fromName]?.[set.id];
         if (marker)
             this.removeMarker(marker);
+        this.removeLocationArea(set);
         super.afterRemoveSet(set);
     }
 
@@ -927,9 +1017,13 @@ export default class Worldmap2d extends View {
             Msg.warn('Worldmap2d', 'Could not create marker for set >' + geoJSON.set.swac_fromName + '[' + geoJSON.set.id + ']<: Geocoordinates are missing or invalid.', this.requestor);
             return;
         }
-        if (this.options.customCircleMarkerOptions) {
+        if (this.options.customCircleMarkerOptions && !geoJSON.set?.map_icon) {
             //TODO unify with marker creation below, create option for circle marker
-            marker = L.circleMarker(latlng, this.options.geojsonCircleMarkerOptions);
+            let circleopts = Object.assign({}, this.options.geojsonCircleMarkerOptions);
+            // Use fill color from datadescription
+            if (this.datadescription && geoJSON.set)
+                circleopts.fillColor = this.getColorForSet(geoJSON.set);
+            marker = L.circleMarker(latlng, circleopts);
         } else {
             // Create markeropts
             let markeropts = {};
@@ -945,23 +1039,11 @@ export default class Worldmap2d extends View {
             }
             // Use icon from datadescription
             if (this.options.datadescription && this.datadescription && geoJSON.set) {
-                // Get color
-                let col = this.datadescription.getValueColor(geoJSON.set);
-                // If color is hex value remove sharp because its not allowed in file URL
-                col = col.replace('#', '');
-                col = col.replace('GREY', '7B7B7B');
-                col = col.replace('808080', '7B7B7B'); // replace grey hex with existing grey icon
-
-                icon = new L.Icon({
-                    iconUrl: '/SWAC/swac/components/Icon/imgs/map/marker-icon-' + col + '.png',
-                    shadowUrl: '/SWAC/swac/components/Icon/imgs/map/marker-shadow.png',
-                    iconSize: [25, 41],
-                    iconAnchor: [12, 41],
-                    popupAnchor: [1, -34],
-                    shadowSize: [41, 41],
-                    color: col,
-                    title: geoJSON.set.name
-                });
+                icon = this.getColoredMarkerIcon(this.getColorForSet(geoJSON.set), geoJSON.set.name);
+            }
+            // Use icon given by the dataset
+            if (geoJSON.set?.map_icon) {
+                icon = L.icon(Object.assign({}, this.options.mapIconOptions, {iconUrl: geoJSON.set.map_icon}));
             }
             if (icon)
                 markeropts.icon = icon;
@@ -1008,11 +1090,20 @@ export default class Worldmap2d extends View {
      * Creates a Area from the given geoJSON feature.
      * 
      * @param {geoJSON} geoJSON Object in geoJSON style
-     * @param {String} color String for the color of the displayed area
-     * 
+     * @param {String} color String for the color of the displayed area. If not
+     * given the color is calculated from the datadescription (red without datadescription).
+     *
      * @returns {Object} The Area that was added to the map.
      */
-    addArea(geoJSON, color = "red") {
+    addArea(geoJSON, color = null) {
+        // Color is calculated, so it can be updated when coloring changes
+        let autoColor = false;
+        if (!color && this.datadescription && geoJSON.set) {
+            color = this.getColorForSet(geoJSON.set);
+            autoColor = true;
+        } else if (!color) {
+            color = "red";
+        }
         if (!geoJSON.geometry) {
             Msg.error(
                     'Worldmap2d',
@@ -1040,6 +1131,7 @@ export default class Worldmap2d extends View {
         })
         let lines = L.polygon(lines_arr, {color: color})
         lines.feature = geoJSON
+        lines.swac_autoColor = autoColor
         if (!this.areas[geoJSON.set.swac_fromName])
             this.areas[geoJSON.set.swac_fromName] = []
         this.areas[geoJSON.set.swac_fromName][geoJSON.set.id] = lines
@@ -1056,6 +1148,86 @@ export default class Worldmap2d extends View {
         }
         this.overlayLayers[geoJSON.set.swac_fromName].addLayer(lines)
         return lines
+    }
+
+    /**
+     * Draws an area around the location of a dataset. Used when the data of a
+     * location is ment for an area around it (e.g. raster data). Shape and size
+     * are given by the options areaShape and areaSize.
+     *
+     * @param {geoJSON} geoJSON Point feature with the dataset in geoJSON.set
+     * @returns {Object} The area that was added to the map or null
+     */
+    addLocationArea(geoJSON) {
+        const set = geoJSON.set;
+        const latlng = L.latLng(geoJSON.geometry.coordinates[1], geoJSON.geometry.coordinates[0]);
+        const color = this.getColorForSet(set, true);
+        // Areas are only clickable when they replace the markers (option areaOnly)
+        // Like markers, clicks on areas are not passed on to the map
+        let style = Object.assign({interactive: this.options.areaOnly === true, bubblingMouseEvents: false}, this.options.areaStyle);
+        // Without datadescription the colors of areaStyle (or leaflets defaults) are used
+        if (color) {
+            style.fillColor = color;
+            if (!style.color)
+                style.color = color;
+        }
+
+        let area;
+        if (this.options.areaShape === 'circle') {
+            style.radius = this.options.areaSize / 2;
+            area = L.circle(latlng, style);
+        } else if (this.options.areaShape === 'rect') {
+            let bounds;
+            if (Array.isArray(this.options.areaSizeDeg)) {
+                // Grid in degrees: cells fit together without gaps
+                const halfLon = this.options.areaSizeDeg[0] / 2;
+                const halfLat = this.options.areaSizeDeg[1] / 2;
+                bounds = L.latLngBounds([latlng.lat - halfLat, latlng.lng - halfLon], [latlng.lat + halfLat, latlng.lng + halfLon]);
+            } else {
+                bounds = latlng.toBounds(this.options.areaSize);
+            }
+            area = L.rectangle(bounds, style);
+        } else {
+            Msg.error('Worldmap2d', 'Area shape >' + this.options.areaShape + '< is not supported. Use rect or circle.', this.requestor);
+            return null;
+        }
+        area.feature = geoJSON;
+        // Click on the area works like a click on a marker (e.g. DataShowModal plugin)
+        if (this.options.areaOnly)
+            area.on('click', (e) => this.map_click_evts?.markerclick(e));
+        // Lines with own color are not changed when recoloring
+        area.swac_ownLineColor = !!this.options.areaStyle?.color;
+
+        // Replace existing area of the dataset
+        this.removeLocationArea(set);
+        if (!this.locationAreas[set.swac_fromName])
+            this.locationAreas[set.swac_fromName] = {};
+        this.locationAreas[set.swac_fromName][set.id] = area;
+
+        // Areas get an own layer, so they can be switched separately from the markers
+        if (!this.areaLayers[set.swac_fromName]) {
+            this.areaLayers[set.swac_fromName] = new L.layerGroup();
+            let datasource = this.options.datasources?.get(set.swac_fromName);
+            if (!datasource || datasource.displayed !== false)
+                this.areaLayers[set.swac_fromName].addTo(this.viewer);
+            let areasTxt = SWAC.lang.dict.Worldmap2d?.areas ? SWAC.lang.dict.Worldmap2d.areas : 'areas';
+            this.layerControl.addOverlay(this.areaLayers[set.swac_fromName], set.swac_fromName + ' (' + areasTxt + ')');
+        }
+        this.areaLayers[set.swac_fromName].addLayer(area);
+        return area;
+    }
+
+    /**
+     * Removes the area around the location of a dataset.
+     *
+     * @param {WatchableSet} set Dataset whose area should be removed
+     */
+    removeLocationArea(set) {
+        let area = this.locationAreas[set.swac_fromName]?.[set.id];
+        if (!area)
+            return;
+        this.areaLayers[set.swac_fromName]?.removeLayer(area);
+        delete this.locationAreas[set.swac_fromName][set.id];
     }
 
     /**
@@ -1462,17 +1634,97 @@ export default class Worldmap2d extends View {
             if (!dd)
                 Msg.error('Worldmap2d', 'Datadescription component >' + this.options.datadescription + '< not found.', this.requestor);
             else
-                window.swac.reactions.addReaction(function (requestors) {
-                    // TODO check untimed Behaviour
-
+                // Arrow function needed: Reactions calls the function as method of the reaction object
+                window.swac.reactions.addReaction((requestors) => {
                     this.datadescription = dd.swac_comp;
 
                     // register event listener for datadescription
                     document.addEventListener('swac_Datadescription_' + this.datadescription.requestor.id + '_changed', () => {
-                        this.rerenderIcons();
+                        this.rerenderColors();
                     });
+                    // Color markers that were added before the datadescription was available
+                    this.rerenderColors();
                 }, dd.getAttribute("id"));
         }
+    }
+
+    /**
+     * Gets the color for a dataset. The color always comes from the datadescription.
+     * The attribute that determines the color is taken in this order:
+     * 1. Attribute choosen by the user (ColorSelect plugin)
+     * 2. Only for areas: attribute map_areacolorattr of the dataset
+     * 3. Attribute configured in the ColorSelect plugin (areaColorAttr for areas, colorAttr)
+     * 4. visuAttribute of the datadescription component
+     * Combined colors are described in the datadescription (ATTRIBUTENAME.combine).
+     *
+     * @param {WatchableSet} set Dataset to get the color for
+     * @param {Boolean} forArea true to get the color for the area around the location
+     * @returns {String} Color for the dataset or null if there is no datadescription
+     */
+    getColorForSet(set, forArea = false) {
+        if (!this.datadescription || !set)
+            return null;
+        let attr = this.colorSelect?.getUserAttr()
+                || (forArea && set.map_areacolorattr)
+                || this.colorSelect?.getConfiguredAttr(forArea)
+                || null;
+        return this.datadescription.getColor(set, attr);
+    }
+
+    /**
+     * Creates a marker icon in the given color. Uses the png icons if available
+     * for the color, otherwise a svg icon.
+     *
+     * @param {String} col Color (hex, rgb or colorname)
+     * @param {String} title Title of the marker
+     * @returns {L.Icon} Icon for the marker
+     */
+    getColoredMarkerIcon(col, title) {
+        let hex = col;
+        if (typeof Colorcalculations !== 'undefined') {
+            try {
+                hex = Colorcalculations.stringToHex(col);
+            } catch (e) {
+                hex = '#808080';
+            }
+        }
+        // If color is hex value remove sharp because its not allowed in file URL
+        hex = hex.replace('#', '').replace('GREY', '7B7B7B').toUpperCase();
+        if (hex === '808080')
+            hex = '7B7B7B'; // replace grey hex with existing grey icon
+
+        if (this.markerIconColors.includes(hex)) {
+            return new L.Icon({
+                iconUrl: '/SWAC/swac/components/Icon/imgs/map/marker-icon-' + hex + '.png',
+                shadowUrl: '/SWAC/swac/components/Icon/imgs/map/marker-shadow.png',
+                iconSize: [25, 41],
+                iconAnchor: [12, 41],
+                popupAnchor: [1, -34],
+                shadowSize: [41, 41],
+                color: hex,
+                title: title
+            });
+        }
+        // No png available for that color (e.g. gradient colors)
+        let svg = '<svg xmlns="http://www.w3.org/2000/svg" width="25" height="41" viewBox="0 0 25 41">'
+                + '<path d="M12.5 0.5C5.9 0.5 0.5 5.9 0.5 12.5c0 9.1 12 27.8 12 27.8s12-18.7 12-27.8C24.5 5.9 19.1 0.5 12.5 0.5z" fill="#' + hex + '" stroke="rgba(0,0,0,0.35)"/>'
+                + '<circle cx="12.5" cy="12.5" r="4.5" fill="#ffffff"/></svg>';
+        return L.divIcon({
+            html: svg,
+            className: 'swac_worldmap2d_colormarker',
+            iconSize: [25, 41],
+            iconAnchor: [12, 41],
+            popupAnchor: [1, -34],
+            color: hex
+        });
+    }
+
+    /**
+     * Recolors markers and areas based on the datadescription.
+     */
+    rerenderColors() {
+        this.rerenderIcons();
+        this.rerenderAreas();
     }
 
     /**
@@ -1483,31 +1735,46 @@ export default class Worldmap2d extends View {
             return;
         for (let key in this.markers) {
             for (let marker of this.markers[key]) {
-                if (typeof marker !== 'undefined') {
-                    // Get color
-                    let col = this.datadescription.getValueColor(marker.feature.set);
-                    if (col === '#808080') {
-                        col = '#7B7B7B';
-                    }
-                    // If color is hex value remove sharp because its not allowed in file URL
-                    col = col.replace('#', '');
-                    col = col.replace('GREY', '7B7B7B')
-                    col = col.toUpperCase();
-                    if (marker.options.icon?.options?.color === col) {
-                        // do not rerender if color is the same
-                        continue;
-                    }
-                    const icon = new L.Icon({
-                        iconUrl: '/SWAC/swac/components/Icon/imgs/map/marker-icon-' + col + '.png',
-                        shadowUrl: '/SWAC/swac/components/Icon/imgs/map/marker-shadow.png',
-                        iconSize: [25, 41],
-                        iconAnchor: [12, 41],
-                        popupAnchor: [1, -34],
-                        shadowSize: [41, 41],
-                        color: col
-                    });
-                    marker.setIcon(icon);
+                // Markers with own icon are not colored
+                if (typeof marker === 'undefined' || marker.feature.set?.map_icon)
+                    continue;
+                let col = this.getColorForSet(marker.feature.set);
+                // Circle markers are colored by style
+                if (marker instanceof L.CircleMarker) {
+                    marker.setStyle({fillColor: col});
+                    continue;
                 }
+                const icon = this.getColoredMarkerIcon(col, marker.feature.set?.name);
+                if (marker.options.icon?.options?.color === icon.options.color) {
+                    // do not rerender if color is the same
+                    continue;
+                }
+                marker.setIcon(icon);
+            }
+        }
+    }
+
+    /**
+     * Recolors the areas that were colored by the datadescription.
+     */
+    rerenderAreas() {
+        // Areas around locations
+        for (let key in this.locationAreas) {
+            for (let area of Object.values(this.locationAreas[key])) {
+                const col = this.getColorForSet(area.feature.set, true);
+                if (!col)
+                    continue;
+                area.setStyle(area.swac_ownLineColor ? {fillColor: col} : {color: col, fillColor: col});
+            }
+        }
+        if (!this.datadescription)
+            return;
+        for (let key in this.areas) {
+            // Object.values because area ids may be negative
+            for (let area of Object.values(this.areas[key])) {
+                if (typeof area === 'undefined' || !area.swac_autoColor)
+                    continue;
+                area.setStyle({color: this.getColorForSet(area.feature.set)});
             }
         }
     }

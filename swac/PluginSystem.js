@@ -150,6 +150,15 @@ export default class PluginSystem {
         }
         // Get plugin object
         let plugin = this.plugins.get(name);
+        // Remove the areas the plugin created. Their ids also contain the plugins
+        // requestor id, so they are not always found by the prefix above.
+        if (plugin && plugin.swac_comp) {
+            let areas = [].concat(plugin.swac_comp.navElements || [], plugin.swac_comp.contElements || []);
+            for (let curArea of areas) {
+                if (curArea && curArea.parentNode)
+                    curArea.parentNode.removeChild(curArea);
+            }
+        }
         // Set plugin to not loaded
         delete plugin.swac_comp;
     }

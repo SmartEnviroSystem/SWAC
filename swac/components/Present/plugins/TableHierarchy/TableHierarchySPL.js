@@ -1,0 +1,293 @@
+import Plugin from '../../../../Plugin.js';
+import SWAC from '../../../../swac.js';
+import {buildHierarchy, matchesFilter} from './Hierarchy.js';
+
+/** Collapsible row groups for table_for_all_datasets and compatible templates. */
+export default class TableHierarchySPL extends Plugin {
+    constructor(options = {}) {
+        super(options);
+        this.name = 'Present/plugins/TableHierarchy';
+        this.desc.text = 'Groups related table rows below an expandable root row.';
+        this.desc.opts.push(
+            {name: 'relations', desc: 'Array of {parentId, childId} relationships.'},
+            {name: 'loadRelations', desc: 'Optional async function returning relations; receives the Present component.'},
+            {name: 'linear', desc: 'If true, branching components stay flat with a warning.'},
+            {name: 'expandWhen', desc: 'Optional dataset predicate that keeps a group expanded.'}
+        );
+        this.entries = new Map();
+        this.tables = new Set();
+        this.expanded = new Set();
+        this.relations = [];
+        this.sequence = 0;
+    }
+
+    async init() {
+        const config = this.requestor.parent.swac_comp.options.plugins.get('TableHierarchy');
+        this.settings = {...config, ...this.options};
+        this.labels = SWAC.lang.dict['Present_TableHierarchy'] || {
+            column: 'Related rows', expand: 'Show following rows', collapse: 'Hide following rows',
+            invalid: 'Some relationships are invalid or reference missing rows. Affected rows remain visible.',
+            loaderror: 'Relationships could not be loaded. All rows are shown separately.'
+        };
+        this.message = document.createElement('p');
+        this.message.className = 'uk-alert-warning';
+        this.message.setAttribute('role', 'status');
+        this.message.hidden = true;
+        this.requestor.parent.appendChild(this.message);
+        await this.reloadRelations();
+        // Also support activating the plugin after the component has loaded.
+        for (const row of this.requestor.parent.querySelectorAll('tr.swac_repeatedForSet')) {
+            if (row.swac_dataset)
+                this.afterAddSet(row.swac_dataset, [row]);
+        }
+    }
+
+    /** The page owns data loading and translates domain-specific relationships. */
+    async reloadRelations() {
+        try {
+            const relations = this.settings.loadRelations
+                ? await this.settings.loadRelations(this.requestor.parent.swac_comp)
+                : (this.settings.relations || []);
+            this.setRelations(relations);
+        } catch (error) {
+            this.loadError = true;
+            this.relations = [];
+            console.error('TableHierarchy: could not load relationships.', error);
+            this.schedule();
+        }
+    }
+
+    setRelations(relations) {
+        if (!Array.isArray(relations) || relations.some(relation =>
+            !relation || relation.parentId == null || relation.childId == null))
+            throw new TypeError('TableHierarchy: expected an array of {parentId, childId}.');
+        this.relations = relations;
+        this.loadError = false;
+        this.schedule();
+    }
+
+    afterAddSet(set, repeateds = []) {
+        for (const row of repeateds) {
+            if (row.tagName !== 'TR' || this.entries.has(row)) continue;
+            const table = row.closest('table');
+            if (!table) continue;
+            this.entries.set(row, {set, table});
+            set.addObserver?.(this);
+            table.swac_tableHierarchy = this;
+            if (!this.tables.has(table)) {
+                // Handle sorting before per-header listeners can sort individual rows.
+                table.addEventListener('click', event => {
+                    const header = event.target.closest('th');
+                    if (!header || header.closest('table') !== table
+                            || event.target.closest('input, button, select, textarea')
+                            || !header.classList.contains('swac_present_sort_un'))
+                        return;
+                    event.stopPropagation();
+                    this.sort(header);
+                }, true);
+                if (this.requestor.parent.swac_comp.options.rowHover === true) {
+                    table.addEventListener('pointerover', event => this.updateHover(table, event.target));
+                    table.addEventListener('pointerout', event => this.updateHover(table, event.relatedTarget));
+                }
+                this.tables.add(table);
+            }
+        }
+        this.schedule();
+    }
+
+    afterRemoveSet(set) {
+        for (const [row, entry] of this.entries) {
+            if (entry.set === set) {
+                row.querySelector('.swac_tablehierarchy_cell')?.remove();
+                this.entries.delete(row);
+            }
+        }
+        set.delObserver?.(this);
+        this.schedule();
+    }
+
+    notifyChangedValue() { this.schedule(); }
+    notifyAddedValue() { this.schedule(); }
+
+    schedule() {
+        if (this.scheduled) return;
+        this.scheduled = true;
+        queueMicrotask(() => {
+            this.scheduled = false;
+            this.render();
+        });
+    }
+
+    /** Called by TableSort, keeping each group in its dependency order. */
+    sort(th) {
+        const table = th.closest('table');
+        const descending = th.classList.contains('swac_present_sort_up');
+        for (const header of table.querySelectorAll('th'))
+            header.classList.remove('swac_present_sort_up', 'swac_present_sort_dw');
+        th.classList.add(descending ? 'swac_present_sort_dw' : 'swac_present_sort_up');
+        this.sorting = {table, th, descending};
+        this.render();
+    }
+
+    /** Called by TableFilter; render evaluates every active column filter. */
+    filter() { this.render(); }
+
+    updateHover(table, target) {
+        if (this.requestor.parent.swac_comp.options.rowHover !== true) return;
+        const row = target?.closest?.('tr');
+        const group = row?.closest('table') === table && !row.hidden
+            ? this.entries.get(row)?.hoverGroup : null;
+        for (const [member, entry] of this.entries) {
+            if (entry.table !== table) continue;
+            const hovered = !!group && entry.hoverGroup === group && !member.hidden;
+            if (member.classList.contains('swac_tablehierarchy_hover') !== hovered)
+                member.classList.toggle('swac_tablehierarchy_hover', hovered);
+        }
+    }
+
+    render() {
+        const {scrollX, scrollY} = window;
+        const focused = document.activeElement;
+        let invalid = false;
+        for (const table of this.tables) {
+            const entries = [...this.entries].filter(([row, entry]) =>
+                entry.table === table && this.requestor.parent.contains(row));
+            if (!entries.length) continue;
+            const header = [...table.querySelectorAll('tr')].find(row =>
+                row.closest('table') === table && row.querySelector('th'));
+            if (!header) continue;
+            if (!header.querySelector('.swac_tablehierarchy_header')) {
+                const th = document.createElement('th');
+                th.className = 'swac_tablehierarchy_header';
+                th.scope = 'col';
+                th.setAttribute('aria-label', this.labels.column);
+                header.insertBefore(th, header.firstChild);
+            }
+            const byId = new Map(entries.map(([row, entry]) => [String(entry.set.id), row]));
+            const {groups, issues} = buildHierarchy([...byId.keys()], this.relations, this.settings.linear);
+            invalid ||= issues.length > 0;
+            // Ambiguous duplicate IDs cannot be grouped safely, but remain visible.
+            if (byId.size !== entries.length) {
+                invalid = true;
+                for (const [row] of entries) {
+                    row.hidden = false;
+                    row.querySelector('.swac_tablehierarchy_cell')?.replaceChildren();
+                }
+                continue;
+            }
+            for (const [row] of entries) {
+                if (!row.id) {
+                    let id;
+                    do { id = this.requestor.parent.id + '_hierarchy_' + (++this.sequence); }
+                    while (document.getElementById(id));
+                    row.id = id;
+                }
+                if (!row.querySelector('.swac_tablehierarchy_cell')) {
+                    const cell = document.createElement('td');
+                    cell.className = 'swac_tablehierarchy_cell uk-text-nowrap';
+                    row.insertBefore(cell, row.firstChild);
+                }
+            }
+            const filters = [...header.querySelectorAll('input[swac_table_filter_attrname]')]
+                .filter(input => input.value !== '');
+            const matches = row => filters.every(input => {
+                const attr = input.getAttribute('swac_table_filter_attrname');
+                const field = [...row.querySelectorAll('[attrname]')].find(elem =>
+                    elem.getAttribute('attrname') === attr);
+                return matchesFilter(field?.textContent, input.value);
+            });
+            if (this.sorting?.table === table) {
+                const {th, descending} = this.sorting;
+                const index = [...th.parentElement.children].indexOf(th);
+                const value = group => byId.get(group.root).children[index]?.textContent.trim() || '';
+                const numeric = groups.every(group => value(group) !== '' && Number.isFinite(Number(value(group))));
+                groups.sort((a, b) => (descending ? -1 : 1) * (numeric
+                    ? Number(value(a)) - Number(value(b))
+                    : value(a).localeCompare(value(b))));
+            }
+            const orderedRows = [];
+            for (const group of groups) {
+                const root = byId.get(group.root);
+                const hasChildren = group.members.length > 1;
+                const filtered = filters.length > 0;
+                const visible = !filtered || group.members.some(member => matches(byId.get(member.id)));
+                const automatic = typeof this.settings.expandWhen === 'function'
+                    && group.members.some(member => this.settings.expandWhen(this.entries.get(byId.get(member.id)).set));
+                const expanded = filtered || automatic || this.expanded.has(root);
+                for (const member of group.members) {
+                    const row = byId.get(member.id);
+                    this.entries.get(row).hoverGroup = expanded && hasChildren ? root : null;
+                    const cell = row.querySelector('.swac_tablehierarchy_cell');
+                    const padding = (0.75 + Math.min(member.depth, 8) * 0.8) + 'rem';
+                    if (cell.style.paddingLeft !== padding) cell.style.paddingLeft = padding;
+                    if (member.depth === 0 && hasChildren) {
+                        let button = cell.querySelector('button');
+                        if (!button) {
+                            button = document.createElement('button');
+                            button.type = 'button';
+                            button.className = 'uk-button uk-button-text';
+                            // Keep pointer focus from scrolling before the click handler runs.
+                            button.addEventListener('mousedown', event => {
+                                if (event.button === 0) event.preventDefault();
+                            });
+                            button.addEventListener('click', event => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                const {scrollX, scrollY} = window;
+                                button.focus({preventScroll: true});
+                                if (this.expanded.has(root)) this.expanded.delete(root);
+                                else this.expanded.add(root);
+                                this.render();
+                                // Layout and scroll anchoring can settle after the click handler.
+                                window.requestAnimationFrame(() => {
+                                    if (window.scrollX !== scrollX || window.scrollY !== scrollY)
+                                        window.scrollTo({left: scrollX, top: scrollY, behavior: 'instant'});
+                                });
+                            });
+                            cell.replaceChildren(button);
+                        }
+                        const label = expanded ? this.labels.collapse : this.labels.expand;
+                        update(button, 'textContent', expanded ? '▼' : '▷');
+                        update(button, 'title', label);
+                        for (const [name, value] of Object.entries({
+                            'aria-label': label,
+                            'aria-expanded': String(expanded),
+                            'aria-controls': group.members.slice(1).map(child => byId.get(child.id).id).join(' ')
+                        })) {
+                            if (button.getAttribute(name) !== value) button.setAttribute(name, value);
+                        }
+                        update(button, 'disabled', !!(filtered || automatic));
+                    } else {
+                        update(cell, 'textContent', member.depth ? '↳' : '');
+                    }
+                    update(row, 'hidden', !visible || (member.depth > 0 && !expanded));
+                    orderedRows.push(row);
+                }
+            }
+            // Keep unchanged rows attached so polling preserves the browser's scroll anchor.
+            const currentRows = [...table.querySelectorAll('tr')].filter(row =>
+                this.entries.get(row)?.table === table && this.requestor.parent.contains(row));
+            for (let index = 0; index < orderedRows.length; index++) {
+                const row = orderedRows[index];
+                if (currentRows[index] === row) continue;
+                currentRows[index].parentElement.insertBefore(row, currentRows[index]);
+                currentRows.splice(currentRows.indexOf(row), 1);
+                currentRows.splice(index, 0, row);
+            }
+        }
+        for (const table of this.tables)
+            this.updateHover(table, table.querySelector('tr.swac_repeatedForSet:hover'));
+        update(this.message, 'textContent', this.loadError ? this.labels.loaderror : (invalid ? this.labels.invalid : ''));
+        update(this.message, 'hidden', !this.message.textContent);
+        // Moving rows can blur a keyboard-focused toggle in native browsers.
+        if (focused && focused !== document.activeElement
+                && this.requestor.parent.contains(focused) && !focused.closest('tr')?.hidden)
+            focused.focus({preventScroll: true});
+        if (window.scrollX !== scrollX || window.scrollY !== scrollY)
+            window.scrollTo({left: scrollX, top: scrollY, behavior: 'instant'});
+    }
+}
+
+function update(element, property, value) {
+    if (element[property] !== value) element[property] = value;
+}
