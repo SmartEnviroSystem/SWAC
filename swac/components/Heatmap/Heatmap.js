@@ -16,8 +16,7 @@ export default class Heatmap extends Present {
         this.desc.templates = [];
         this.desc.templates[0] = {
             name: 'heatmap',
-            url: SWAC.config.swac_root + 'components/Present/table_for_all_datasets.html',
-            desc: 'Table with coloured values.'
+            desc: 'Heatmap with coloured values.'
         };
         this.desc.opts[1] = {
             name: 'datadescription',

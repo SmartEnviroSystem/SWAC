@@ -111,7 +111,7 @@ export default class Dataselect extends View {
             this.options.showAttribute = true;
         this.desc.opts[4] = {
             name: 'urlParam',
-            desc: 'Name of the URL parameter holding the id of the dataset to preselect. null disables preselection.'
+            desc: 'Name of the URL parameter holding the id of the dataset to preselect. The parameters attribute, start and end (format 2026-11-25T00:00) preselect the attribute and the period. The URL is kept up to date with the selection, so it can be shared. null disables both.'
         };
         if (typeof options.urlParam === 'undefined')
             this.options.urlParam = 'oo_id';
@@ -127,12 +127,24 @@ export default class Dataselect extends View {
         };
         if (typeof options.showPeriod === 'undefined')
             this.options.showPeriod = false;
+        this.desc.opts[7] = {
+            name: 'multiple',
+            desc: 'If true several datasets can be selected. Only attributes all their collections have are offered. The URL parameter holds the ids separated by commas.'
+        };
+        if (typeof options.multiple === 'undefined')
+            this.options.multiple = false;
+        this.desc.opts[8] = {
+            name: 'filterAttribute',
+            desc: 'Attribute of the collections holding the id of the dataset, for collections several datasets share. getSelection() delivers a matching filter (neoeq, so collections without the attribute are not filtered). null disables the filter.'
+        };
+        if (typeof options.filterAttribute === 'undefined')
+            this.options.filterAttribute = 'oo_id';
 
         this.desc.funcs[0] = {
             name: 'getSelection',
             desc: 'Gets the current selection.',
             returns: {
-                desc: 'Object with id, set, name, collection, attribute, timeAttr, from and to (from and to as local datetime strings like 2026-10-01T00:00, null without showPeriod) or null if no dataset is selected.',
+                desc: 'Object with id, set, name, collection, filter (of the first selected dataset), sets (all selected datasets, each with id, set, name, collection, filter), attribute, timeAttr, from and to (from and to as local datetime strings like 2026-10-01T00:00, null without showPeriod) or null if no dataset is selected.',
                 type: 'Object'
             }
         };
@@ -140,7 +152,7 @@ export default class Dataselect extends View {
             name: 'setSelection',
             desc: 'Selects a dataset and optionally an attribute.',
             params: [
-                {name: 'id', desc: 'Id of the dataset to select', type: 'String'},
+                {name: 'id', desc: 'Id of the dataset to select, with option multiple also a list of ids', type: 'String|String[]'},
                 {name: 'attribute', desc: 'Name of the attribute to select (optional)', type: 'String'}
             ],
             returns: {
@@ -189,6 +201,13 @@ export default class Dataselect extends View {
             // Transfer required attribute from SWA-Statement to the dataset selection (allows browser check of required inputs)
             if (this.requestor.hasAttribute('required'))
                 this.setSelect.required = true;
+            if (this.options.multiple) {
+                this.setSelect.multiple = true;
+                // The placeholder option would be selectable in a list
+                let placeholder = this.setSelect.querySelector('option[value=""]');
+                if (placeholder)
+                    placeholder.remove();
+            }
             if (this.options.attributeRequired && this.options.showAttribute)
                 this.attrSelect.required = true;
 
@@ -303,9 +322,44 @@ export default class Dataselect extends View {
     preselectFromUrl() {
         if (!this.options.urlParam)
             return;
-        let id = new URLSearchParams(window.location.search).get(this.options.urlParam);
-        if (id && this.sets.has(id) && this.setSelect.value !== id)
-            this.setSelection(id);
+        let params = new URLSearchParams(window.location.search);
+        // The period is set first, so the change event of the dataset already carries it
+        if (this.options.showPeriod && this.fromInput && this.toInput) {
+            for (let [input, name] of [[this.fromInput, 'start'], [this.toInput, 'end']]) {
+                if (params.get(name))
+                    input.value = params.get(name);
+                // An invalid date leaves the input empty, then the preset stays
+                if (!input.value)
+                    input.value = input.defaultValue;
+            }
+            this.checkPeriod();
+        }
+        let ids = (params.get(this.options.urlParam) || '').split(',').filter(id => this.sets.has(id));
+        if (!this.options.multiple)
+            ids = ids.slice(0, 1);
+        if (ids.length > 0 && ids.join(',') !== this.selectedSets().map(set => String(set.id)).join(','))
+            this.setSelection(ids, params.get('attribute'));
+    }
+
+    /**
+     * Writes the selection into the URL, so the address can be shared.
+     */
+    writeToUrl() {
+        let selection = this.getSelection();
+        let values = {
+            [this.options.urlParam]: selection && selection.sets.map(set => set.id).join(','),
+            attribute: selection && selection.attribute,
+            start: selection && selection.from,
+            end: selection && selection.to
+        };
+        let params = new URLSearchParams(window.location.search);
+        for (let name in values) {
+            if (values[name])
+                params.set(name, values[name]);
+            else
+                params.delete(name);
+        }
+        history.replaceState(history.state, '', '?' + params.toString() + window.location.hash);
     }
 
     /**
@@ -314,29 +368,33 @@ export default class Dataselect extends View {
      * @returns {Promise} Resolves when the attributes are shown
      */
     onSetChange() {
-        let set = this.sets.get(this.setSelect.value);
-        if (!set) {
+        let sets = this.selectedSets();
+        if (sets.length === 0) {
             this.loadingCollection = null;
             this.resetAttributes('choosesetfirst', 'Select device first');
             this.notifyChange('set');
             return Promise.resolve();
         }
-        let collection = set.data_collection;
-        if (!collection) {
-            Msg.error('Dataselect', 'Dataset >' + set.id + '< has no attribute >data_collection<.', this.requestor);
+        let withoutCollection = sets.find(set => !set.data_collection);
+        if (withoutCollection) {
+            Msg.error('Dataselect', 'Dataset >' + withoutCollection.id + '< has no attribute >data_collection<.', this.requestor);
             this.resetAttributes('structureerror', 'The data structure could not be loaded.');
             this.notifyChange('set');
             return Promise.resolve();
         }
 
         this.resetAttributes('loading', 'Loading ...');
+        let collections = [...new Set(sets.map(set => set.data_collection))];
+        let collection = collections.join(',');
         this.loadingCollection = collection;
         let thisRef = this;
-        return Model.getValueDefinitions({fromName: collection}).then(function (definitions) {
+        return Promise.all(collections.map(curCollection => Model.getValueDefinitions({fromName: curCollection}))).then(function (allDefinitions) {
             // Ignore the answer if another dataset was selected meanwhile
             if (thisRef.loadingCollection !== collection)
                 return;
-            thisRef.attributes = definitions || [];
+            // Only attributes every selected collection has can be used for all datasets
+            let lists = allDefinitions.map(definitions => definitions || []);
+            thisRef.attributes = lists[0].filter(curAttr => lists.every(list => list.some(other => other.name === curAttr.name)));
             thisRef.renderAttributes(thisRef.attributes);
             thisRef.notifyChange('set');
         }).catch(function (error) {
@@ -405,6 +463,8 @@ export default class Dataselect extends View {
     }
 
     notifyChange(changed) {
+        if (this.options.urlParam)
+            this.writeToUrl();
         document.dispatchEvent(new CustomEvent('swac_' + this.requestor.id + '_dataselect_changed', {
             detail: {
                 requestor: this,
@@ -415,15 +475,23 @@ export default class Dataselect extends View {
         }));
     }
 
+    selectedSets() {
+        return [...this.setSelect.selectedOptions].map(option => this.sets.get(option.value)).filter(Boolean);
+    }
+
     getSelection() {
-        let set = this.sets.get(this.setSelect.value);
-        if (!set)
+        let sets = this.selectedSets();
+        if (sets.length === 0)
             return null;
+        let filterFor = curSet => this.options.filterAttribute ? this.options.filterAttribute + ',neoeq,' + curSet.id : null;
+        let set = sets[0];
         return {
             id: set.id,
             set: set,
             name: set.name,
             collection: set.data_collection,
+            filter: filterFor(set),
+            sets: sets.map(curSet => ({id: curSet.id, set: curSet, name: curSet.name, collection: curSet.data_collection, filter: filterFor(curSet)})),
             attribute: this.attrSelect.value || null,
             timeAttr: (this.timeSelect && this.timeSelect.value) || null,
             from: (this.options.showPeriod && this.fromInput && this.fromInput.value) || null,
@@ -432,7 +500,9 @@ export default class Dataselect extends View {
     }
 
     setSelection(id, attribute = null) {
-        this.setSelect.value = String(id);
+        let ids = String(id).split(',');
+        for (let option of this.setSelect.options)
+            option.selected = ids.includes(option.value);
         this.pendingAttribute = attribute;
         return this.onSetChange();
     }
