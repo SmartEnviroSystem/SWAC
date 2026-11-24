@@ -330,6 +330,7 @@ export default class Collage extends View {
         this.keogramLayout = null;  // Position of the stripes in the shown keogram
         this.stripeCache = new Map();   // Stripes cut out of the images, by image source
         this.stripeCacheParams = null;  // Cut parameters of the cached stripes
+        this.sourceRun = 0;     // Number of the shown datasource, changes when the datasource is switched
     }
 
     init() {
@@ -377,6 +378,56 @@ export default class Collage extends View {
         super.afterAddSet(set, repeateds);
     }
 
+    //Inheritted
+    afterRemoveSet(set) {
+        // The id alone is not unique, different datasources can use the same ids
+        let index = this.images.findIndex(curImg => curImg === set
+                    || (Number(curImg.id) === Number(set.id) && curImg.swac_fromName === set.swac_fromName));
+        if (index >= 0) {
+            this.images.splice(index, 1);
+            if (index < this.selected)
+                this.selected--;
+            clearTimeout(this.renderTimeout);
+            if (this.images.length === 0)
+                this.clearView();
+            else
+                this.renderTimeout = setTimeout(this.render.bind(this), 0);
+        }
+        super.afterRemoveSet(set);
+    }
+
+    /**
+     * Prepares the collage for the images of a new datasource, see switchDatasource().
+     * Stops playback, keogram drawing and running requests of the old datasource
+     * and removes the shown images, so that timeline or keogram are built again.
+     *
+     * @returns {Promise} Resolves when the collage is ready for the new images
+     */
+    prepareForDatasource() {
+        // Requests and drawings of the old datasource see the new number and end without effect
+        this.sourceRun++;
+        this.pause();
+        this.playRun++;
+        clearTimeout(this.renderTimeout);
+        this.images = [];
+        this.selected = -1;
+        this.hasTs = false;
+        // The mode is detected again from the new images, unless it is set by option
+        this.mode = null;
+        this.stripeCache.clear();
+        this.stripeCacheParams = null;
+        this.ownRequestIds.clear();
+        this.clearView();
+        // The new datasource is loaded with these fromWheres. Without own size it would
+        // deliver all its images at once, so it shows as many images as the first one.
+        let fromWheres = this.requestor.fromWheres;
+        if (fromWheres && !fromWheres.size) {
+            let firstWheres = this.firstDatasource && this.firstDatasource.fromWheres ? this.firstDatasource.fromWheres : {};
+            fromWheres.size = this.options.pageSize || firstWheres.size || 20;
+        }
+        return super.prepareForDatasource();
+    }
+
     /**
      * Gets the number of images shown at once
      *
@@ -400,7 +451,12 @@ export default class Collage extends View {
             return;
         this.sortImages(this.images);
         if (!this.mode) {
-            this.mode = await this.detectMode(this.images[0]);
+            let run = this.sourceRun;
+            let mode = await this.detectMode(this.images[0]);
+            // The datasource was switched meanwhile, the new images are rendered on their own
+            if (run !== this.sourceRun)
+                return;
+            this.mode = mode;
             Msg.info('Collage', 'Useing display mode >' + this.mode + '<', this.requestor);
             document.dispatchEvent(new CustomEvent('swac_' + this.requestor.id + '_collage_mode', {
                 detail: {requestor: this.requestor, mode: this.mode}
@@ -1270,6 +1326,8 @@ export default class Collage extends View {
         if (this.images.length === 0)
             return false;
         let sets = await this.loadNeighbours(this.images[0], -1);
+        if (!sets)
+            return false;
         if (sets.length === 0) {
             this.showMsg(SWAC.lang.dict.Collage.noolder);
             return false;
@@ -1287,6 +1345,8 @@ export default class Collage extends View {
         if (this.images.length === 0)
             return false;
         let sets = await this.loadNeighbours(this.images[this.images.length - 1], 1);
+        if (!sets)
+            return false;
         if (sets.length === 0) {
             this.showMsg(SWAC.lang.dict.Collage.nonewer);
             return false;
@@ -1318,6 +1378,8 @@ export default class Collage extends View {
         }
         // Target is outside the shown images, load the images next to the selected one
         let sets = await this.loadNeighbours(set, direction);
+        if (!sets)
+            return;
         if (sets.length === 0) {
             this.showMsg(direction > 0 ? SWAC.lang.dict.Collage.nonewer : SWAC.lang.dict.Collage.noolder);
             return;
@@ -1347,6 +1409,8 @@ export default class Collage extends View {
         // gt-filter with one second less to include images at exactly the timepoint
         let from = new Date(target.getTime() - 1000);
         let sets = await this.loadImages(this.options.tsAttr + ',gt,' + this.formatDate(from), this.options.tsAttr + ',asc');
+        if (!sets)
+            return;
         sets = sets.filter(curSet => this.getDate(curSet) >= target);
         if (sets.length === 0) {
             this.showMsg(SWAC.lang.dict.Collage.notimepoint);
@@ -1362,13 +1426,15 @@ export default class Collage extends View {
      *
      * @param {WatchableSet} set Set next to which images should be loaded
      * @param {Number} direction -1 for images before, 1 for images after the set
-     * @returns {Promise<WatchableSet[]>} Up to pageSize sets in ascending order
+     * @returns {Promise<WatchableSet[]>} Up to pageSize sets in ascending order, null if the datasource was switched meanwhile
      */
     async loadNeighbours(set, direction) {
         let attr = this.hasTs ? this.options.tsAttr : 'id';
         let value = this.hasTs ? this.formatDate(this.getDate(set)) : set.id;
         let filter = attr + (direction > 0 ? ',gt,' : ',lt,') + value;
         let sets = await this.loadImages(filter, attr + (direction > 0 ? ',asc' : ',desc'));
+        if (!sets)
+            return null;
         // Check again, because sources like static files ignore filters
         let key = this.getKey(set);
         sets = sets.filter(curSet => direction > 0 ? this.getKey(curSet) > key : this.getKey(curSet) < key);
@@ -1383,7 +1449,7 @@ export default class Collage extends View {
      *
      * @param {String} filter Filter for the navigation (e.g. ts,gt,2026-01-03T12:00:00)
      * @param {String} order Order of the requested sets (e.g. ts,asc)
-     * @returns {Promise<WatchableSet[]>} Loaded sets
+     * @returns {Promise<WatchableSet[]>} Loaded sets, null if the datasource was switched meanwhile
      */
     async loadImages(filter, order) {
         let fromWheres = {};
@@ -1405,16 +1471,22 @@ export default class Collage extends View {
             fromName: this.requestor.fromName,
             fromWheres: fromWheres
         };
+        let run = this.sourceRun;
         this.setLoading(true);
         try {
             let loadProm = Model.load(dataRequest);
             // requestId is calculated synchronous by Model.load, sets are notified while loading
             this.ownRequestIds.add(dataRequest.requestId);
             let data = await loadProm;
+            // The images belong to a datasource that is not shown any more
+            if (run !== this.sourceRun)
+                return null;
             // Model.load delivers the WatchableSource that can contain sets from earlier requests too
             return Array.from(data).filter(curSet => curSet.swac_dataRequest
                         && curSet.swac_dataRequest.requestId === dataRequest.requestId);
         } catch (e) {
+            if (run !== this.sourceRun)
+                return null;
             Msg.error('Collage', 'Could not load images: ' + e, this.requestor);
             this.showMsg(SWAC.lang.dict.Collage.loaderror);
             return [];
@@ -1508,6 +1580,27 @@ export default class Collage extends View {
         let msgElem = this.requestor.querySelector('.swac_collage_msg');
         if (msgElem)
             msgElem.innerHTML = text;
+    }
+
+    /**
+     * Removes the shown images, the large image and its caption
+     *
+     * @returns {undefined}
+     */
+    clearView() {
+        // Stop a keogram that is still drawing
+        this.keogramRun++;
+        this.keogramLayout = null;
+        let strip = this.requestor.querySelector('.swac_collage_strip');
+        if (strip)
+            strip.innerHTML = '';
+        let mainImg = this.requestor.querySelector('.swac_collage_mainimg');
+        if (mainImg)
+            mainImg.removeAttribute('src');
+        let captionElem = this.requestor.querySelector('.swac_collage_caption');
+        if (captionElem)
+            captionElem.innerHTML = '';
+        this.showMsg('');
     }
 
     /**

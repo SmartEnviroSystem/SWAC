@@ -490,7 +490,7 @@ export default class Worldmap2d extends View {
             name: 'areaShape',
             desc: 'Shape of the area that is drawn around the location of each dataset. \n\
 Use this when the data of a location is ment for an area around it (e.g. raster data). \n\
-Possible values: rect, circle. If not set no areas are drawn.',
+Possible values: rect (raster display), circle. If not set no areas are drawn.',
             example: 'rect'
         };
         if (typeof options.areaShape === 'undefined')
@@ -498,8 +498,8 @@ Possible values: rect, circle. If not set no areas are drawn.',
 
         this.desc.opts[33] = {
             name: 'areaSize',
-            desc: 'Size of the area around a location in meters. Edge length for rect, diameter for circle.',
-            example: 3000
+            desc: 'Size of the area around a location in meters. Number: edge length for rect, diameter for circle. Array [width, height]: separate size for rect in east-west direction (longitude) and north-south direction (latitude), e.g. [3000, 2000] for a raster of 3 km x 2 km. The location is in the middle of the area. For circle the width is used.',
+            example: [3000, 2000]
         };
         if (typeof options.areaSize === 'undefined')
             this.options.areaSize = 1000;
@@ -1174,7 +1174,8 @@ Possible values: rect, circle. If not set no areas are drawn.',
 
         let area;
         if (this.options.areaShape === 'circle') {
-            style.radius = this.options.areaSize / 2;
+            const diameter = Array.isArray(this.options.areaSize) ? this.options.areaSize[0] : this.options.areaSize;
+            style.radius = diameter / 2;
             area = L.circle(latlng, style);
         } else if (this.options.areaShape === 'rect') {
             let bounds;
@@ -1183,6 +1184,12 @@ Possible values: rect, circle. If not set no areas are drawn.',
                 const halfLon = this.options.areaSizeDeg[0] / 2;
                 const halfLat = this.options.areaSizeDeg[1] / 2;
                 bounds = L.latLngBounds([latlng.lat - halfLat, latlng.lng - halfLon], [latlng.lat + halfLat, latlng.lng + halfLon]);
+            } else if (Array.isArray(this.options.areaSize)) {
+                // Raster with separate size in meters for width (longitude) and height (latitude),
+                // the location is in the middle of the area
+                const widthBounds = latlng.toBounds(this.options.areaSize[0]);
+                const heightBounds = latlng.toBounds(this.options.areaSize[1]);
+                bounds = L.latLngBounds([heightBounds.getSouth(), widthBounds.getWest()], [heightBounds.getNorth(), widthBounds.getEast()]);
             } else {
                 bounds = latlng.toBounds(this.options.areaSize);
             }
