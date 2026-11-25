@@ -12,6 +12,7 @@ var Dataselect_de = {
     chooseattribute: 'Messwert auswählen',
     noattribute: 'Keine Spalte (optional)',
     choosetimeattr: 'Zeitspalte auswählen',
+    notimeattr: 'Keine gemeinsame Zeitspalte',
     loading: 'Wird geladen ...',
     noattributes: 'Keine passenden Messwerte',
     structureerror: 'Die Datenstruktur konnte nicht geladen werden.',

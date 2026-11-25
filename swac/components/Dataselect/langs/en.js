@@ -12,6 +12,7 @@ var Dataselect_en = {
     chooseattribute: 'Select measured value',
     noattribute: 'No column (optional)',
     choosetimeattr: 'Select time column',
+    notimeattr: 'No common time column',
     loading: 'Loading ...',
     noattributes: 'No matching values',
     structureerror: 'The data structure could not be loaded.',

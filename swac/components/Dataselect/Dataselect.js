@@ -129,7 +129,7 @@ export default class Dataselect extends View {
             this.options.showPeriod = false;
         this.desc.opts[7] = {
             name: 'multiple',
-            desc: 'If true several datasets can be selected. Only attributes all their collections have are offered. The URL parameter holds the ids separated by commas.'
+            desc: 'If true several datasets can be selected in a dropdown with checkboxes. Only attributes all their collections have are offered. The URL parameter holds the ids separated by commas.'
         };
         if (typeof options.multiple === 'undefined')
             this.options.multiple = false;
@@ -207,6 +207,7 @@ export default class Dataselect extends View {
                 let placeholder = this.setSelect.querySelector('option[value=""]');
                 if (placeholder)
                     placeholder.remove();
+                this.initMultiple();
             }
             if (this.options.attributeRequired && this.options.showAttribute)
                 this.attrSelect.required = true;
@@ -239,7 +240,68 @@ export default class Dataselect extends View {
      */
     afterAddSet(set, repeateds) {
         this.sets.set(String(set.id), set);
+        this.addCheckbox(set);
         super.afterAddSet(set, repeateds);
+    }
+
+    /**
+     * Shows a button with a dropdown of checkboxes instead of the list box.
+     * The select stays the holder of the selection.
+     */
+    initMultiple() {
+        // Not display:none, so the browser can still point to it when it is required and empty
+        Object.assign(this.setSelect.style, {position: 'absolute', opacity: 0, width: '1px', height: '1px', pointerEvents: 'none'});
+        this.setSelect.tabIndex = -1;
+        this.multiButton = document.createElement('button');
+        this.multiButton.type = 'button';
+        this.multiButton.className = 'uk-select uk-text-left uk-text-truncate';
+        this.multiList = document.createElement('ul');
+        this.multiList.className = 'uk-list uk-margin-remove';
+        let dropdown = document.createElement('div');
+        dropdown.setAttribute('uk-dropdown', 'mode: click; pos: bottom-justify');
+        dropdown.appendChild(this.multiList);
+        this.setSelect.after(this.multiButton, dropdown);
+        for (let set of this.sets.values())
+            this.addCheckbox(set);
+        this.multiList.addEventListener('change', evt => {
+            for (let option of this.setSelect.options) {
+                if (option.value === evt.target.value)
+                    option.selected = evt.target.checked;
+            }
+            this.onSetChange();
+        });
+        // A form reset restores the select without firing change
+        let form = this.requestor.closest('form');
+        if (form)
+            form.addEventListener('reset', () => setTimeout(() => this.updateMultiple(), 0));
+        this.updateMultiple();
+    }
+
+    addCheckbox(set) {
+        if (!this.multiList)
+            return;
+        let box = document.createElement('input');
+        box.type = 'checkbox';
+        box.className = 'uk-checkbox uk-margin-small-right';
+        box.value = String(set.id);
+        let label = document.createElement('label');
+        label.append(box, set.name);
+        let item = document.createElement('li');
+        item.appendChild(label);
+        this.multiList.appendChild(item);
+    }
+
+    /**
+     * Shows the selection of the select in the checkboxes and the button.
+     */
+    updateMultiple() {
+        if (!this.multiList)
+            return;
+        let selected = this.selectedSets();
+        for (let box of this.multiList.querySelectorAll('input'))
+            box.checked = selected.some(set => String(set.id) === box.value);
+        this.multiButton.textContent = selected.length > 0
+                ? selected.map(set => set.name).join(', ') : this.getText('chooseset', 'Select device');
     }
 
     /**
@@ -368,6 +430,7 @@ export default class Dataselect extends View {
      * @returns {Promise} Resolves when the attributes are shown
      */
     onSetChange() {
+        this.updateMultiple();
         let sets = this.selectedSets();
         if (sets.length === 0) {
             this.loadingCollection = null;
@@ -449,15 +512,19 @@ export default class Dataselect extends View {
         // The time attribute is used without asking if the collection has it,
         // otherwise the user decides which attribute holds the time
         if (this.timeSelect) {
+            // Common attributes of several datasets without the time attribute are never their time
+            let noCommonTime = !hasTimeAttr && this.selectedSets().length > 1;
             this.timeSelect.innerHTML = '';
             if (hasTimeAttr) {
                 this.timeSelect.appendChild(this.createOption(timeAttr, timeAttr));
+            } else if (noCommonTime) {
+                this.timeSelect.appendChild(this.createOption('', 'No common time attribute', 'notimeattr'));
             } else {
                 this.timeSelect.appendChild(this.createOption('', 'Select time attribute', 'choosetimeattr'));
                 for (let curName of names)
                     this.timeSelect.appendChild(this.createOption(curName, curName));
             }
-            this.timeSelect.disabled = hasTimeAttr;
+            this.timeSelect.disabled = hasTimeAttr || noCommonTime;
         }
         this.showTimeArea(!hasTimeAttr);
     }
