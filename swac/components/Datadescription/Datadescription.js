@@ -193,8 +193,7 @@ export default class Datadescription extends View {
     selc: '.swac_datadescription_datacheck',
     desc: 'Checkbox for enabling visualisation or automatic threshold calculation.'
 };
-
-
+        this.desc.optPerSet[15] = {
             name: 'ATTRIBUTENAME.col_uknw',
             desc: 'Color to use, when there is no value or no matching value description. Default is grey (#808080).'
         };
