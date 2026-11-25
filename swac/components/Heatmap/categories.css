@@ -13,15 +13,11 @@
 .heatmap-tile {
     width: 8rem;
     height: 3rem;
-    border: 1px solid #666;
+    border: 1px solid #d0d0d0;
     cursor: pointer;
 }
-.heatmap-tile:focus-visible { outline: 3px solid currentColor; outline-offset: -4px; }
+.heatmap-tile:focus-visible { outline: 3px solid #171717; outline-offset: -4px; }
 .heatmap-status {
-    background: white;
-    color: #171717;
-    border-radius: .2rem;
-    padding: .1rem .3rem;
     max-width: 90%;
     overflow: hidden;
     text-overflow: ellipsis;

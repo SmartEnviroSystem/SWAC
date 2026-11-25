@@ -18,6 +18,11 @@ export default class Heatmap extends Present {
             name: 'heatmap',
             desc: 'Heatmap with coloured values.'
         };
+        this.desc.depends.push({
+            name: 'Colorcalculations.js',
+            path: SWAC.config.swac_root + 'algorithms/Colorcalculations.js',
+            desc: 'Contrast colour of the category icons'
+        });
         const categoryTemplate = {name: 'categories', style: 'categories', desc: 'Device and period status grid.'};
         if (this.options.mode === 'categories')
             this.desc.templates.unshift(categoryTemplate);
@@ -31,7 +36,7 @@ export default class Heatmap extends Present {
         };
         this.desc.opts.push(
             {name: 'mode', desc: 'Default: numbers. Use categories for device and period statuses.'},
-            {name: 'categories', desc: 'Category keys mapped to {label, color, icon?}. Null means normal, an absent value means no data.'},
+            {name: 'categories', desc: 'Category keys mapped to {label, color, icon?}. Null means normal (styled by the key normal, if given), an absent value means no data.'},
             {name: 'rowLabelAttribute', desc: 'Category row heading attribute. Defaults to name.'}
         );
         this.desc.events.push({name: 'heatmap_cell_clicked', desc: 'Category cell activated. Event detail contains set, attribute and value.'});
@@ -182,9 +187,11 @@ export default class Heatmap extends Present {
                 button.setAttribute('aria-label', title);
                 const mark = document.createElement('span');
                 mark.className = 'heatmap-status';
+                // The tile is filled with the category colour, the icon gets its contrast colour
+                mark.style.color = Colorcalculations.calculateContrastColor(status.color);
                 if (status.icon)
                     mark.setAttribute('uk-icon', status.icon);
-                else
+                else if (set[key] !== null)
                     mark.textContent = status.label;
                 button.replaceChildren(mark);
             });
@@ -194,7 +201,7 @@ export default class Heatmap extends Present {
     categoryStatus(value) {
         const lang = SWAC.lang.dict.Heatmap;
         if (value === null)
-            return {label: lang.normal, color: '#eeeeee', icon: 'check'};
+            return this.options.categories.normal || {label: lang.normal, color: '#eeeeee', icon: 'check'};
         if (value === undefined)
             return {label: lang.noData, color: '#ffffff', icon: 'question'};
         if (Object.hasOwn(this.options.categories, value))
@@ -206,7 +213,7 @@ export default class Heatmap extends Present {
         const legend = this.requestor.querySelector('.heatmap-category-legend');
         this.requestor.querySelector('.heatmap-categories thead th').textContent = this.options.rowLabelAttribute;
         legend.replaceChildren();
-        for (const value of [...Object.keys(this.options.categories), null, undefined]) {
+        for (const value of [...Object.keys(this.options.categories).filter(key => key !== 'normal'), null, undefined]) {
             const status = this.categoryStatus(value);
             const entry = document.createElement('span');
             const swatch = document.createElement('span');
