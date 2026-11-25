@@ -1,0 +1,35 @@
+.heatmap-category-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem 1rem;
+}
+.heatmap-category-legend > span, .heatmap-tile {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .35rem;
+}
+.heatmap-categories td { padding: .125rem; }
+.heatmap-tile {
+    width: 8rem;
+    height: 3rem;
+    border: 1px solid #666;
+    cursor: pointer;
+}
+.heatmap-tile:focus-visible { outline: 3px solid currentColor; outline-offset: -4px; }
+.heatmap-status {
+    background: white;
+    color: #171717;
+    border-radius: .2rem;
+    padding: .1rem .3rem;
+    max-width: 90%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.heatmap-swatch {
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    border: 1px solid #666;
+}
