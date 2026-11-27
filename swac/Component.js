@@ -621,12 +621,11 @@ DEFINTION of SET:\n\
             }
         }
         this.desc.funcs[1027] = {
-            name: 'getDatasources',
-            desc: 'Gets the datasources the component can switch to. Contains the source the component was loaded with and the sources from option datasources.',
-            returns: {
-                desc: 'List of datasources with name, fromName and fromWheres.',
-                type: 'Object[]'
-            }
+            name: 'calculateSamplingRate',
+            desc: 'Calculates the sampling rate from the timestamps of the datasets. Adds swac_sampling_interval_sec (seconds since the previous measurement) and swac_sampling_median_sec to the datasets without saving them to the datasource. Duplicate timestamps are excluded from the median. Also accepts timestamps like 2026-11-01 00:15:00.',
+            params: [{name: 'sets', type: 'WatchableSet[]|Object[]', desc: 'Datasets to calculate, also plain objects e.g. from a JSON file.'},
+                {name: 'timeAttribute', type: 'string', desc: 'Timestamp attribute; defaults to ts.'}],
+            returns: {type: 'Object|null', desc: 'intervalSeconds (median interval), perSecond (sampling rate in Hz), perHour, measurements, duplicateTimestamps, invalidTimestamps (missing or unreadable) and possibleGaps (intervals longer than 1.5 times the median), or null when no positive interval exists.'}
         };
         this.desc.funcs[1028] = {
             name: 'switchDatasource',
@@ -642,14 +641,6 @@ DEFINTION of SET:\n\
                 desc: 'Promise that resolves when the data of the new source is loaded.',
                 type: 'Promise'
             }
-        };
-
-        this.desc.funcs[1027] = {
-            name: 'calculateSamplingRate',
-            desc: 'Adds swac_sampling_interval_ms and swac_sampling_median_ms to the supplied datasets without saving them to the datasource. Uses ts by default; duplicate timestamps are excluded from the median.',
-            params: [{name: 'sets', type: 'WatchableSet[]', desc: 'Datasets to calculate.'},
-                {name: 'timeAttribute', type: 'string', desc: 'Timestamp attribute; defaults to ts.'}],
-            returns: {type: 'number|null', desc: 'Median positive interval in milliseconds, or null when no positive interval exists.'}
         };
 
         // Documentation for events
@@ -2308,31 +2299,46 @@ DEFINTION of SET:\n\
             }
         }
     }
+
+    /**
+     * Calculates the sampling rate from the timestamps of the datasets.
+     *
+     * @param {WatchableSet[]|Object[]} sets Datasets, also plain objects e.g. from a JSON file
+     * @param {String} timeAttribute Name of the timestamp attribute
+     * @returns {Object|null} Sampling information, null without two different valid timestamps
+     */
     calculateSamplingRate(sets, timeAttribute = 'ts') {
         let timedSets = [];
+        let invalidTimestamps = 0;
         for (let set of sets) {
             if (!set)
                 continue;
             set.swac_sampling_interval_sec = null;
             set.swac_sampling_median_sec = null;
             let value = set[timeAttribute];
-            if (value === null || typeof value === 'undefined' || value === '')
+            // Also accepts the database format 2026-11-01 00:15:00 (e.g. exported with DBeaver)
+            if (typeof value === 'string')
+                value = value.trim().replace(/^(\d{4}-\d{2}-\d{2}) /, '$1T');
+            let time = value === null || typeof value === 'undefined' || value === '' ? NaN : new Date(value).getTime();
+            if (!Number.isFinite(time)) {
+                invalidTimestamps++;
                 continue;
-            let time = new Date(value).getTime();
-            if (Number.isFinite(time))
-                timedSets.push({set: set, time: time});
+            }
+            timedSets.push({set: set, time: time});
         }
         timedSets.sort(function (first, second) {
-
             return first.time - second.time;
         });
 
         let differences = [];
+        let duplicateTimestamps = 0;
         for (let i = 1; i < timedSets.length; i++) {
             let difference = timedSets[i].time - timedSets[i - 1].time;
             timedSets[i].set.swac_sampling_interval_sec = difference / 1000;
             if (difference > 0)
                 differences.push(difference);
+            else
+                duplicateTimestamps++;
         }
         if (differences.length === 0)
             return null;
@@ -2344,6 +2350,17 @@ DEFINTION of SET:\n\
                 : Math.round((differences[middle - 1] + differences[middle]) / 2);
         for (let entry of timedSets)
             entry.set.swac_sampling_median_sec = median / 1000;
-        return median;
+
+        // Interval and rate are the same information: rate in Hz = 1 / interval in seconds
+        let intervalSeconds = median / 1000;
+        return {
+            intervalSeconds: intervalSeconds,
+            perSecond: 1 / intervalSeconds,
+            perHour: 3600 / intervalSeconds,
+            measurements: timedSets.length,
+            duplicateTimestamps: duplicateTimestamps,
+            invalidTimestamps: invalidTimestamps,
+            possibleGaps: differences.filter(difference => difference > 1.5 * median).length
+        };
     }
 }
