@@ -2160,7 +2160,7 @@ DEFINTION of SET:\n\
         let median = differences.length % 2 ? differences[middle]
                 : Math.round((differences[middle - 1] + differences[middle]) / 2);
         for (let entry of timedSets)
-            entry.set.swac_sampling_median_sec = median;
+            entry.set.swac_sampling_median_sec = median / 1000;
         return median;
     }
 }
