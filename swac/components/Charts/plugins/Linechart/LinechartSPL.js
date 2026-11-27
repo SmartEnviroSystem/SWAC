@@ -45,7 +45,13 @@ export default class LinechartSPL extends Plugin {
                     .get(thisRef.requestor.pluginname)
                     || thisRef.requestor.parent.swac_comp.options.plugins.get('Linechart');
             if (pluginConfig && pluginConfig.legend)
+		if (pluginConfig && typeof pluginConfig.sharedYAxis !== 'undefined') {
+    			thisRef.options.sharedYAxis = pluginConfig.sharedYAxis;
+		}
                 thisRef.options.legend = pluginConfig.legend;
+		if (pluginConfig && typeof pluginConfig.sharedYAxis !== 'undefined') {
+    			thisRef.options.sharedYAxis = pluginConfig.sharedYAxis;
+		}
 
             // Check if content area is available
             if (!thisRef.contElements || thisRef.contElements.length === 0) {
@@ -54,6 +60,8 @@ export default class LinechartSPL extends Plugin {
             resolve();
         });
     }
+
+   
 
     afterAddSet(set, repeateds) {
         if (!this.chart) {
@@ -110,7 +118,9 @@ export default class LinechartSPL extends Plugin {
                         xAxisKey: comp.options.xAxisAttrName,
                         yAxisKey: curYAttr
                     },
-                    yAxisID: 'y_' + curYAttr
+			yAxisID: this.options.sharedYAxis
+    				? 'y'
+    				: 'y_' + curYAttr
                 };
 
                 // Calculate color for dataset (dot) useing datadescription component
@@ -181,53 +191,74 @@ export default class LinechartSPL extends Plugin {
 
         // Create scales for y axis
         for (let curYAttr of comp.options.yAxisAttrNames) {
-            // Auto confgure yAxis1
-            if (!this.options.scales['y_' + curYAttr]) {
-                this.options.scales['y_' + curYAttr] = {};
-            }
-            // Add title for yAxis if not configured
-            if (!this.options.scales['y_' + curYAttr].title) {
-                this.options.scales['y_' + curYAttr].title = {
-                    display: 'true',
-                    align: 'center',
-                    text: curYAttr
-                }
-            }
-            // Set type of yAxis
-            if (!this.options.scales['y_' + curYAttr].type) {
-                let stype = comp.getScaleTypeForAttr(curYAttr);
-                // Category type is only for x axis
-                if (stype !== 'category')
-                    this.options.scales['y_' + curYAttr].type = stype;
-            }
-            // Set assignmet of variable to axis
-            parsing_inst['y_' + curYAttr] = curYAttr;
 
-            // Create datasets description
-            let ddesc = {
-                label: rsName + '_' + curYAttr,
-                data: [set],
-                borderWidth: 1,
-                yAxisID: 'y_' + curYAttr,
-                parsing: {
-                    xAxisKey: comp.options.xAxisAttrName,
-                    yAxisKey: curYAttr
-                }
-            };
-            // Calculate color for dataset useing datadescription component
-            if (comp.datadescription) {
-                ddesc.backgroundColor = [comp.datadescription.getValueColor(set)];
-                ddesc.borderColor = comp.datadescription.getAttributeColor(curYAttr);
-            } else if (comp.options.sourceColors && comp.options.sourceColors[set.swac_fromName + '_' + curYAttr]) {
-                ddesc.backgroundColor = comp.options.sourceColors[set.swac_fromName + '_' + curYAttr];
-                ddesc.borderColor = comp.options.sourceColors[set.swac_fromName + '_' + curYAttr];
-            } else {
-                Msg.warn('LinechartSPL', 'There is no color defined for >' + set.swac_fromName + '_' + curYAttr + '< dots will be default colored', comp.requestor);
-                ddesc.backgroundColor = set.swac_fromName + '_' + curYAttr;
-                ddesc.borderColor = set.swac_fromName + '_' + curYAttr;
-            }
-            datasets_inst.push(ddesc);
+    let yAxisID = this.options.sharedYAxis
+        ? 'y'
+        : 'y_' + curYAttr;
+
+    if (!this.options.scales[yAxisID]) {
+        this.options.scales[yAxisID] = {};
+    }
+
+    if (!this.options.scales[yAxisID].title) {
+        this.options.scales[yAxisID].title = {
+            display: true,
+            align: 'center',
+            text: this.options.sharedYAxis
+                ? comp.options.yAxisAttrNames.join(' / ')
+                : curYAttr
+        };
+    }
+
+    if (!this.options.scales[yAxisID].type) {
+        let stype = comp.getScaleTypeForAttr(curYAttr);
+
+        if (stype !== 'category')
+            this.options.scales[yAxisID].type = stype;
+    }
+
+    parsing_inst['y_' + curYAttr] = curYAttr;
+
+    let ddesc = {
+        label: rsName + '_' + curYAttr,
+        data: [set],
+        borderWidth: 1,
+        yAxisID: yAxisID,
+        parsing: {
+            xAxisKey: comp.options.xAxisAttrName,
+            yAxisKey: curYAttr
         }
+    };
+
+    if (comp.datadescription) {
+        ddesc.backgroundColor = [
+            comp.datadescription.getValueColor(set)
+        ];
+        ddesc.borderColor =
+            comp.datadescription.getAttributeColor(curYAttr);
+
+    } else if (comp.options.sourceColors &&
+        comp.options.sourceColors[set.swac_fromName + '_' + curYAttr]) {
+
+        ddesc.backgroundColor =
+            comp.options.sourceColors[set.swac_fromName + '_' + curYAttr];
+
+        ddesc.borderColor =
+            comp.options.sourceColors[set.swac_fromName + '_' + curYAttr];
+
+    } else {
+        Msg.warn('LinechartSPL',
+            'There is no color defined for >' +
+            set.swac_fromName + '_' + curYAttr +
+            '< dots will be default colored',
+            comp.requestor);
+
+        ddesc.backgroundColor = set.swac_fromName + '_' + curYAttr;
+        ddesc.borderColor = set.swac_fromName + '_' + curYAttr;
+    }
+
+    datasets_inst.push(ddesc);
+}
 
         this.chart = new Chart(ctx, {
             type: 'line',
